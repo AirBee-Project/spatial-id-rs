@@ -1,4 +1,6 @@
-use crate::{Coordinate, Point, RangeId, SingleId, ZoomLevel};
+use crate::{
+    ALT_ABS_MAX, Coordinate, LAT_ABS_MAX, LON_ABS_MAX, Point, RangeId, SingleId, ZoomLevel,
+};
 
 #[cfg(not(feature = "temporal_id"))]
 mod single_id {
@@ -16,7 +18,7 @@ mod single_id {
     #[ignore]
     #[test]
     fn near_northern_limit_at_z25() {
-        let coord = Coordinate::new(85.051_1, 180.0, 0.0).unwrap();
+        let coord = Coordinate::new(LAT_ABS_MAX, LON_ABS_MAX, 0.0).unwrap();
         insta::assert_debug_snapshot!(coord.single_id(25).unwrap());
     }
 
@@ -40,7 +42,7 @@ mod single_id {
     #[ignore]
     #[test]
     fn longitude_dateline_boundary_at_z25() {
-        let coord = Coordinate::new(0.0, 180.0 - f64::EPSILON, 0.0).unwrap();
+        let coord = Coordinate::new(0.0, LON_ABS_MAX - f64::EPSILON, 0.0).unwrap();
         insta::assert_debug_snapshot!(coord.single_id(25).unwrap());
     }
 }
@@ -67,7 +69,7 @@ mod round_trip {
     #[test]
     /// 北緯の高い地点では三角関数の丸め誤差が OS 間で出やすい。
     fn coordinate_to_ecef_snapshot_high_latitude() {
-        let coord = Coordinate::new(85.051_1 - f64::EPSILON, 45.0, 123.0).unwrap();
+        let coord = Coordinate::new(LAT_ABS_MAX - f64::EPSILON, 45.0, 123.0).unwrap();
         let ecef: crate::Ecef = coord.into();
         insta::assert_debug_snapshot!(ecef);
     }
@@ -98,14 +100,14 @@ mod point_ids {
         for z in [0u8, 5, 25, 30] {
             let zoom = ZoomLevel::new(z).unwrap();
 
-            let top = Coordinate::new(0.0, 180.0, 33_554_432.0)
+            let top = Coordinate::new(0.0, LON_ABS_MAX, ALT_ABS_MAX)
                 .unwrap()
                 .single_id(z)
                 .unwrap();
             assert_eq!(top.x(), zoom.xy_max(), "z={z}");
             assert_eq!(top.f(), zoom.f_max(), "z={z}");
 
-            let bottom = Coordinate::new(0.0, -180.0, -33_554_432.0)
+            let bottom = Coordinate::new(0.0, -LON_ABS_MAX, -ALT_ABS_MAX)
                 .unwrap()
                 .single_id(z)
                 .unwrap();
@@ -118,7 +120,7 @@ mod point_ids {
     #[test]
     fn single_id_is_valid_at_latitude_limits() {
         for z in [0u8, 5, 25, 30] {
-            for lat in [85.0511, -85.0511] {
+            for lat in [LAT_ABS_MAX, -LAT_ABS_MAX] {
                 let id = Coordinate::new(lat, 0.0, 0.0)
                     .unwrap()
                     .single_id(z)
@@ -154,8 +156,8 @@ mod point_fractional_id {
             Coordinate::new(35.681382, 139.766084, 10.3).unwrap(),
             Coordinate::new(0.0, 0.0, 0.0).unwrap(),
             Coordinate::new(-12.5, 90.0, -1234.5).unwrap(),
-            Coordinate::new(85.0511, -180.0, 33_554_432.0).unwrap(),
-            Coordinate::new(-85.0511, 180.0, -33_554_432.0).unwrap(),
+            Coordinate::new(LAT_ABS_MAX, -LON_ABS_MAX, ALT_ABS_MAX).unwrap(),
+            Coordinate::new(-LAT_ABS_MAX, LON_ABS_MAX, -ALT_ABS_MAX).unwrap(),
         ]
     }
 
@@ -186,8 +188,9 @@ mod point_fractional_id {
     fn trait_fractional_id_reaches_upper_face() {
         for z in [0u8, 5, 25, 30] {
             let zoom = ZoomLevel::new(z).unwrap();
-            let fid = Point::fractional_id(&Coordinate::new(0.0, 180.0, 33_554_432.0).unwrap(), z)
-                .unwrap();
+            let fid =
+                Point::fractional_id(&Coordinate::new(0.0, LON_ABS_MAX, ALT_ABS_MAX).unwrap(), z)
+                    .unwrap();
             assert_eq!(fid.x(), zoom.xy_max() as f64 + 1.0, "z={z}");
             assert_eq!(fid.f(), zoom.f_max() as f64 + 1.0, "z={z}");
         }

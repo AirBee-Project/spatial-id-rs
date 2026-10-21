@@ -57,10 +57,10 @@ mod ecef_to_coordinate {
 
 /// 範囲の境界にある地理座標を ECEF に変換して戻しても、範囲外にならないことを確認する。
 mod boundary_round_trip {
-    use crate::{Coordinate, Ecef, Vec3, Vec3Ecef};
+    use crate::{ALT_ABS_MAX, Coordinate, Ecef, LAT_ABS_MAX, Vec3, Vec3Ecef};
 
-    const LATITUDES: [f64; 5] = [85.0511, -85.0511, 0.0, 35.0, -60.0];
-    const ALTITUDES: [f64; 4] = [33_554_432.0, 0.0, -10_000.0, 1_000_000.0];
+    const LATITUDES: [f64; 5] = [LAT_ABS_MAX, -LAT_ABS_MAX, 0.0, 35.0, -60.0];
+    const ALTITUDES: [f64; 4] = [ALT_ABS_MAX, 0.0, -10_000.0, 1_000_000.0];
 
     fn boundary_coordinates() -> impl Iterator<Item = Coordinate> {
         LATITUDES.into_iter().flat_map(|lat| {
@@ -103,7 +103,7 @@ mod boundary_round_trip {
     #[test]
     fn far_out_of_range_is_still_rejected() {
         // 許容幅（1 cm）を大きく超える高度はエラーのまま
-        let coord_vec: Vec3Ecef = Coordinate::new(35.0, 135.0, 33_554_432.0).unwrap().into();
+        let coord_vec: Vec3Ecef = Coordinate::new(35.0, 135.0, ALT_ABS_MAX).unwrap().into();
         let scaled = coord_vec.scale(1.001);
         assert!(Coordinate::try_from(scaled).is_err());
     }
@@ -114,7 +114,7 @@ mod validation {
     use rand::RngExt;
     use rand_chacha::{ChaCha8Rng, rand_core::SeedableRng};
 
-    use crate::{Coordinate, Ecef, Point, Vec3, Vec3Ecef};
+    use crate::{Coordinate, Ecef, LON_ABS_MAX, Point, Vec3, Vec3Ecef};
 
     /// 早期リターンを使わない、厳密な判定。
     fn is_valid_exact(x: f64, y: f64, z: f64) -> bool {
@@ -174,7 +174,7 @@ mod validation {
             // 緯度・高度の範囲の内外にまたがる点
             let (x, y, z) = xyz(
                 rng.random_range(-87.0..87.0),
-                rng.random_range(-180.0..180.0),
+                rng.random_range(-LON_ABS_MAX..LON_ABS_MAX),
                 rng.random_range(-7.0e6..3.4e7),
             );
             assert_eq!(
@@ -193,7 +193,7 @@ mod validation {
         for _ in 0..20_000 {
             let (x, y, z) = xyz(
                 rng.random_range(-85.0..85.0),
-                rng.random_range(-180.0..180.0),
+                rng.random_range(-LON_ABS_MAX..LON_ABS_MAX),
                 rng.random_range(-1.0e5..3.3e7),
             );
             let start = Ecef::new(x, y, z).unwrap();

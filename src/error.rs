@@ -1,5 +1,6 @@
 use alloc::string::String;
 
+use crate::{ALT_ABS_MAX, LAT_ABS_MAX, LON_ABS_MAX};
 use core::{error, fmt};
 
 /// 本クレートで発生し得るエラーを表す最上位の型。
@@ -149,21 +150,21 @@ impl fmt::Display for GeometryError {
             GeometryError::LatitudeOutOfRange { latitude } => {
                 write!(
                     f,
-                    "Latitude '{}' is out of range (valid: -85.0511..=85.0511)",
+                    "Latitude '{}' is out of range (valid: -{LAT_ABS_MAX}..={LAT_ABS_MAX})",
                     latitude
                 )
             }
             GeometryError::LongitudeOutOfRange { longitude } => {
                 write!(
                     f,
-                    "Longitude '{}' is out of range (valid: -180.0..=180.0)",
+                    "Longitude '{}' is out of range (valid: -{LON_ABS_MAX}..={LON_ABS_MAX})",
                     longitude
                 )
             }
             GeometryError::AltitudeOutOfRange { altitude } => {
                 write!(
                     f,
-                    "Altitude '{}' is out of range (valid: -33,554,432.0..=33,554,432.0)",
+                    "Altitude '{}' is out of range (valid: -{ALT_ABS_MAX}..={ALT_ABS_MAX})",
                     altitude
                 )
             }
