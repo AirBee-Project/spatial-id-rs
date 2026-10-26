@@ -9,21 +9,19 @@ use crate::query::ops::binary::run_binary;
 use crate::query::{merge_policy::MergePolicy, query_iter::QueryIter, traits::BinaryOperator};
 
 /// [`MergePolicy`] で重ね合わせる二項演算子。
+///
+/// `default` があれば、片側にしかない値も `resolve(a, default)` / `resolve(default, b)` で解決する。
 pub struct Merge<V, P> {
-    _marker: core::marker::PhantomData<fn() -> (V, P)>,
-}
-
-impl<V, P> Default for Merge<V, P> {
-    fn default() -> Self {
-        Self {
-            _marker: core::marker::PhantomData,
-        }
-    }
+    default: Option<V>,
+    _marker: core::marker::PhantomData<fn() -> P>,
 }
 
 impl<V, P> Merge<V, P> {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(default: Option<V>) -> Self {
+        Self {
+            default,
+            _marker: core::marker::PhantomData,
+        }
     }
 }
 
@@ -36,6 +34,19 @@ where
         lhs: QueryIter<'a, V>,
         rhs: QueryIter<'a, V>,
     ) -> Result<QueryIter<'a, V>, Error> {
-        run_binary(lhs, rhs, Some(|a| a), Some(|b| b), Some(P::resolve))
+        let default = &self.default;
+        run_binary(
+            lhs,
+            rhs,
+            Some(move |a| match default {
+                Some(d) => P::resolve(a, d.clone()),
+                None => a,
+            }),
+            Some(move |b| match default {
+                Some(d) => P::resolve(d.clone(), b),
+                None => b,
+            }),
+            Some(P::resolve),
+        )
     }
 }

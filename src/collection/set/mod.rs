@@ -3,6 +3,7 @@ use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId};
 use core::iter::Map;
 pub(crate) mod convert;
 pub(crate) mod impls;
+#[cfg(feature = "unstable")]
 pub(crate) mod json;
 pub(crate) mod ops;
 #[cfg(test)]

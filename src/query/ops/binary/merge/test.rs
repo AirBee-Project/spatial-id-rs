@@ -39,3 +39,33 @@ fn merge_of_two_empty_tables_is_noop() {
 
     assert_eq!(out.iter().count(), 0);
 }
+
+#[cfg(feature = "unstable")]
+#[test]
+fn merge_with_default_resolves_one_sided_segments_against_default() {
+    use crate::query::merge_policy::SaturatingSub;
+
+    let mut a = SpatialIdMap::new();
+    let mut b = SpatialIdMap::new();
+
+    let (only_a, av) = time_segment(100, 7);
+    let (both, av2) = time_segment(101, 9);
+    let (_, bv2) = time_segment(101, 4);
+    let (only_b, bv) = time_segment(102, 5);
+
+    a.insert(only_a, av);
+    a.insert(both, av2);
+    b.insert(both, bv2);
+    b.insert(only_b, bv);
+
+    let out = a
+        .query()
+        .merge_with_default(b.query(), 1, SaturatingSub)
+        .get(..)
+        .into_map()
+        .unwrap();
+
+    assert_eq!(out.get(only_a).next().unwrap().1, &6); // 7 - default(1)
+    assert_eq!(out.get(both).next().unwrap().1, &5); // 9 - 4
+    assert_eq!(out.get(only_b).next().unwrap().1, &0); // default(1) - 5 は 0 に飽和
+}

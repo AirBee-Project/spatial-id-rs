@@ -17,8 +17,8 @@ hashbrown = "0.17.1"
 spatial-id-derive = { version = "0.1.4", path = "spatial-id-derive" }
 libm = "0.2.16"
 triomphe = { version = "0.1.17", default-features = false }
-serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
-serde_json = { version = "1", default-features = false, features = ["alloc"] }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
+serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }
 
 # featuresで切り替え可能なもの
 rand = { version = "0.10.2", optional = true }
@@ -32,6 +32,8 @@ std = ["dep:geojson"]
 rayon = ["dep:rayon", "std"]
 random = [ "rand" ]
 temporal_id = []
+# 破壊的な変更があり得るAPI
+unstable = ["dep:serde", "dep:serde_json"]
 rand = ["dep:rand"]
 
 [dev-dependencies]
@@ -66,7 +68,7 @@ bench = false
 [[bin]]
 name = "spatial-id"
 path = "src/main.rs"
-required-features = ["std"]
+required-features = ["std", "unstable"]
 
 
 [[bench]]
@@ -164,33 +166,38 @@ required-features = ["rayon"]
 name = "query_unary_shift"
 path = "benches/query/unary/shift.rs"
 harness = false
+required-features = ["unstable"]
 
 [[bench]]
 name = "query_unary_falloff"
 path = "benches/query/unary/falloff.rs"
 harness = false
+required-features = ["unstable"]
 
 [[bench]]
 name = "query_unary_extrude"
 path = "benches/query/unary/extrude.rs"
 harness = false
+required-features = ["unstable"]
 
 [[bench]]
 name = "query_unary_filter_values"
 path = "benches/query/unary/filter_values.rs"
 harness = false
+required-features = ["unstable"]
 
 [[bench]]
 name = "query_unary_zoom_out"
 path = "benches/query/unary/zoom_out.rs"
 harness = false
-required-features = ["rayon"]
+required-features = ["rayon", "unstable"]
 
 [[bench]]
 name = "query_workflow_risk_diffusion"
 path = "benches/query/workflow/risk_diffusion.rs"
 harness = false
-required-features = ["rayon"]
+required-features = ["rayon", "unstable"]
 
 [[example]]
 name = "map_json"
+required-features = ["unstable"]

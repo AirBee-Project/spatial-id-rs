@@ -26,6 +26,7 @@ fn extrude_f_same_xy_diff_f_resolves_via_policy() {
 /// 列同士は「他軸で区別されていた粗いSegmentとその内側のネストした細かいSegment」により
 /// 互いに素とは限らないため、`from_flexids` へ渡す前の順序を決定的にしておかないと、
 /// 同一入力でも実行のたびに結果が変わりうる（実データで実際に再現したバグ）。
+#[cfg(feature = "unstable")]
 #[test]
 fn extrude_result_is_deterministic_across_runs() {
     let bldg_risk: SpatialIdMap<u32> =
