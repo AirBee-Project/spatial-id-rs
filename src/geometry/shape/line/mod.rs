@@ -1,5 +1,5 @@
 use crate::Coordinate;
-#[cfg(any(feature = "std", test))]
+#[cfg(any(all(feature = "std", feature = "unstable"), test))]
 use crate::{CoverSingleIds, Error, Point, SingleId};
 pub mod geometry_relation;
 pub mod impls;
@@ -26,7 +26,7 @@ impl Line {
     /// 連続する頂点列（折れ線）が覆う [`SingleId`] のイテレータを返す。
     ///
     /// 頂点が1点のみの場合はその点の空間ID、2点以上の場合は隣り合う各線分が覆う空間IDを返す。
-    #[cfg(any(feature = "std", test))]
+    #[cfg(any(all(feature = "std", feature = "unstable"), test))]
     pub(crate) fn cover_polyline<'a>(
         coordinates: &'a [Coordinate],
         z: impl Into<u8>,

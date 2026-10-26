@@ -1,5 +1,6 @@
 use crate::collection::core::{BitMask, FlexTreeCore, IntoIter, NoSummary, Summary, ValueSet};
 use core::ops::RangeBounds;
+#[cfg(feature = "unstable")]
 pub(crate) mod json;
 #[cfg(feature = "rayon")]
 pub(crate) mod par;
@@ -107,6 +108,41 @@ where
     /// 空間に値を挿入する。既に値がある場所は上書きされる。
     pub fn insert<T: SpatialId>(&mut self, target: T, value: V) {
         self.inner.insert(target, value);
+    }
+
+    #[cfg(feature = "unstable")]
+    /// `region` に収まるシャードを2つの領域に割り、それぞれの領域で切り取った中身を `(下, 上)` で返す。
+    /// 選んだ軸がこれ以上割れなければ [`None`]。
+    ///
+    /// 軸は F→X→Y の順に、各軸のズームの和で巡回して選び、シャードが1方向の薄い板に偏らないようにする。
+    /// 全ての値が全時間なら T 軸では割らない。割っても両側が元と同じ件数になり、分割が収束しないため。
+    pub fn split_shard(&self, region: FlexId) -> Option<((FlexId, Self), (FlexId, Self))> {
+        let spatial = u32::from(region.f_zoomlevel())
+            + u32::from(region.x_zoomlevel())
+            + u32::from(region.y_zoomlevel());
+        let split: fn(&FlexId, crate::Side) -> Option<FlexId> =
+            if self.iter().all(|(id, _)| id.is_whole_time()) {
+                match spatial % 3 {
+                    0 => FlexId::split_f,
+                    1 => FlexId::split_x,
+                    _ => FlexId::split_y,
+                }
+            } else {
+                match (spatial + u32::from(region.t_zoomlevel())) % 4 {
+                    0 => FlexId::split_f,
+                    1 => FlexId::split_x,
+                    2 => FlexId::split_y,
+                    _ => FlexId::split_t,
+                }
+            };
+        let half = |side: crate::Side| {
+            let part = split(&region, side)?;
+            Some((
+                part,
+                self.get(part).map(|(id, v)| (id, v.clone())).collect(),
+            ))
+        };
+        Some((half(crate::Side::Lower)?, half(crate::Side::Upper)?))
     }
 
     /// まだ値のない場所にだけ挿入する（Upsert）。既に値がある場所はそのまま保つ。
