@@ -39,5 +39,3 @@ fn merge_of_two_empty_tables_is_noop() {
 
     assert_eq!(out.iter().count(), 0);
 }
-
-
