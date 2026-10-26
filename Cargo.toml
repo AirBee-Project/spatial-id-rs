@@ -1,9 +1,26 @@
 [package]
 name = "spatial-id"
-version = "0.1.4"
-edition = "2024"
-license = "MIT"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 description = "Spatial ID (Ouranos 4D spatio-temporal ID) types, collections, geometry conversions, and queries"
+readme = "README.md"
+keywords = ["spatial-id", "geospatial", "gis", "spatiotemporal", "ouranos"]
+categories = ["science::geo", "data-structures", "no-std"]
+exclude = [
+    "/sample",
+    "/.github",
+    "/.vscode",
+    "/deny.toml",
+    "/release-plz.toml",
+    "/commitlint.config.mjs",
+]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [workspace]
 members = [
@@ -11,10 +28,17 @@ members = [
     "spatial-id-derive",
 ]
 
+[workspace.package]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/AirBee-Project/spatial-id-rs"
+rust-version = "1.88"
+
 [dependencies]
 # デフォルトで必要なもの
 hashbrown = "0.17.1"
-spatial-id-derive = { version = "0.1.4", path = "spatial-id-derive" }
+# derive の生成コードは本体のパスを参照するため、同一バージョンに固定する。
+spatial-id-derive = { version = "=0.1.0", path = "spatial-id-derive" }
 libm = "0.2.16"
 triomphe = { version = "0.1.17", default-features = false }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
