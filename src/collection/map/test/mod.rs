@@ -4,8 +4,6 @@ pub(crate) mod insert;
 pub(crate) mod par;
 pub(crate) mod query;
 pub(crate) mod remove;
-#[cfg(feature = "unstable")]
-pub(crate) mod shard;
 pub(crate) mod upsert;
 
 #[cfg(test)]
