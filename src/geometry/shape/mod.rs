@@ -7,7 +7,7 @@
 //! - [`Sphere`](crate::geometry::Sphere) は中心点と半径を持つ独立した [`Shape`](crate::geometry::Shape) として扱う。
 //!
 //! 詳細な図と説明は次のドキュメントを参照:
-//! [docs/geometry-relation.md](https://github.com/AirBee-Project/Kasane-Logic/blob/main/docs/geometry-relation.md)
+//! [docs/geometry-relation.md](https://github.com/AirBee-Project/spatial-id-rs/blob/main/docs/geometry-relation.md)
 
 pub(crate) mod cylinder;
 pub(crate) mod line;
