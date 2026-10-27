@@ -9,14 +9,15 @@ cargo add spatial-id
 ```
 
 ```rust
-use spatial-id::{SingleId, SpatialIdMap};
+use spatial_id::SingleId;
+use spatial_id::collection::SpatialIdMap;
 
 fn main() {
     let mut map: SpatialIdMap<f64> = SpatialIdMap::new();
 
     map.insert(SingleId::new(20, 9, 931389, 412900).unwrap(), 3.2);
 
-    for (id, value) in map.flat_single_ids() {
+    for (id, value) in map.flat_single_ids(None) {
         println!("{} => {},", id, value)
     }
 }
