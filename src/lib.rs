@@ -21,6 +21,7 @@ pub mod query;
 pub mod time;
 
 pub use error::Error;
+pub use geometry::Epsilon;
 pub use id::{
     FlexId, IntoRange, RangeId, Side, SingleId, SpatialId, SpatialIdError, Zoom, ZoomLevel,
 };

@@ -3,7 +3,8 @@ use alloc::vec::Vec;
 use hashbrown::HashSet;
 
 use crate::{
-    Coordinate, CoverSingleIds, Error, GeometryError, Line, Point, Polygon, SingleId, SpatialIdMap,
+    Coordinate, CoverSingleIds, Epsilon, Error, GeometryError, Line, Point, Polygon, SingleId,
+    SpatialIdMap,
 };
 
 mod projected_ring;
@@ -11,8 +12,6 @@ mod projected_ring;
 mod test;
 
 use projected_ring::ProjectedRing;
-
-const EPSILON: f64 = 1e-10;
 
 /// GeoJSON の全ジオメトリが覆う空間IDを求める。
 ///
@@ -262,7 +261,7 @@ fn cover_polygon(rings: &[Vec<Position>], z: u8) -> Result<HashSet<SingleId>, Er
                 .iter()
                 .map(Coordinate::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(Polygon::new(coords, EPSILON))
+            Ok(Polygon::new(coords))
         })
         .collect::<Result<Vec<_>, Error>>()?
         .into_iter();
@@ -282,7 +281,7 @@ fn cover_polygon(rings: &[Vec<Position>], z: u8) -> Result<HashSet<SingleId>, Er
             continue;
         };
         let projected = projected.get_or_insert_with(|| ProjectedRing::new(exterior.vertices()));
-        if !projected.contains_ring(vertices, EPSILON) {
+        if !projected.contains_ring(vertices, Epsilon::DEFAULT.as_meters()) {
             return Err(GeometryError::HoleOutsideExterior { index }.into());
         }
 
