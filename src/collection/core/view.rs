@@ -104,9 +104,8 @@ impl<'a, V> View<'a, V> {
     // `merge` の各段で呼ぶので展開させる
     #[inline(always)]
     pub(super) fn ptr_eq<W>(&self, this: &FlexId, node: &Node<W>) -> bool {
-        let same = |a: &Arc<Branch<V>>, b: &Arc<Branch<W>>| {
-            ptr::addr_eq(Arc::as_ptr(a), Arc::as_ptr(b))
-        };
+        let same =
+            |a: &Arc<Branch<V>>, b: &Arc<Branch<W>>| ptr::addr_eq(Arc::as_ptr(a), Arc::as_ptr(b));
         match (self, node) {
             (View::Branch(a), Node::Branch(b)) => same(a, b),
             // 行き先の領域を求めるのは、先の Branch が同じときだけ

@@ -171,21 +171,20 @@ impl<P> Falloff<P> {
             + TryFrom<u64>,
         A: SafeValue,
     {
-        let spread_into = |mut tree: FlexTreeCore<A>,
-                           moved: &mut Vec<FlexId>,
-                           (id, value): &(FlexId, V)| {
-            id.falloff_each(
-                self.axis,
-                self.z,
-                self.radius,
-                self.direction,
-                attenuator,
-                value,
-                moved,
-                |ids, value| tree.insert_with(ids.iter().copied(), wrap(value), &resolve),
-            );
-            tree
-        };
+        let spread_into =
+            |mut tree: FlexTreeCore<A>, moved: &mut Vec<FlexId>, (id, value): &(FlexId, V)| {
+                id.falloff_each(
+                    self.axis,
+                    self.z,
+                    self.radius,
+                    self.direction,
+                    attenuator,
+                    value,
+                    moved,
+                    |ids, value| tree.insert_with(ids.iter().copied(), wrap(value), &resolve),
+                );
+                tree
+            };
 
         #[cfg(not(feature = "rayon"))]
         {

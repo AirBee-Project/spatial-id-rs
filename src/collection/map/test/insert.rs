@@ -15,12 +15,7 @@ mod tests {
 
         let actual_values: Vec<_> = table.get(target).map(|(_, value)| *value).collect();
         assert_eq!(actual_values, vec![20]);
-        assert!(
-            table
-                .iter()
-                .find(|(_, val)| **val == 10)
-                .is_none()
-        );
+        assert!(table.iter().find(|(_, val)| **val == 10).is_none());
         assert_eq!(
             table
                 .iter()

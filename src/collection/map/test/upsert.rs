@@ -66,6 +66,11 @@ mod tests {
             with_noop_upsert, plain,
             "埋まっている場所への upsert でテーブルが変わった"
         );
-        assert!(with_noop_upsert.iter().find(|(_, val)| **val == 20).is_none());
+        assert!(
+            with_noop_upsert
+                .iter()
+                .find(|(_, val)| **val == 20)
+                .is_none()
+        );
     }
 }

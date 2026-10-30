@@ -4,8 +4,8 @@ use alloc::vec::Vec;
 use core::fmt::Debug;
 use triomphe::Arc;
 
-use super::node::{Branch, Node, Skip, common_descent};
 use super::FlexTreeCore;
+use super::node::{Branch, Node, Skip, common_descent};
 use crate::id::relative_flex_id::ShortPath;
 use crate::{FlexId, RangeId, Side, SingleId, id::dimension::Dimension};
 
@@ -22,10 +22,7 @@ fn node_count<V>(node: &Node<V>) -> usize {
 }
 
 /// 領域 `this` の Node が FlexTreeCore の規則を守っているか検査する。
-fn check_rules<V: PartialEq + Debug>(
-    node: &Node<V>,
-    this: FlexId,
-) -> Result<(), String> {
+fn check_rules<V: PartialEq + Debug>(node: &Node<V>, this: FlexId) -> Result<(), String> {
     match node {
         Node::Empty | Node::Leaf(_) => Ok(()),
         Node::Branch(branch) => check_branch(branch, this),
@@ -58,10 +55,7 @@ fn check_rules<V: PartialEq + Debug>(
 }
 
 /// 領域 `this` の Branch が規則を守っているか検査する。
-fn check_branch<V: PartialEq + Debug>(
-    branch: &Branch<V>,
-    this: FlexId,
-) -> Result<(), String> {
+fn check_branch<V: PartialEq + Debug>(branch: &Branch<V>, this: FlexId) -> Result<(), String> {
     let Branch {
         dimension,
         split_dimensions,
