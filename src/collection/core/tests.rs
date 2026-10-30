@@ -5,13 +5,12 @@ use core::fmt::Debug;
 use triomphe::Arc;
 
 use super::node::{Branch, Node, Skip, common_descent};
-use super::{BitMask, FlexTreeCore, NoSummary, Summary, ValueSet};
-use crate::MinMax;
+use super::FlexTreeCore;
 use crate::id::relative_flex_id::ShortPath;
 use crate::{FlexId, RangeId, Side, SingleId, id::dimension::Dimension};
 
 /// Leaf と Branch の数。Skip は数えない。
-fn node_count<V, S>(node: &Node<V, S>) -> usize {
+fn node_count<V>(node: &Node<V>) -> usize {
     match node {
         Node::Empty | Node::Leaf(_) | Node::LeafAt(..) => 1,
         Node::Branch(branch) | Node::BranchAt(_, branch) => {
@@ -23,8 +22,8 @@ fn node_count<V, S>(node: &Node<V, S>) -> usize {
 }
 
 /// 領域 `this` の Node が FlexTreeCore の規則を守っているか検査する。
-fn check_rules<V: PartialEq + Debug, S: Summary<V> + Debug>(
-    node: &Node<V, S>,
+fn check_rules<V: PartialEq + Debug>(
+    node: &Node<V>,
     this: FlexId,
 ) -> Result<(), String> {
     match node {
@@ -59,8 +58,8 @@ fn check_rules<V: PartialEq + Debug, S: Summary<V> + Debug>(
 }
 
 /// 領域 `this` の Branch が規則を守っているか検査する。
-fn check_branch<V: PartialEq + Debug, S: Summary<V> + Debug>(
-    branch: &Branch<V, S>,
+fn check_branch<V: PartialEq + Debug>(
+    branch: &Branch<V>,
     this: FlexId,
 ) -> Result<(), String> {
     let Branch {
@@ -68,7 +67,6 @@ fn check_branch<V: PartialEq + Debug, S: Summary<V> + Debug>(
         split_dimensions,
         height,
         count,
-        summary,
         lower,
         upper,
     } = branch;
@@ -97,15 +95,6 @@ fn check_branch<V: PartialEq + Debug, S: Summary<V> + Debug>(
             "{this:?}: count が不正: 実際 {count}, 期待 {expected_count}"
         ));
     }
-    let (Some(l), Some(u)) = (lower.summary(), upper.summary()) else {
-        return Err(format!("{this:?}: 空の子を持つ Branch"));
-    };
-    let expected_summary = l.merge(&u);
-    if *summary != expected_summary {
-        return Err(format!(
-            "{this:?}: summary が不正: 実際 {summary:?}, 期待 {expected_summary:?}"
-        ));
-    }
     check_rules(lower, this.split_on(*dimension, Side::Lower).unwrap())?;
     check_rules(upper, this.split_on(*dimension, Side::Upper).unwrap())
 }
@@ -128,7 +117,7 @@ fn check_path(this: FlexId, region: FlexId, split: u8) -> Result<(), String> {
     Ok(())
 }
 
-fn assert_rules<V: PartialEq + Debug, S: Summary<V> + Debug>(tree: &FlexTreeCore<V, S>) {
+fn assert_rules<V: PartialEq + Debug>(tree: &FlexTreeCore<V>) {
     check_rules(&tree.upper_root, FlexId::UPPER_MAX).unwrap();
     check_rules(&tree.lower_root, FlexId::LOWER_MAX).unwrap();
 }
@@ -145,7 +134,7 @@ fn build<'a, V: Clone + Ord + 'a>(
 }
 
 /// FlexTreeCore の中で `point` を含む FlexId の値。
-fn value_at<V: Clone, S>(tree: &FlexTreeCore<V, S>, point: &FlexId) -> Option<V> {
+fn value_at<V: Clone>(tree: &FlexTreeCore<V>, point: &FlexId) -> Option<V> {
     tree.iter()
         .find(|(id, _)| id.contains(point))
         .map(|(_, v)| v.clone())
@@ -239,7 +228,7 @@ fn sample_points(next: &mut impl FnMut(u64) -> u64, ids: &[FlexId]) -> Vec<FlexI
 #[test]
 fn node_size_is_value_or_pointer() {
     use core::mem::size_of;
-    assert!(size_of::<Node<u64, MinMax<u64>>>() <= size_of::<u64>().max(size_of::<Arc<()>>()) + 8);
+    assert!(size_of::<Node<u64>>() <= size_of::<u64>().max(size_of::<Arc<()>>()) + 8);
 }
 
 #[test]
@@ -398,73 +387,8 @@ fn set_operations_match_model() {
     }
 }
 
-/// FlexTreeCore 全体の value_range の基本動作テスト。
-#[test]
-fn value_range_basic() {
-    let mut tree: FlexTreeCore<u64> = FlexTreeCore::default();
-    assert_eq!(tree.value_range(), None);
-
-    let id1 = FlexId::new(2, 0, 2, 0, 2, 0).unwrap();
-    tree.insert(id1, 50);
-    assert_eq!(tree.value_range(), Some((&50, &50)));
-
-    let id2 = FlexId::new(2, 0, 2, 1, 2, 1).unwrap();
-    tree.insert(id2, 20);
-    assert_eq!(tree.value_range(), Some((&20, &50)));
-
-    let id3 = FlexId::new(2, 0, 2, 2, 2, 2).unwrap();
-    tree.insert(id3, 80);
-    assert_eq!(tree.value_range(), Some((&20, &80)));
-}
-
-/// Branch の [min, max] を使った filter_range の枝刈りと参照モデル一致テスト。
-#[test]
-fn filter_range_prunes_and_matches_model() {
-    let mut next = rng(42);
-    for max_zoom in [4, 10] {
-        for _ in 0..30 {
-            let mut tree = FlexTreeCore::<u64>::default();
-            let mut writes = Vec::new();
-            let mut ids = Vec::new();
-
-            for _ in 0..20 {
-                let id = random_id(&mut next, max_zoom);
-                let value = next(100) + 10; // 10..=109
-                tree.insert(id, value);
-                writes.push((id, Some(value)));
-                ids.push(id);
-            }
-            assert_rules(&tree);
-
-            let (min_bound, max_bound) = (30u64, 70u64);
-            let filtered = tree.filter_range(min_bound..=max_bound);
-            assert_rules(&filtered);
-
-            for (_, val) in filtered.iter() {
-                assert!(*val >= min_bound && *val <= max_bound);
-            }
-
-            for point in sample_points(&mut next, &ids) {
-                let expected =
-                    model_value_at(&writes, &point).filter(|v| *v >= min_bound && *v <= max_bound);
-                assert_eq!(value_at(&filtered, &point), expected);
-            }
-
-            if let Some((&tree_min, &tree_max)) = tree.value_range() {
-                let full = tree.filter_range(tree_min..=tree_max);
-                assert_eq!(full, tree);
-                let full_unbounded = tree.filter_range(..);
-                assert_eq!(full_unbounded, tree);
-            }
-
-            let empty = tree.filter_range(1000..=2000);
-            assert_eq!(empty.iter().count(), 0);
-        }
-    }
-}
-
 /// 参照実装：再帰でたどって、値を持つ領域を下側から順に集める。
-fn collect_recursive<'a, V, S>(node: &'a Node<V, S>, this: FlexId, out: &mut Vec<(FlexId, &'a V)>) {
+fn collect_recursive<'a, V>(node: &'a Node<V>, this: FlexId, out: &mut Vec<(FlexId, &'a V)>) {
     match node {
         Node::Empty => {}
         Node::Leaf(value) => out.push((this, value)),
@@ -555,34 +479,15 @@ fn empty_tree_iterators_are_fused() {
     assert_eq!(owned.next(), None);
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, BitMask)]
-enum Color {
-    Red,
-    Green,
-    Blue,
-    Yellow,
-}
-
-/// 判別値を明示しても、番号は定義順になる。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, BitMask)]
-#[repr(u8)]
-enum Sparse {
-    First = 200,
-    Second = 3,
-    Third,
-}
-
-const COLORS: [Color; 4] = [Color::Red, Color::Green, Color::Blue, Color::Yellow];
-
 /// 書き込みの履歴。`None` は削除。
 type Writes<V> = Vec<(FlexId, Option<V>)>;
 
 /// 乱数で上書き挿入と削除を繰り返した FlexTreeCore と、その書き込み履歴を作る。
-fn random_tree<V: PartialEq + Clone, S: Summary<V>>(
+fn random_tree<V: PartialEq + Clone>(
     next: &mut impl FnMut(u64) -> u64,
     max_zoom: u64,
     random_value: impl Fn(&mut dyn FnMut(u64) -> u64) -> V,
-) -> (FlexTreeCore<V, S>, Writes<V>) {
+) -> (FlexTreeCore<V>, Writes<V>) {
     let mut tree = FlexTreeCore::default();
     let mut writes = Vec::new();
     for _ in 0..40 {
@@ -599,41 +504,13 @@ fn random_tree<V: PartialEq + Clone, S: Summary<V>>(
     (tree, writes)
 }
 
-/// `#[derive(BitMask)]` はバリアントを定義順に番号付けし、数を数える。
-#[test]
-fn derived_bit_mask_numbers_variants_in_order() {
-    assert_eq!(Color::COUNT, 4);
-    assert_eq!(COLORS.map(Color::index), [0, 1, 2, 3]);
-    assert_eq!(Sparse::COUNT, 3);
-    assert_eq!(
-        [Sparse::First, Sparse::Second, Sparse::Third].map(Sparse::index),
-        [0, 1, 2]
-    );
-    assert_eq!(<Option<Color>>::COUNT, 5);
-    assert_eq!(None::<Color>.index(), 0);
-    assert_eq!(Some(Color::Red).index(), 1);
-    assert_eq!(true.index(), 1);
-}
-
-/// ValueSet の集合演算。
-#[test]
-fn value_set_operations() {
-    let warm: ValueSet<Color> = [Color::Red, Color::Yellow].into_iter().collect();
-    let red = ValueSet::single(Color::Red);
-    assert!(warm.contains(Color::Red) && !warm.contains(Color::Blue));
-    assert!(red.is_subset(&warm) && !warm.is_subset(&red));
-    assert!(warm.is_disjoint(&ValueSet::single(Color::Green)));
-    assert!(ValueSet::<Color>::EMPTY.is_empty());
-    assert_eq!(warm.bits(), 0b1001);
-}
-
 /// `count` は値を持つ領域の数と一致し、イテレーターの `size_hint` は残りの数を正確に返す。
 #[test]
 fn count_and_size_hint_match_iteration() {
     let mut next = rng(99);
     for max_zoom in [5, 20] {
         for _ in 0..50 {
-            let (tree, _) = random_tree::<u64, MinMax<u64>>(&mut next, max_zoom, |n| n(3));
+            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
             let total = tree.iter().count();
             assert_eq!(tree.count(), total);
             assert_eq!(tree.is_empty(), total == 0);
@@ -649,43 +526,15 @@ fn count_and_size_hint_match_iteration() {
     }
 }
 
-/// 2つの Summary を組み合わせると、範囲とビットマスクの両方で絞り込める。
+/// `Ord` でない値も持て、FlexTreeCore どうしで集合演算ができる。
 #[test]
-fn paired_summary_supports_both_filters() {
-    let mut tree: FlexTreeCore<Color, (MinMax<Color>, ValueSet<Color>)> = FlexTreeCore::default();
-    tree.insert(FlexId::new(2, 0, 2, 0, 2, 0).unwrap(), Color::Red);
-    tree.insert(FlexId::new(2, 1, 2, 1, 2, 1).unwrap(), Color::Blue);
-    tree.insert(FlexId::new(2, 2, 2, 2, 2, 2).unwrap(), Color::Yellow);
-    assert_rules(&tree);
-
-    assert_eq!(tree.value_range(), Some((&Color::Red, &Color::Yellow)));
-    assert_eq!(
-        tree.value_set(),
-        [Color::Red, Color::Blue, Color::Yellow]
-            .into_iter()
-            .collect()
-    );
-    assert_eq!(
-        tree.filter_range(Color::Green..=Color::Blue).value_set(),
-        ValueSet::single(Color::Blue)
-    );
-    assert_eq!(
-        tree.filter_values(ValueSet::single(Color::Yellow))
-            .value_range(),
-        Some((&Color::Yellow, &Color::Yellow))
-    );
-}
-
-/// `NoSummary` なら `Ord` でない値も持て、Summary の違う FlexTreeCore どうしで集合演算ができる。
-#[test]
-fn no_summary_holds_unordered_values() {
+fn unordered_values_support_set_operations() {
     let a_id = FlexId::new(1, 0, 0, 0, 0, 0).unwrap();
     let b_id = FlexId::new(1, 1, 0, 0, 0, 0).unwrap();
-    let mut tree: FlexTreeCore<f64, NoSummary> = FlexTreeCore::default();
+    let mut tree: FlexTreeCore<f64> = FlexTreeCore::default();
     tree.insert(a_id, 0.5);
     tree.insert(b_id, 1.5);
     assert_eq!(tree.count(), 2);
-    assert_eq!(tree.summary(), Some(NoSummary));
 
     let mut region: FlexTreeCore<u64> = FlexTreeCore::default();
     region.insert(a_id, 7);
@@ -700,7 +549,7 @@ fn random_targets(next: &mut impl FnMut(u64) -> u64, max_zoom: u64) -> Vec<FlexI
 }
 
 /// FlexId の列が覆う領域。
-fn region_of(ids: &[FlexId]) -> FlexTreeCore<(), NoSummary> {
+fn region_of(ids: &[FlexId]) -> FlexTreeCore<()> {
     let mut region = FlexTreeCore::default();
     region.insert(ids.iter().copied(), ());
     region
@@ -712,7 +561,7 @@ fn insert_many_ids_matches_inserting_one_by_one() {
     let mut next = rng(11);
     for max_zoom in [5, 20] {
         for _ in 0..50 {
-            let (base, _) = random_tree::<u64, MinMax<u64>>(&mut next, max_zoom, |n| n(3));
+            let (base, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
             let targets = random_targets(&mut next, max_zoom);
 
             let mut at_once = base.clone();
@@ -769,10 +618,10 @@ fn get_matches_intersection() {
     let mut next = rng(13);
     for max_zoom in [5, 20] {
         for _ in 0..50 {
-            let (tree, _) = random_tree::<u64, MinMax<u64>>(&mut next, max_zoom, |n| n(3));
+            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
             let targets = random_targets(&mut next, max_zoom);
 
-            let got: FlexTreeCore<u64, MinMax<u64>> = tree
+            let got: FlexTreeCore<u64> = tree
                 .get(targets.iter().copied())
                 .map(|(id, v)| (id, *v))
                 .collect();
@@ -790,7 +639,7 @@ fn get_overlapping_returns_whole_leaves_once() {
     let mut next = rng(14);
     for max_zoom in [5, 20] {
         for _ in 0..50 {
-            let (tree, _) = random_tree::<u64, MinMax<u64>>(&mut next, max_zoom, |n| n(3));
+            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
 
             let targets = random_targets(&mut next, max_zoom);
             let expected: Vec<_> = tree
@@ -827,7 +676,7 @@ fn remove_returns_removed_part() {
     let mut next = rng(15);
     for max_zoom in [5, 20] {
         for _ in 0..50 {
-            let (mut tree, _) = random_tree::<u64, MinMax<u64>>(&mut next, max_zoom, |n| n(3));
+            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
             let before = tree.clone();
             let targets = random_targets(&mut next, max_zoom);
             let region = region_of(&targets);
@@ -847,7 +696,7 @@ fn remove_overlapping_removes_whole_leaves() {
     let mut next = rng(16);
     for max_zoom in [5, 20] {
         for _ in 0..50 {
-            let (mut tree, _) = random_tree::<u64, MinMax<u64>>(&mut next, max_zoom, |n| n(3));
+            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
             let before = tree.clone();
             let targets = random_targets(&mut next, max_zoom);
             let overlaps = |leaf: &FlexId| targets.iter().any(|t| leaf.intersection(t).is_some());
@@ -906,7 +755,7 @@ fn traversal_stack_fits_height_bound() {
     let mut next = rng(17);
     for max_zoom in [5, 20] {
         for _ in 0..50 {
-            let (tree, _) = random_tree::<u64, MinMax<u64>>(&mut next, max_zoom, |n| n(3));
+            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
             let bound = usize::from(tree.upper_root.height().max(tree.lower_root.height())) + 2;
 
             let mut stack = Vec::from([
@@ -946,7 +795,7 @@ fn eq_skips_shared_subtrees() {
     use core::sync::atomic::Ordering::Relaxed;
 
     let mut next = rng(19);
-    let mut tree = FlexTreeCore::<Counted, NoSummary>::default();
+    let mut tree = FlexTreeCore::<Counted>::default();
     for i in 0..1000 {
         tree.insert(random_id(&mut next, 20), Counted(i % 5));
     }
@@ -974,7 +823,7 @@ fn writes_do_not_change_clones() {
     let mut next = rng(20);
     for max_zoom in [5, 20] {
         for _ in 0..50 {
-            let (mut tree, _) = random_tree::<u64, MinMax<u64>>(&mut next, max_zoom, |n| n(3));
+            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
             let snapshot = tree.clone();
             let before: Vec<(FlexId, u64)> = snapshot.iter().map(|(id, v)| (id, *v)).collect();
 
@@ -1071,7 +920,7 @@ fn get_single_target_matches_clipped_iteration() {
     let mut next = rng(41);
     for max_zoom in [3, 5, 20] {
         for _ in 0..300 {
-            let (tree, _) = random_tree::<u64, MinMax<u64>>(&mut next, max_zoom, |n| n(3));
+            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
             let target = random_id(&mut next, max_zoom);
             let expected: Vec<_> = tree
                 .iter()
@@ -1079,48 +928,6 @@ fn get_single_target_matches_clipped_iteration() {
                 .collect();
             let got: Vec<_> = tree.get(target).collect();
             assert_eq!(got, expected, "target {target}");
-        }
-    }
-}
-
-/// 値での絞り込みは、Summary の有無や種類によらず同じ結果になる。Summary は速さだけを変える。
-#[test]
-fn value_filters_agree_across_summaries() {
-    type Both = (MinMax<Color>, ValueSet<Color>);
-    let mut next = rng(51);
-    for max_zoom in [5, 20] {
-        for _ in 0..100 {
-            let (plain, _) = random_tree::<u64, NoSummary>(&mut next, max_zoom, |n| n(10));
-            let ranged: FlexTreeCore<u64, MinMax<u64>> = plain.with_summary();
-            // 付け替えても、挿入して組んだ木と同じになる
-            assert_eq!(ranged, plain.iter().map(|(id, v)| (id, *v)).collect());
-            assert_rules(&ranged);
-            assert_eq!(plain.value_range(), ranged.value_range());
-            let low = next(10);
-            let high = low + next(5);
-            assert_eq!(
-                plain.filter_range(low..high).with_summary::<MinMax<u64>>(),
-                ranged.filter_range(low..high)
-            );
-
-            let (colors, _) =
-                random_tree::<Color, NoSummary>(&mut next, max_zoom, |n| COLORS[n(4) as usize]);
-            let sets: FlexTreeCore<Color, ValueSet<Color>> = colors.with_summary();
-            let both: FlexTreeCore<Color, Both> = colors.with_summary();
-            assert_eq!(colors.value_set(), sets.value_set());
-            assert_eq!(colors.value_set(), both.value_set());
-            assert_eq!(colors.value_range(), both.value_range());
-            let wanted: ValueSet<Color> = COLORS.into_iter().filter(|_| next(2) == 0).collect();
-            let expected = colors.filter_values(wanted);
-            assert_eq!(
-                expected.with_summary::<ValueSet<Color>>(),
-                sets.filter_values(wanted)
-            );
-            assert_eq!(expected.with_summary::<Both>(), both.filter_values(wanted));
-            assert_eq!(
-                colors.filter_range(Color::Green..).with_summary::<Both>(),
-                both.filter_range(Color::Green..)
-            );
         }
     }
 }

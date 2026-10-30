@@ -4,19 +4,18 @@ use triomphe::Arc;
 
 use super::FlexTreeCore;
 use super::node::{Branch, Node};
-use crate::collection::summary::Summary;
 use crate::{FlexId, Side, id::dimension::Dimension};
 
 /// [FlexTreeCore]の値を持つ領域と値への参照を、Node を辿りながら1つずつ返すイテレーター。
 #[derive(Debug)]
-pub(crate) struct Iter<'a, V, S> {
-    stack: Vec<(&'a Node<V, S>, FlexId)>,
+pub(crate) struct Iter<'a, V> {
+    stack: Vec<(&'a Node<V>, FlexId)>,
     /// まだ返していない要素の数。
     remaining: usize,
 }
 
-impl<'a, V, S> Iter<'a, V, S> {
-    pub(super) fn new(tree: &'a FlexTreeCore<V, S>) -> Self {
+impl<'a, V> Iter<'a, V> {
+    pub(super) fn new(tree: &'a FlexTreeCore<V>) -> Self {
         Iter {
             stack: tree.new_stack(),
             remaining: tree.count(),
@@ -24,7 +23,7 @@ impl<'a, V, S> Iter<'a, V, S> {
     }
 }
 
-impl<V, S> Clone for Iter<'_, V, S> {
+impl<V> Clone for Iter<'_, V> {
     fn clone(&self) -> Self {
         Iter {
             stack: self.stack.clone(),
@@ -33,7 +32,7 @@ impl<V, S> Clone for Iter<'_, V, S> {
     }
 }
 
-impl<'a, V, S> Iterator for Iter<'a, V, S> {
+impl<'a, V> Iterator for Iter<'a, V> {
     type Item = (FlexId, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -63,9 +62,9 @@ impl<'a, V, S> Iterator for Iter<'a, V, S> {
     }
 }
 
-impl<'a, V, S> Iter<'a, V, S> {
+impl<'a, V> Iter<'a, V> {
     /// 領域 `this` の `branch` の子を、下側から取り出されるように積む。
-    fn push_branch(&mut self, this: FlexId, branch: &'a Branch<V, S>) {
+    fn push_branch(&mut self, this: FlexId, branch: &'a Branch<V>) {
         let dimension = branch.dimension;
         self.stack.push((
             &branch.upper,
@@ -78,21 +77,21 @@ impl<'a, V, S> Iter<'a, V, S> {
     }
 }
 
-impl<V, S> ExactSizeIterator for Iter<'_, V, S> {}
+impl<V> ExactSizeIterator for Iter<'_, V> {}
 
-impl<V, S> FusedIterator for Iter<'_, V, S> {}
+impl<V> FusedIterator for Iter<'_, V> {}
 
 /// 値を持つ領域と値の組 `(FlexId, V)` を、所有権ごと1つずつ返すイテレーター。
 ///
 /// [`SpatialIdMap::remove`](crate::SpatialIdMap::remove) や、[`SpatialIdMap`](crate::SpatialIdMap) の `into_iter` が返す。
 #[derive(Debug)]
-pub struct IntoIter<V, S> {
-    stack: Vec<(Node<V, S>, FlexId)>,
+pub struct IntoIter<V> {
+    stack: Vec<(Node<V>, FlexId)>,
     /// まだ返していない要素の数。
     remaining: usize,
 }
 
-impl<V: Clone, S> Iterator for IntoIter<V, S> {
+impl<V: Clone> Iterator for IntoIter<V> {
     type Item = (FlexId, V);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -125,9 +124,9 @@ impl<V: Clone, S> Iterator for IntoIter<V, S> {
     }
 }
 
-impl<V, S> IntoIter<V, S> {
+impl<V> IntoIter<V> {
     /// 領域 `this` の `branch` の子を、[Iter]と同じく下側から取り出されるように積む。
-    fn push_branch(&mut self, this: FlexId, branch: Arc<Branch<V, S>>)
+    fn push_branch(&mut self, this: FlexId, branch: Arc<Branch<V>>)
     where
         V: Clone,
     {
@@ -142,22 +141,22 @@ impl<V, S> IntoIter<V, S> {
     }
 }
 
-impl<V: Clone, S> ExactSizeIterator for IntoIter<V, S> {}
+impl<V: Clone> ExactSizeIterator for IntoIter<V> {}
 
-impl<V: Clone, S> FusedIterator for IntoIter<V, S> {}
+impl<V: Clone> FusedIterator for IntoIter<V> {}
 
-impl<'a, V, S> IntoIterator for &'a FlexTreeCore<V, S> {
+impl<'a, V> IntoIterator for &'a FlexTreeCore<V> {
     type Item = (FlexId, &'a V);
-    type IntoIter = Iter<'a, V, S>;
+    type IntoIter = Iter<'a, V>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-impl<V: Clone, S> IntoIterator for FlexTreeCore<V, S> {
+impl<V: Clone> IntoIterator for FlexTreeCore<V> {
     type Item = (FlexId, V);
-    type IntoIter = IntoIter<V, S>;
+    type IntoIter = IntoIter<V>;
 
     fn into_iter(self) -> Self::IntoIter {
         let remaining = self.count();
@@ -170,7 +169,7 @@ impl<V: Clone, S> IntoIterator for FlexTreeCore<V, S> {
     }
 }
 
-impl<V: PartialEq + Clone, S: Summary<V>> Extend<(FlexId, V)> for FlexTreeCore<V, S> {
+impl<V: PartialEq + Clone> Extend<(FlexId, V)> for FlexTreeCore<V> {
     /// 順に [`insert`](FlexTreeCore::insert) する。重なる場所は後の値で上書きされる。
     fn extend<I: IntoIterator<Item = (FlexId, V)>>(&mut self, iter: I) {
         for (id, value) in iter {
@@ -180,15 +179,15 @@ impl<V: PartialEq + Clone, S: Summary<V>> Extend<(FlexId, V)> for FlexTreeCore<V
 }
 
 /// FlexId の Z-order 列（`prev < next`）から、1つのルート配下の Node を下から O(n) で組む。
-struct OrderedRootBuilder<V, S> {
+struct OrderedRootBuilder<V> {
     root_id: FlexId,
     prev_id: FlexId,
     cur_region: FlexId,
-    cur_node: Node<V, S>,
-    stack: Vec<(FlexId, Dimension, u8, Node<V, S>)>,
+    cur_node: Node<V>,
+    stack: Vec<(FlexId, Dimension, u8, Node<V>)>,
 }
 
-impl<V: PartialEq + Clone, S: Summary<V>> OrderedRootBuilder<V, S> {
+impl<V: PartialEq + Clone> OrderedRootBuilder<V> {
     fn new(root_id: FlexId, id: FlexId, value: V) -> Self {
         Self {
             root_id,
@@ -230,7 +229,7 @@ impl<V: PartialEq + Clone, S: Summary<V>> OrderedRootBuilder<V, S> {
         Ok(())
     }
 
-    fn finish(mut self) -> Node<V, S> {
+    fn finish(mut self) -> Node<V> {
         while let Some((top_fork, top_dim, _, lower)) = self.stack.pop() {
             let upper_id = top_fork.split_on(top_dim, Side::Upper).unwrap();
             let upper = Node::rebase(self.cur_node, &self.cur_region, &upper_id);
@@ -241,22 +240,22 @@ impl<V: PartialEq + Clone, S: Summary<V>> OrderedRootBuilder<V, S> {
     }
 }
 
-fn finish_builders<V: PartialEq + Clone, S: Summary<V>>(
-    upper: Option<OrderedRootBuilder<V, S>>,
-    lower: Option<OrderedRootBuilder<V, S>>,
-) -> FlexTreeCore<V, S> {
+fn finish_builders<V: PartialEq + Clone>(
+    upper: Option<OrderedRootBuilder<V>>,
+    lower: Option<OrderedRootBuilder<V>>,
+) -> FlexTreeCore<V> {
     FlexTreeCore {
         upper_root: upper.map_or(Node::Empty, OrderedRootBuilder::finish),
         lower_root: lower.map_or(Node::Empty, OrderedRootBuilder::finish),
     }
 }
 
-impl<V: PartialEq + Clone, S: Summary<V>> FromIterator<(FlexId, V)> for FlexTreeCore<V, S> {
+impl<V: PartialEq + Clone> FromIterator<(FlexId, V)> for FlexTreeCore<V> {
     /// FlexId の Z-order 列なら下から O(n) で組み立て、途中で順序が崩れていれば [`insert`](FlexTreeCore::insert) に切り替える。
     fn from_iter<I: IntoIterator<Item = (FlexId, V)>>(iter: I) -> Self {
         let mut iter = iter.into_iter();
-        let mut upper: Option<OrderedRootBuilder<V, S>> = None;
-        let mut lower: Option<OrderedRootBuilder<V, S>> = None;
+        let mut upper: Option<OrderedRootBuilder<V>> = None;
+        let mut lower: Option<OrderedRootBuilder<V>> = None;
 
         for (id, value) in iter.by_ref() {
             let root_idx = id.root_index();
@@ -294,10 +293,9 @@ impl<V: PartialEq + Clone, S: Summary<V>> FromIterator<(FlexId, V)> for FlexTree
 /// 同じ場所へ異なる値が重なった場合にどちらが残るかは、チャンクの分かれ方で決まり、
 /// 逐次の [`FromIterator`] の後勝ちとは一致しない。
 #[cfg(feature = "rayon")]
-impl<V, S> rayon::iter::FromParallelIterator<(FlexId, V)> for FlexTreeCore<V, S>
+impl<V> rayon::iter::FromParallelIterator<(FlexId, V)> for FlexTreeCore<V>
 where
     V: PartialEq + Clone + Send + Sync,
-    S: Summary<V> + Send + Sync,
 {
     fn from_par_iter<I>(par_iter: I) -> Self
     where
@@ -316,10 +314,9 @@ where
 
 /// 並列に組んだ木を和集合で重ねる（`feature = "rayon"`）。重なる場所は追加する側の値になる。
 #[cfg(feature = "rayon")]
-impl<V, S> rayon::iter::ParallelExtend<(FlexId, V)> for FlexTreeCore<V, S>
+impl<V> rayon::iter::ParallelExtend<(FlexId, V)> for FlexTreeCore<V>
 where
     V: PartialEq + Clone + Send + Sync,
-    S: Summary<V> + Send + Sync,
 {
     fn par_extend<I>(&mut self, par_iter: I)
     where

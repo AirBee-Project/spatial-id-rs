@@ -8,13 +8,11 @@ description = "Spatial ID (Ouranos 4D spatio-temporal ID) types, collections, ge
 [workspace]
 members = [
     ".",
-    "spatial-id-derive",
 ]
 
 [dependencies]
 # デフォルトで必要なもの
 hashbrown = "0.17.1"
-spatial-id-derive = { version = "0.1.4", path = "spatial-id-derive" }
 libm = "0.2.16"
 triomphe = { version = "0.1.17", default-features = false }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }

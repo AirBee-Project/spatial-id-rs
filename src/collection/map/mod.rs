@@ -1,5 +1,4 @@
-use crate::collection::core::{BitMask, FlexTreeCore, IntoIter, NoSummary, Summary, ValueSet};
-use core::ops::RangeBounds;
+use crate::collection::core::{FlexTreeCore, IntoIter};
 #[cfg(feature = "unstable")]
 pub(crate) mod json;
 #[cfg(feature = "rayon")]
@@ -11,79 +10,19 @@ use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId};
 
 /// 空間IDごとに値を持つマップ。
 ///
-/// 全ての操作は `S` を指定せずに使える。`S` は木の Branch が子孫の値についてキャッシュする
-/// [Summary] で、値で絞り込む操作だけを速くする。値の範囲で絞り込む
-/// [`filter_range`](Self::filter_range) を多用するなら [`MinMax`](crate::MinMax) を、
-/// enum を種類で絞り込む [`filter_values`](Self::filter_values) を多用するなら [`ValueSet`] を指定する。
-///
 /// ```
 /// use spatial_id::collection::SpatialIdMap;
-/// use spatial_id::collection::summary::MinMax;
 /// use spatial_id::SingleId;
 ///
 /// let mut table = SpatialIdMap::new();
 /// table.insert(SingleId::new(20, 0, 0, 0).unwrap(), 3.5_f64);
-///
-/// let mut indexed: SpatialIdMap<u32, MinMax<u32>> = SpatialIdMap::default();
-/// indexed.insert(SingleId::new(20, 0, 0, 0).unwrap(), 80);
-/// assert_eq!(indexed.filter_range(50..).count(), 1);
-/// ```
-///
-/// ## Enum
-///
-/// enum に `#[derive(BitMask)]` を付け、型パラメーターに [ValueSet] を指定する。
-/// これにより内部的にビットマスクが張られてフィルタリングが高速化する
-///
-/// ```
-/// use spatial_id::collection::SpatialIdMap;
-/// use spatial_id::collection::summary::{BitMask, ValueSet};
-/// use spatial_id::SingleId;
-///
-/// #[derive(Debug, Clone, Copy, PartialEq, Eq, BitMask)]
-/// enum Land {
-///     Road,
-///     Building,
-///     Water,
-/// }
-///
-/// let mut map: SpatialIdMap<Land, ValueSet<Land>> = SpatialIdMap::default();
-/// map.insert(SingleId::new(20, 5, 100, 200).unwrap(), Land::Road);
-/// map.insert(SingleId::new(20, 5, 101, 200).unwrap(), Land::Water);
-///
-/// assert!(map.value_set().contains(Land::Water));
-/// let obstacles = map.filter_values([Land::Building, Land::Water].into_iter().collect());
-/// assert_eq!(obstacles.count(), 1);
-/// ```
-///
-/// ## 範囲と種類の両方で絞る
-///
-/// 2つの Summary をタプルで組み合わせる。型が長くなるので型エイリアスを付けるとよい。
-///
-/// ```
-/// use spatial_id::collection::SpatialIdMap;
-/// use spatial_id::collection::summary::{BitMask, MinMax, ValueSet};
-/// use spatial_id::SingleId;
-///
-/// #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, BitMask)]
-/// enum Risk {
-///     Low,
-///     Mid,
-///     High,
-/// }
-///
-/// let mut map = SpatialIdMap::<Risk, (MinMax<Risk>, ValueSet<Risk>)>::default();
-/// map.insert(SingleId::new(20, 5, 100, 200).unwrap(), Risk::Low);
-/// map.insert(SingleId::new(20, 5, 101, 200).unwrap(), Risk::High);
-///
-/// assert_eq!(map.filter_range(Risk::Mid..).count(), 1);
-/// assert_eq!(map.filter_values(ValueSet::single(Risk::Low)).count(), 1);
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SpatialIdMap<V, S = NoSummary> {
-    pub(crate) inner: FlexTreeCore<V, S>,
+pub struct SpatialIdMap<V> {
+    pub(crate) inner: FlexTreeCore<V>,
 }
 
-impl<V, S> Default for SpatialIdMap<V, S> {
+impl<V> Default for SpatialIdMap<V> {
     fn default() -> Self {
         Self {
             inner: FlexTreeCore::default(),
@@ -93,17 +32,14 @@ impl<V, S> Default for SpatialIdMap<V, S> {
 
 impl<V: PartialEq + Clone> SpatialIdMap<V> {
     /// 空の [SpatialIdMap] を作成する。
-    ///
-    /// [Summary] を指定するときは [`Default::default`] または [`with_summary`](Self::with_summary) を使う。
     pub fn new() -> Self {
         Self::default()
     }
 }
 
-impl<V, S> SpatialIdMap<V, S>
+impl<V> SpatialIdMap<V>
 where
     V: PartialEq + Clone,
-    S: Summary<V>,
 {
     /// 空間に値を挿入する。既に値がある場所は上書きされる。
     pub fn insert<T: SpatialId>(&mut self, target: T, value: V) {
@@ -162,7 +98,7 @@ where
     /// 指定した空間（target）をツリーからくり抜き、削除された領域とその値を返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターはテーブルを借用しない。
-    pub fn remove<T: SpatialId>(&mut self, target: T) -> IntoIter<V, S> {
+    pub fn remove<T: SpatialId>(&mut self, target: T) -> IntoIter<V> {
         self.inner.remove(target).into_iter()
     }
 
@@ -179,7 +115,7 @@ where
     /// [`FlexId`] と値をそのまま取り除いて返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターはテーブルを借用しない。
-    pub fn remove_overlapping<T: SpatialId>(&mut self, target: T) -> IntoIter<V, S> {
+    pub fn remove_overlapping<T: SpatialId>(&mut self, target: T) -> IntoIter<V> {
         self.inner.remove_overlapping(target).into_iter()
     }
 
@@ -227,13 +163,6 @@ where
         self.inner.is_empty()
     }
 
-    /// 中身はそのままに、[Summary] を `T` に付け替えたテーブルを作成する。
-    pub fn with_summary<T: Summary<V>>(&self) -> SpatialIdMap<V, T> {
-        SpatialIdMap {
-            inner: self.inner.with_summary(),
-        }
-    }
-
     /// テーブルのすべての値を削除する。
     pub fn clear(&mut self) {
         self.inner.clear();
@@ -245,60 +174,16 @@ where
     }
 }
 
-impl<V, S> SpatialIdMap<V, S>
-where
-    V: Ord + Clone,
-    S: Summary<V>,
-{
-    /// テーブル全体に存在する値の範囲 `(最小, 最大)`。空なら [`None`]。
-    ///
-    /// [`MinMax`](crate::MinMax) を持つテーブルなら O(1)、そうでなければ全ての値を走査する。
-    pub fn value_range(&self) -> Option<(&V, &V)> {
-        self.inner.value_range()
-    }
-
-    /// 値が `range` に含まれる領域だけを残したテーブルを作る。
-    ///
-    /// [`MinMax`](crate::MinMax) を持つテーブルなら、値がすべて `range` の内側・外側にある部分は辿らない。
-    pub fn filter_range<R: RangeBounds<V>>(&self, range: R) -> Self {
-        Self {
-            inner: self.inner.filter_range(range),
-        }
-    }
-}
-
-impl<V, S> SpatialIdMap<V, S>
-where
-    V: BitMask + PartialEq + Clone,
-    S: Summary<V>,
-{
-    /// テーブル全体に現れる値の集合。
-    ///
-    /// [`ValueSet`] を持つテーブルなら O(1)、そうでなければ全ての値を走査する。
-    pub fn value_set(&self) -> ValueSet<V> {
-        self.inner.value_set()
-    }
-
-    /// 値が `values` に含まれる領域だけを残したテーブルを作る。
-    ///
-    /// [`ValueSet`] を持つテーブルなら、値がすべて `values` の内側・外側にある部分は辿らない。
-    pub fn filter_values(&self, values: ValueSet<V>) -> Self {
-        Self {
-            inner: self.inner.filter_values(values),
-        }
-    }
-}
-
-impl<V: Clone, S> IntoIterator for SpatialIdMap<V, S> {
+impl<V: Clone> IntoIterator for SpatialIdMap<V> {
     type Item = (FlexId, V);
-    type IntoIter = IntoIter<V, S>;
+    type IntoIter = IntoIter<V>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
     }
 }
 
-impl<V: PartialEq + Clone, S: Summary<V>> FromIterator<(FlexId, V)> for SpatialIdMap<V, S> {
+impl<V: PartialEq + Clone> FromIterator<(FlexId, V)> for SpatialIdMap<V> {
     fn from_iter<T: IntoIterator<Item = (FlexId, V)>>(iter: T) -> Self {
         Self {
             inner: iter.into_iter().collect(),
@@ -306,7 +191,7 @@ impl<V: PartialEq + Clone, S: Summary<V>> FromIterator<(FlexId, V)> for SpatialI
     }
 }
 
-impl<V: PartialEq + Clone, S: Summary<V>> Extend<(FlexId, V)> for SpatialIdMap<V, S> {
+impl<V: PartialEq + Clone> Extend<(FlexId, V)> for SpatialIdMap<V> {
     fn extend<T: IntoIterator<Item = (FlexId, V)>>(&mut self, iter: T) {
         self.inner.extend(iter);
     }

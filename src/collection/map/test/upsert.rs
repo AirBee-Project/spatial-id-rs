@@ -25,14 +25,7 @@ mod tests {
 
         let actual_values: Vec<_> = table.get(target).map(|(_, value)| *value).collect();
         assert_eq!(actual_values, vec![10], "既存値が上書きされてはいけない");
-        assert!(
-            table
-                .filter_range(&20..=&20)
-                .into_iter()
-                .map(|(id, _)| id)
-                .next()
-                .is_none()
-        );
+        assert!(table.iter().find(|(_, value)| **value == 20).is_none());
     }
 
     /// target が既存領域と空き領域の両方にまたがる場合、占有済みの部分は既存値のまま、
@@ -73,13 +66,6 @@ mod tests {
             with_noop_upsert, plain,
             "埋まっている場所への upsert でテーブルが変わった"
         );
-        assert!(
-            with_noop_upsert
-                .filter_range(&20..=&20)
-                .into_iter()
-                .map(|(id, _)| id)
-                .next()
-                .is_none()
-        );
+        assert!(with_noop_upsert.iter().find(|(_, val)| **val == 20).is_none());
     }
 }

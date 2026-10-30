@@ -17,16 +17,14 @@ mod tests {
         assert_eq!(actual_values, vec![20]);
         assert!(
             table
-                .filter_range(&10..=&10)
-                .into_iter()
-                .map(|(id, _)| id)
-                .next()
+                .iter()
+                .find(|(_, val)| **val == 10)
                 .is_none()
         );
         assert_eq!(
             table
-                .filter_range(&20..=&20)
-                .into_iter()
+                .iter()
+                .filter(|(_, val)| **val == 20)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),
             target.into_iter().collect::<Vec<_>>()
@@ -46,8 +44,8 @@ mod tests {
 
         assert_eq!(
             table
-                .filter_range(&10..=&10)
-                .into_iter()
+                .iter()
+                .filter(|(_, val)| **val == 10)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),
             first.into_iter().chain(second).collect::<Vec<_>>()
