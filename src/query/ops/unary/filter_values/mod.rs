@@ -86,9 +86,11 @@ where
     }
 
     fn run<'a>(&'a self, input: QueryIter<'a, V>) -> Result<QueryIter<'a, V>, Error> {
+        let common_ancestor = input.common_ancestor();
         Ok(QueryIter::from_ordered(input.filter(
             move |item| !matches!(item, Ok((_, value)) if !self.predicate.matches(value)),
-        )))
+        ))
+        .with_common_ancestor(common_ancestor))
     }
 
     fn reverse_target(&self, bounds: crate::RangeId, out: &mut alloc::vec::Vec<crate::RangeId>) {

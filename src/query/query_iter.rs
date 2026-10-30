@@ -5,7 +5,12 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 /// 演算子の間を流れる `(FlexId, V)` の列。FlexId の Z-order 列である。
-pub struct QueryIter<'a, V>(Box<dyn Iterator<Item = Result<(FlexId, V), Error>> + Send + 'a>);
+pub struct QueryIter<'a, V> {
+    iter: Box<dyn Iterator<Item = Result<(FlexId, V), Error>> + Send + 'a>,
+    /// QueryIterが流す最小の共通祖先の[FlexId]。地上と地下で2つ存在する場合があるため2つある
+    /// 存在しない場合には[None]となる。
+    common_ancestor: [Option<FlexId>; 2],
+}
 
 impl<'a, V> QueryIter<'a, V> {
     /// 制約を満たす `iter` を包む。制約を守るのは呼び出し側の責任。
@@ -26,7 +31,22 @@ impl<'a, V> QueryIter<'a, V> {
                 }
             })
         };
-        Self(Box::new(iter))
+        Self {
+            iter: Box::new(iter),
+            common_ancestor: FlexId::ROOTS.map(Some),
+        }
+    }
+
+    pub(crate) fn with_common_ancestor(
+        mut self,
+        common_ancestor: [Option<FlexId>; 2],
+    ) -> Self {
+        self.common_ancestor = common_ancestor;
+        self
+    }
+
+    pub(crate) fn common_ancestor(&self) -> [Option<FlexId>; 2] {
+        self.common_ancestor
     }
 
     /// 要素ごとに独立な変換 `f` を、順序を保ったまま適用する。[`None`] を返した要素は取り除く。
@@ -38,10 +58,12 @@ impl<'a, V> QueryIter<'a, V> {
     where
         V: Send + 'a,
     {
+        let common_ancestor = self.common_ancestor;
         QueryIter::from_ordered(self.filter_map(move |item| match item {
             Ok((id, value)) => f(id, value).map(|value| Ok((id, value))),
             Err(e) => Some(Err(e)),
         }))
+        .with_common_ancestor(common_ancestor)
     }
 
     /// 要素ごとに独立な変換 `f` を、順序を保ったまま適用する。[`None`] を返した要素は取り除く。
@@ -89,6 +111,7 @@ impl<'a, V> QueryIter<'a, V> {
             Err(e) => Some(Err(e)),
         };
 
+        let common_ancestor = self.common_ancestor;
         let mut input = self.fuse();
         let mut ready = Vec::new().into_iter();
         let mut per_item: Option<Duration> = None;
@@ -143,6 +166,7 @@ impl<'a, V> QueryIter<'a, V> {
                 }
             }
         }))
+        .with_common_ancestor(common_ancestor)
     }
 }
 
@@ -150,11 +174,11 @@ impl<V> Iterator for QueryIter<'_, V> {
     type Item = Result<(FlexId, V), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
+        self.iter.next()
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        self.0.size_hint()
+        self.iter.size_hint()
     }
 }
 
@@ -162,6 +186,7 @@ impl<'a, V: SafeValue + 'static, S: Send + Sync + 'static> From<SpatialIdMap<V, 
     for QueryIter<'a, V>
 {
     fn from(table: SpatialIdMap<V, S>) -> Self {
-        Self::from_ordered(table.into_iter().map(Ok))
+        let common_ancestor = table.inner.common_ancestor_roots();
+        Self::from_ordered(table.into_iter().map(Ok)).with_common_ancestor(common_ancestor)
     }
 }
