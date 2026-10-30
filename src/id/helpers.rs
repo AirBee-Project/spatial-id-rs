@@ -1,5 +1,6 @@
 use alloc::string::String;
 
+use crate::{ALT_ABS_MAX, LON_ABS_MAX};
 use core::{f64::consts::PI, fmt};
 pub fn scale_range_i32(start: i32, end: i32, scale: i32) -> [i32; 2] {
     [
@@ -23,7 +24,7 @@ pub fn scale_range_u32(start: u32, end: u32, scale: u32) -> [u32; 2] {
 /// Segment番号 x の左端なら x、中心なら x+0.5 を渡せる。
 pub fn longitude(x: f64, z: u8) -> f64 {
     let n = libm::pow(2_f64, (z as i32) as f64);
-    360.0 * (x / n) - 180.0
+    2.0 * LON_ABS_MAX * (x / n) - LON_ABS_MAX
 }
 
 /// 緯度 (latitude) を返す（Web Mercator の逆変換, 実数 y 対応）
@@ -46,7 +47,7 @@ pub fn latitude(y: f64, z: u8) -> f64 {
 ///
 pub fn altitude(f: f64, z: u8) -> f64 {
     let n = libm::pow(2_f64, (z as i32) as f64);
-    33_554_432.0 * (f / n)
+    ALT_ABS_MAX * (f / n)
 }
 
 /// 座標軸のどちら側かを表す。

@@ -1,5 +1,5 @@
 use crate::{
-    Coordinate, Ecef, Error, FractionalId, Point, WGS84_A, WGS84_E2, ZoomLevel,
+    Coordinate, Ecef, Error, FractionalId, LON_ABS_MAX, Point, WGS84_A, WGS84_E2, ZoomLevel,
     geometry::traits::CoverSingleIds,
 };
 use core::fmt;
@@ -91,7 +91,7 @@ impl Point for Coordinate {
         let f = factor * alt;
 
         let n = 2u64.pow(z as u32) as f64;
-        let x = (lon + 180.0) / 360.0 * n;
+        let x = (lon + LON_ABS_MAX) / (2.0 * LON_ABS_MAX) * n;
 
         let lat_rad = lat.to_radians();
         let y = (1.0

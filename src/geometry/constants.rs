@@ -28,3 +28,8 @@ pub const WGS84_B: f64 = WGS84_A * (1.0 - WGS84_F);
 /// `e² = 1 - (b² / a²)`
 ///
 pub const WGS84_E2: f64 = 1.0 - (WGS84_B * WGS84_B) / (WGS84_A * WGS84_A);
+
+/// 緯度・経度・標高の最大・最小値
+pub const LAT_ABS_MAX: f64 = 85.0511;
+pub const LON_ABS_MAX: f64 = 180.0;
+pub const ALT_ABS_MAX: f64 = 33_554_432.0;
