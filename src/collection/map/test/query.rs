@@ -54,6 +54,40 @@ mod tests {
         assert_eq!(via_wrapped_count, via_full_count);
     }
 
+    /// value_range() / value_set() / filter_values() が値に基づいて動くことを検証する。
+    #[test]
+    fn value_queries_return_expected() {
+        let table = build_table(&[
+            TableEntry::Single(SingleId::new(4, 3, 2, 1).unwrap(), 10),
+            TableEntry::Single(SingleId::new(4, 3, 2, 2).unwrap(), 20),
+            TableEntry::Range(RangeId::new(3, [0, 1], [1, 1], [2, 2]).unwrap(), 30),
+        ]);
+
+        assert_eq!(table.value_range(), Some((&10, &30)));
+        assert_eq!(table.value_set(), [10, 20, 30].into());
+        let picked = table.filter_values(&[10, 30].into());
+        assert_eq!(picked.value_set(), [10, 30].into());
+    }
+
+    /// filter_range() が値の範囲条件に一致する組だけを返すことを検証する。
+    #[test]
+    fn value_range_returns_expected_pairs() {
+        let table = build_table(&[
+            TableEntry::Single(SingleId::new(4, 3, 2, 1).unwrap(), 10),
+            TableEntry::Single(SingleId::new(4, 3, 2, 2).unwrap(), 20),
+            TableEntry::Range(RangeId::new(3, [0, 1], [1, 1], [2, 2]).unwrap(), 30),
+        ]);
+
+        let mut actual: Vec<i32> = table
+            .filter_range(10..=20)
+            .into_iter()
+            .map(|(_, value)| value)
+            .collect();
+        actual.sort();
+
+        assert_eq!(actual, vec![10, 20]);
+    }
+
     /// iter() がテーブル中の全ての ID と値の組を返すことを検証する。
     #[test]
     fn iter_returns_all_pairs() {

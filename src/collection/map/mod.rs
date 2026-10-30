@@ -1,4 +1,6 @@
 use crate::collection::core::{FlexTreeCore, IntoIter};
+use alloc::collections::BTreeSet;
+use core::ops::RangeBounds;
 #[cfg(feature = "unstable")]
 pub(crate) mod json;
 #[cfg(feature = "rayon")]
@@ -171,6 +173,32 @@ where
     /// テーブルに保持されているすべての空間と値への参照のペアを返す。
     pub fn iter(&self) -> impl Iterator<Item = (FlexId, &V)> + Clone + '_ {
         self.inner.iter()
+    }
+}
+
+impl<V: Ord + Clone> SpatialIdMap<V> {
+    /// テーブル全体に存在する値の範囲 `(最小, 最大)`。空なら [`None`]。
+    pub fn value_range(&self) -> Option<(&V, &V)> {
+        self.inner.value_range()
+    }
+
+    /// 値が `range` に含まれる領域だけを残したテーブルを作る。
+    pub fn filter_range<R: RangeBounds<V>>(&self, range: R) -> Self {
+        Self {
+            inner: self.inner.filter_range(range),
+        }
+    }
+
+    /// テーブル全体に現れる値の集合。
+    pub fn value_set(&self) -> BTreeSet<V> {
+        self.inner.value_set()
+    }
+
+    /// 値が `values` に含まれる領域だけを残したテーブルを作る。
+    pub fn filter_values(&self, values: &BTreeSet<V>) -> Self {
+        Self {
+            inner: self.inner.filter_values(values),
+        }
     }
 }
 

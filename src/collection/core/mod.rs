@@ -1,9 +1,11 @@
 use crate::collection::time_reconstruct;
 use crate::{AllowedIntervals, FlexId, RangeId, Side, SingleId, SpatialId};
+use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::iter::from_fn;
 use core::mem;
+use core::ops::RangeBounds;
 pub use iter::IntoIter;
 pub(crate) use iter::Iter;
 use node::{Decision, Node};
@@ -397,6 +399,35 @@ impl<V: PartialEq + Clone> FlexTreeCore<V> {
             upper_root: filter(&self.upper_root, &FlexId::UPPER_MAX),
             lower_root: filter(&self.lower_root, &FlexId::LOWER_MAX),
         }
+    }
+}
+
+impl<V: Ord + Clone> FlexTreeCore<V> {
+    /// 全ての値の範囲 `(最小, 最大)`。空なら [`None`]。
+    pub fn value_range(&self) -> Option<(&V, &V)> {
+        self.iter()
+            .map(|(_, value)| value)
+            .fold(None, |range, value| {
+                Some(match range {
+                    None => (value, value),
+                    Some((min, max)) => (min.min(value), max.max(value)),
+                })
+            })
+    }
+
+    /// 値が `range` に含まれる [FlexId] だけを残す。
+    pub fn filter_range<R: RangeBounds<V>>(&self, range: R) -> Self {
+        self.filter(&|_| Decision::Descend, &|_, value| range.contains(value))
+    }
+
+    /// 全ての値の集合。
+    pub fn value_set(&self) -> BTreeSet<V> {
+        self.iter().map(|(_, value)| value.clone()).collect()
+    }
+
+    /// 値が `values` に含まれる [FlexId] だけを残す。
+    pub fn filter_values(&self, values: &BTreeSet<V>) -> Self {
+        self.filter(&|_| Decision::Descend, &|_, value| values.contains(value))
     }
 }
 
