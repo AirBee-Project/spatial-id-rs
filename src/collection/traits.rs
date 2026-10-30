@@ -16,7 +16,8 @@ impl Source for SpatialIdSet {
             self.inner
                 .get_overlapping(targets.iter().cloned())
                 .map(|(id, ())| Ok((id, ()))),
-        ))
+        )
+        .with_common_ancestor(self.inner.common_ancestor_roots()))
     }
 }
 
@@ -36,6 +37,7 @@ where
             self.inner
                 .get_overlapping(targets.iter().cloned())
                 .map(|(id, value)| Ok((id, value.clone()))),
-        ))
+        )
+        .with_common_ancestor(self.inner.common_ancestor_roots()))
     }
 }

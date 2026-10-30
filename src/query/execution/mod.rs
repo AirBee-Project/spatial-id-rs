@@ -326,12 +326,13 @@ fn read_source<'a, V: SafeValue + 'static>(
 ) -> Result<QueryIter<'a, V>, Error> {
     let token = token.clone();
     let mut counter = 0u32;
-    Ok(QueryIter::from_ordered(
-        source.read_flex_ids(bounds, &token)?.map(move |item| {
-            token.check_amortized(&mut counter)?;
-            item
-        }),
-    ))
+    let stream = source.read_flex_ids(bounds, &token)?;
+    let common_ancestor = stream.common_ancestor();
+    Ok(QueryIter::from_ordered(stream.map(move |item| {
+        token.check_amortized(&mut counter)?;
+        item
+    }))
+    .with_common_ancestor(common_ancestor))
 }
 
 impl<V: SafeValue + 'static> Query<V> {

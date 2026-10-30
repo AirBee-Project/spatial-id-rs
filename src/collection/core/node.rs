@@ -4,10 +4,12 @@ use crate::{
     FlexId, Side,
     id::{
         dimension::Dimension,
+        flex_id::ZOrderRel,
         relative_flex_id::{RelativeFlexId, ShortPath},
     },
 };
 use alloc::borrow::Cow;
+use alloc::vec::Vec;
 use core::{mem, ptr};
 use triomphe::Arc;
 
@@ -180,6 +182,8 @@ impl<V, S> Node<V, S> {
             _ => false,
         }
     }
+
+
 }
 
 impl<V: Ord, S: Summary<V>> Node<V, S> {
@@ -557,6 +561,139 @@ impl<V: PartialEq + Clone, S: Summary<V>> Node<V, S> {
             }
         }
     }
+
+    /// ルート領域 `root_id` のこの Node から、`horizon` より前に確定した要素を Z-order 順に抜き出して `out` へ追加する。
+    pub(super) fn drain_confirmed(
+        &mut self,
+        root_id: FlexId,
+        horizon: &FlexId,
+        out: &mut Vec<(FlexId, V)>,
+    ) {
+        if self.is_empty() {
+            return;
+        }
+        let top_region = match self.skip_target(&root_id) {
+            Some((region, _)) => region,
+            None => root_id,
+        };
+        if top_region.zorder_rel(horizon) == ZOrderRel::Greater {
+            return;
+        }
+        if top_region.zorder_rel(horizon) == ZOrderRel::Less {
+            Self::append_all(mem::take(self), root_id, out);
+            return;
+        }
+        self.drain_inner(root_id, horizon, out);
+    }
+
+    /// `this` 自身は空にせず、`horizon` より前に確定した部分木を抜き出して `out` へ追加する。
+    fn drain_inner(
+        &mut self,
+        this: FlexId,
+        horizon: &FlexId,
+        out: &mut Vec<(FlexId, V)>,
+    ) -> bool {
+        match self {
+            Node::Empty | Node::Leaf(_) | Node::LeafAt(..) => false,
+            Node::Skip(skip) => {
+                let region = skip.path.to_absolute(&this).unwrap();
+                if region.zorder_rel(horizon) == ZOrderRel::Greater {
+                    return false;
+                }
+                let skip_mut = Arc::make_mut(skip);
+                if !skip_mut.child.drain_inner(region, horizon, out) {
+                    return false;
+                }
+                let child = mem::take(&mut skip_mut.child);
+                *self = Node::rebase(child, &region, &this);
+                true
+            }
+            Node::BranchAt(path, _) => {
+                let region = path.to_absolute(&this);
+                if region.zorder_rel(horizon) == ZOrderRel::Greater {
+                    return false;
+                }
+                let Node::BranchAt(path, branch) = mem::take(self) else {
+                    unreachable!()
+                };
+                let mut inner = Node::Branch(branch);
+                let changed = inner.drain_branch(region, horizon, out);
+                *self = match inner {
+                    Node::Branch(branch) if !changed => Node::BranchAt(path, branch),
+                    inner => Node::rebase(inner, &region, &this),
+                };
+                changed
+            }
+            Node::Branch(_) => self.drain_branch(this, horizon, out),
+        }
+    }
+
+    fn drain_branch(
+        &mut self,
+        this: FlexId,
+        horizon: &FlexId,
+        out: &mut Vec<(FlexId, V)>,
+    ) -> bool {
+        let Node::Branch(branch) = self else {
+            unreachable!()
+        };
+        let dim = branch.dimension;
+        let lower_id = this.split_on(dim, Side::Lower).unwrap();
+        if lower_id.zorder_rel(horizon) == ZOrderRel::Greater {
+            return false;
+        }
+        let upper_id = this.split_on(dim, Side::Upper).unwrap();
+
+        if lower_id.zorder_rel(horizon) == ZOrderRel::Less {
+            let b = Arc::make_mut(branch);
+            let lower = mem::take(&mut b.lower);
+            let upper = mem::take(&mut b.upper);
+            Self::append_all(lower, lower_id, out);
+            *self = Node::rebase(upper, &upper_id, &this);
+            self.drain_inner(this, horizon, out);
+            return true;
+        }
+
+        let b = Arc::make_mut(branch);
+        if !b.lower.drain_inner(lower_id, horizon, out) {
+            return false;
+        }
+        let (Some(ls), Some(us)) = (b.lower.summary(), b.upper.summary()) else {
+            unreachable!()
+        };
+        b.split_dimensions = dim.bit() | b.lower.split_dimensions() | b.upper.split_dimensions();
+        b.height = 1 + b.lower.height().max(b.upper.height());
+        b.count = b.lower.count() + b.upper.count();
+        b.summary = ls.merge(&us);
+        true
+    }
+
+    /// 領域 `this` の `node` に含まれる全要素を Z-order 順で `out` に追加する。
+    pub(super) fn append_all(node: Self, this: FlexId, out: &mut Vec<(FlexId, V)>) {
+        match node {
+            Node::Empty => {}
+            Node::Leaf(value) => out.push((this, value)),
+            Node::LeafAt(path, value) => out.push((path.to_absolute(&this), value)),
+            Node::Branch(branch) => Self::append_branch(this, branch, out),
+            Node::BranchAt(path, branch) => Self::append_branch(path.to_absolute(&this), branch, out),
+            Node::Skip(skip) => {
+                let region = skip.path.to_absolute(&this).unwrap();
+                let child = Arc::try_unwrap(skip).map_or_else(|s| s.child.clone(), |s| s.child);
+                Self::append_all(child, region, out);
+            }
+        }
+    }
+
+    fn append_branch(region: FlexId, branch: Arc<Branch<V, S>>, out: &mut Vec<(FlexId, V)>) {
+        let (dim, lower, upper) = match Arc::try_unwrap(branch) {
+            Ok(b) => (b.dimension, b.lower, b.upper),
+            Err(b) => (b.dimension, b.lower.clone(), b.upper.clone()),
+        };
+        Self::append_all(lower, region.split_on(dim, Side::Lower).unwrap(), out);
+        Self::append_all(upper, region.split_on(dim, Side::Upper).unwrap(), out);
+    }
+
+
 }
 
 /// 行き先 `region`・その先の Node がそれぞれ `a`・`b` の 2 つの Skip が、領域 `this` から

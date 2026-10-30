@@ -210,6 +210,44 @@ impl<V, S> FlexTreeCore<V, S> {
             (&mut self.upper_root, FlexId::UPPER_MAX)
         }
     }
+
+    /// 各ルート（`[UPPER_MAX, LOWER_MAX]`）の全要素を包む最小共通祖先の [`FlexId`] を返す。
+    /// そのルートが空なら [`None`]。
+    pub(crate) fn common_ancestor_roots(&self) -> [Option<FlexId>; 2] {
+        [
+            (&self.upper_root, FlexId::UPPER_MAX),
+            (&self.lower_root, FlexId::LOWER_MAX),
+        ]
+        .map(|(root, root_id)| {
+            if root.is_empty() {
+                None
+            } else {
+                Some(root.skip_target(&root_id).map_or(root_id, |(id, _)| id))
+            }
+        })
+    }
+
+    fn root_mut(&mut self, root_idx: usize) -> (&mut Node<V, S>, FlexId) {
+        if root_idx == 0 {
+            (&mut self.upper_root, FlexId::UPPER_MAX)
+        } else {
+            (&mut self.lower_root, FlexId::LOWER_MAX)
+        }
+    }
+
+    /// 指定したルートのうち `horizon` より前に確定した要素を抜き出し、Z-order 順で `out` へ追加する。
+    pub(crate) fn drain_confirmed(
+        &mut self,
+        root_idx: usize,
+        horizon: &FlexId,
+        out: &mut Vec<(FlexId, V)>,
+    ) where
+        V: PartialEq + Clone,
+        S: Summary<V>,
+    {
+        let (root, root_id) = self.root_mut(root_idx);
+        root.drain_confirmed(root_id, horizon, out);
+    }
 }
 
 impl<V: PartialEq, S> FlexTreeCore<V, S> {
