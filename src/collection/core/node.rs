@@ -1,5 +1,4 @@
 use super::view::{Target, View};
-use crate::collection::summary::{BitMask, Summary, ValueSet};
 use crate::{
     FlexId, Side,
     id::{
@@ -7,27 +6,25 @@ use crate::{
         relative_flex_id::{RelativeFlexId, ShortPath},
     },
 };
-use alloc::borrow::Cow;
 use core::{mem, ptr};
 use triomphe::Arc;
 
 /// Node は自分の領域を持たず、親から渡される領域 `this`との相対的な位置で意味を持つ。辿る関数が`this`を持つことで様々な操作を行う。
 #[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) enum Node<V, S> {
+pub(crate) enum Node<V> {
     #[default]
     Empty,
     Leaf(V),
-    Branch(Arc<Branch<V, S>>),
+    Branch(Arc<Branch<V>>),
     /// 行き先を [ShortPath] で表せない Skip。
-    Skip(Arc<Skip<V, S>>),
+    Skip(Arc<Skip<V>>),
     /// 行き先を [ShortPath] で表せて、先が Leaf の Skip。確保せずに Node に埋め込む。
     LeafAt(ShortPath, V),
     /// 行き先を [ShortPath] で表せて、先が Branch の Skip。
-    BranchAt(ShortPath, Arc<Branch<V, S>>),
+    BranchAt(ShortPath, Arc<Branch<V>>),
 }
 
-// derive では `S: Clone` まで要求されるが、Arc の複製に `S` の複製は要らない
-impl<V: Clone, S> Clone for Node<V, S> {
+impl<V: Clone> Clone for Node<V> {
     fn clone(&self) -> Self {
         match self {
             Node::Empty => Node::Empty,
@@ -41,7 +38,7 @@ impl<V: Clone, S> Clone for Node<V, S> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Branch<V, S> {
+pub(crate) struct Branch<V> {
     pub(super) dimension: Dimension,
     /// 自身と子孫が割っている次元のビットマスク。自身の `dimension` とlowerとupperの集合を合わせたもの。
     pub(super) split_dimensions: u8,
@@ -49,20 +46,19 @@ pub(crate) struct Branch<V, S> {
     pub(super) height: u8,
     /// 子孫に含まれる、値を持つ[FlexId]の数。
     pub(super) count: u32,
-    pub(super) summary: S,
-    pub(super) lower: Node<V, S>,
-    pub(super) upper: Node<V, S>,
+    pub(super) lower: Node<V>,
+    pub(super) upper: Node<V>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Skip<V, S> {
+pub(crate) struct Skip<V> {
     pub(super) path: RelativeFlexId,
     /// 自身と子孫が割っている次元のビットマスク。行き先が狭い次元（`path` の深くなっている次元）と `child` の集合を合わせたもの。
     pub(super) split_dimensions: u8,
-    pub(super) child: Node<V, S>,
+    pub(super) child: Node<V>,
 }
 
-/// [`Node::filter`] で、Branch の領域と Summary から子孫をまとめて判断した結果。
+/// [`Node::filter`] で、Branch の領域から子孫をまとめて判断した結果。
 pub(super) enum Decision {
     /// 子孫をすべて残す。
     KeepAll,
@@ -72,7 +68,7 @@ pub(super) enum Decision {
     Descend,
 }
 
-impl<V, S> Node<V, S> {
+impl<V> Node<V> {
     pub(super) fn is_empty(&self) -> bool {
         matches!(self, Node::Empty)
     }
@@ -119,7 +115,7 @@ impl<V, S> Node<V, S> {
     /// 領域 `this` のこの Node が Skip なら、行き先の領域とその先。
     // `merge` の各段で呼ぶので展開させる
     #[inline(always)]
-    pub(super) fn skip_target(&self, this: &FlexId) -> Option<(FlexId, Target<'_, V, S>)> {
+    pub(super) fn skip_target(&self, this: &FlexId) -> Option<(FlexId, Target<'_, V>)> {
         match self {
             Node::Skip(skip) => Some((
                 skip.path.to_absolute(this).unwrap(),
@@ -150,7 +146,7 @@ impl<V, S> Node<V, S> {
         &self,
         this: FlexId,
     ) -> impl DoubleEndedIterator<Item = (&Self, FlexId)> {
-        fn halves<V, S>(branch: &Branch<V, S>, this: FlexId) -> [Option<(&Node<V, S>, FlexId)>; 2] {
+        fn halves<V>(branch: &Branch<V>, this: FlexId) -> [Option<(&Node<V>, FlexId)>; 2] {
             let half = |side| this.split_on(branch.dimension, side).unwrap();
             [
                 Some((&branch.lower, half(Side::Lower))),
@@ -170,7 +166,7 @@ impl<V, S> Node<V, S> {
     }
 
     /// 同じ Branch・Skip の Arc を指しているなら true。値の型が違う Node とも比べられる。
-    pub(super) fn ptr_eq<W, T>(&self, other: &Node<W, T>) -> bool {
+    pub(super) fn ptr_eq<W>(&self, other: &Node<W>) -> bool {
         match (self, other) {
             (Node::Branch(a), Node::Branch(b)) => ptr::addr_eq(Arc::as_ptr(a), Arc::as_ptr(b)),
             (Node::Skip(a), Node::Skip(b)) => ptr::addr_eq(Arc::as_ptr(a), Arc::as_ptr(b)),
@@ -182,96 +178,21 @@ impl<V, S> Node<V, S> {
     }
 }
 
-impl<V: Ord, S: Summary<V>> Node<V, S> {
-    /// この Node と子孫の値の範囲 `(最小, 最大)`。空なら [`None`]。
-    ///
-    /// Summary が範囲を持っていればそれを使い、持っていなければ子孫を辿って求める。
-    pub(super) fn value_range(&self) -> Option<(&V, &V)> {
-        match self {
-            Node::Empty => None,
-            Node::Leaf(value) | Node::LeafAt(_, value) => Some((value, value)),
-            Node::Branch(branch) | Node::BranchAt(_, branch) => branch
-                .summary
-                .value_range()
-                .or_else(|| wider_range(branch.lower.value_range(), branch.upper.value_range())),
-            Node::Skip(skip) => skip.child.value_range(),
-        }
-    }
-}
-
-impl<V: BitMask, S: Summary<V>> Node<V, S> {
-    /// この Node と子孫に現れる値の集合。
-    ///
-    /// Summary が集合を持っていればそれを使い、持っていなければ子孫を辿って求める。
-    pub(super) fn value_set(&self) -> ValueSet<V> {
-        match self {
-            Node::Empty => ValueSet::EMPTY,
-            Node::Leaf(value) | Node::LeafAt(_, value) => ValueSet::single(*value),
-            Node::Branch(branch) | Node::BranchAt(_, branch) => branch
-                .summary
-                .value_set()
-                .unwrap_or_else(|| branch.lower.value_set().union(&branch.upper.value_set())),
-            Node::Skip(skip) => skip.child.value_set(),
-        }
-    }
-}
-
-impl<V: Clone, S> Node<V, S> {
-    /// 形はそのままに、Branch の Summary を `T` で作り直した Node。
-    pub(super) fn with_summary<T: Summary<V>>(&self) -> Node<V, T> {
-        match self {
-            Node::Empty => Node::Empty,
-            Node::Leaf(value) => Node::Leaf(value.clone()),
-            Node::Branch(branch) => Node::Branch(branch.with_summary()),
-            Node::Skip(skip) => {
-                Node::Skip(Arc::new(Skip::new(skip.path, skip.child.with_summary())))
-            }
-            Node::LeafAt(path, value) => Node::LeafAt(*path, value.clone()),
-            Node::BranchAt(path, branch) => Node::BranchAt(*path, branch.with_summary()),
-        }
-    }
-}
-
-impl<V: Clone, S> Branch<V, S> {
-    fn with_summary<T: Summary<V>>(&self) -> Arc<Branch<V, T>> {
-        Arc::new(Branch::new(
-            self.dimension,
-            self.lower.with_summary(),
-            self.upper.with_summary(),
-        ))
-    }
-}
-
-/// 2つの値の範囲を合わせた範囲。
-pub(super) fn wider_range<'a, V: Ord>(
-    a: Option<(&'a V, &'a V)>,
-    b: Option<(&'a V, &'a V)>,
-) -> Option<(&'a V, &'a V)> {
-    match (a, b) {
-        (Some((a_min, a_max)), Some((b_min, b_max))) => Some((a_min.min(b_min), a_max.max(b_max))),
-        (range, None) | (None, range) => range,
-    }
-}
-
-impl<V, S: Summary<V>> Branch<V, S> {
-    fn new(dimension: Dimension, lower: Node<V, S>, upper: Node<V, S>) -> Self {
-        let (Some(lower_summary), Some(upper_summary)) = (lower.summary(), upper.summary()) else {
-            unreachable!("Branch の子は空にならない")
-        };
+impl<V> Branch<V> {
+    fn new(dimension: Dimension, lower: Node<V>, upper: Node<V>) -> Self {
         Branch {
             dimension,
             split_dimensions: dimension.bit() | lower.split_dimensions() | upper.split_dimensions(),
             height: 1 + lower.height().max(upper.height()),
             count: lower.count() + upper.count(),
-            summary: lower_summary.merge(&upper_summary),
             lower,
             upper,
         }
     }
 }
 
-impl<V, S> Skip<V, S> {
-    fn new(path: RelativeFlexId, child: Node<V, S>) -> Self {
+impl<V> Skip<V> {
+    fn new(path: RelativeFlexId, child: Node<V>) -> Self {
         Skip {
             split_dimensions: path.deeper_dimensions() | child.split_dimensions(),
             path,
@@ -280,21 +201,7 @@ impl<V, S> Skip<V, S> {
     }
 }
 
-impl<V, S: Summary<V>> Node<V, S> {
-    /// この Node と子孫の値の Summary。空なら [`None`]。
-    pub(super) fn summary(&self) -> Option<Cow<'_, S>> {
-        match self {
-            Node::Empty => None,
-            Node::Leaf(value) | Node::LeafAt(_, value) => Some(Cow::Owned(S::new(value))),
-            Node::Branch(branch) | Node::BranchAt(_, branch) => {
-                Some(Cow::Borrowed(&branch.summary))
-            }
-            Node::Skip(skip) => skip.child.summary(),
-        }
-    }
-}
-
-impl<V: PartialEq + Clone, S: Summary<V>> Node<V, S> {
+impl<V: PartialEq + Clone> Node<V> {
     /// `join` が Branch を作るなら true。
     fn forms_branch(dimension: Dimension, lower: &Self, upper: &Self) -> bool {
         // Node は領域との相対位置で意味を持つので、子孫が `dimension` で割っている Node を
@@ -386,11 +293,11 @@ impl<V: PartialEq + Clone, S: Summary<V>> Node<V, S> {
     ///
     /// `rule` は、`a` と `b` から結果がすぐ決まるなら `a` を書き換えて true を返す。決まらなければ両方を割って子へ降りる。
     /// 他と共有していない Branch・Skip は作り直さずに書き換え、共有しているものは複製してから書き換える。
-    pub(super) fn merge<W, T>(
+    pub(super) fn merge<W>(
         this: &FlexId,
         a: &mut Self,
-        b: View<'_, W, T>,
-        rule: &impl Fn(&FlexId, &mut Self, View<'_, W, T>) -> bool,
+        b: View<'_, W>,
+        rule: &impl Fn(&FlexId, &mut Self, View<'_, W>) -> bool,
     ) {
         if rule(this, a, b) {
             return;
@@ -476,7 +383,7 @@ impl<V: PartialEq + Clone, S: Summary<V>> Node<V, S> {
     }
 
     /// 和。`a` に値がある場所は `a`、無い場所は `b`。
-    pub(super) fn union_rule(this: &FlexId, a: &mut Self, b: View<'_, V, S>) -> bool {
+    pub(super) fn union_rule(this: &FlexId, a: &mut Self, b: View<'_, V>) -> bool {
         if a.is_empty() {
             *a = b.to_node(this);
             return true;
@@ -485,7 +392,7 @@ impl<V: PartialEq + Clone, S: Summary<V>> Node<V, S> {
     }
 
     /// 積。`b` に値がある場所だけ `a` を残す。
-    pub(super) fn intersection_rule<W, T>(this: &FlexId, a: &mut Self, b: View<'_, W, T>) -> bool {
+    pub(super) fn intersection_rule<W>(this: &FlexId, a: &mut Self, b: View<'_, W>) -> bool {
         if b.is_empty() {
             *a = Node::Empty;
             return true;
@@ -494,7 +401,7 @@ impl<V: PartialEq + Clone, S: Summary<V>> Node<V, S> {
     }
 
     /// 差。`b` に値がある場所の `a` を消す。
-    pub(super) fn difference_rule<W, T>(this: &FlexId, a: &mut Self, b: View<'_, W, T>) -> bool {
+    pub(super) fn difference_rule<W>(this: &FlexId, a: &mut Self, b: View<'_, W>) -> bool {
         if b.leaf().is_some() || b.ptr_eq(this, a) {
             *a = Node::Empty;
             return true;
@@ -504,12 +411,12 @@ impl<V: PartialEq + Clone, S: Summary<V>> Node<V, S> {
 
     /// 領域 `this` のこの Node から、条件を満たす Leaf だけを残した Node を返す。何も捨てなければ [`None`]。
     ///
-    /// Branch は領域と Summary を `classify` で判断し、子孫をまとめて残すか捨てられるならそれ以上降りない。
+    /// Branch は領域を `classify` で判断し、子孫をまとめて残すか捨てられるならそれ以上降りない。
     /// Leaf は領域と値を `keep` で判断する。
     pub(super) fn filter(
         &self,
         this: &FlexId,
-        classify: &impl Fn(&FlexId, &S) -> Decision,
+        classify: &impl Fn(&FlexId) -> Decision,
         keep: &impl Fn(&FlexId, &V) -> bool,
     ) -> Option<Self> {
         match self {
@@ -534,12 +441,12 @@ impl<V: PartialEq + Clone, S: Summary<V>> Node<V, S> {
 
     /// 領域 `this` の `branch` に [`filter`](Self::filter) をかける。
     fn filter_branch(
-        branch: &Arc<Branch<V, S>>,
+        branch: &Arc<Branch<V>>,
         this: &FlexId,
-        classify: &impl Fn(&FlexId, &S) -> Decision,
+        classify: &impl Fn(&FlexId) -> Decision,
         keep: &impl Fn(&FlexId, &V) -> bool,
     ) -> Option<Self> {
-        match classify(this, &branch.summary) {
+        match classify(this) {
             Decision::KeepAll => None,
             Decision::DropAll => Some(Node::Empty),
             Decision::Descend => {

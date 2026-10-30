@@ -1,4 +1,3 @@
-use crate::collection::core::Summary;
 use crate::query::CancellationToken;
 use crate::query::SafeValue;
 use crate::query::{QueryIter, Source};
@@ -20,10 +19,9 @@ impl Source for SpatialIdSet {
     }
 }
 
-impl<V, S> Source for SpatialIdMap<V, S>
+impl<V> Source for SpatialIdMap<V>
 where
     V: SafeValue + 'static,
-    S: Summary<V> + Send + Sync + 'static,
 {
     type Value = V;
 

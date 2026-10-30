@@ -4,7 +4,7 @@ pub(crate) mod query;
 #[cfg(test)]
 mod test;
 
-use crate::collection::core::{FlexTreeCore, NoSummary};
+use crate::collection::core::FlexTreeCore;
 use crate::id::helpers::Side;
 use crate::query::{
     SafeValue, merge_policy::MergePolicy, query_iter::QueryIter, traits::UnaryOperator,
@@ -160,7 +160,7 @@ impl<P> Falloff<P> {
         attenuator: &Attenuator<V>,
         wrap: impl Fn(V) -> A + Send + Sync,
         resolve: impl Fn(&A, &A) -> A + Send + Sync,
-    ) -> Result<FlexTreeCore<A, NoSummary>, Error>
+    ) -> Result<FlexTreeCore<A>, Error>
     where
         V: SafeValue
             + Add<Output = V>
@@ -171,21 +171,20 @@ impl<P> Falloff<P> {
             + TryFrom<u64>,
         A: SafeValue,
     {
-        let spread_into = |mut tree: FlexTreeCore<A, NoSummary>,
-                           moved: &mut Vec<FlexId>,
-                           (id, value): &(FlexId, V)| {
-            id.falloff_each(
-                self.axis,
-                self.z,
-                self.radius,
-                self.direction,
-                attenuator,
-                value,
-                moved,
-                |ids, value| tree.insert_with(ids.iter().copied(), wrap(value), &resolve),
-            );
-            tree
-        };
+        let spread_into =
+            |mut tree: FlexTreeCore<A>, moved: &mut Vec<FlexId>, (id, value): &(FlexId, V)| {
+                id.falloff_each(
+                    self.axis,
+                    self.z,
+                    self.radius,
+                    self.direction,
+                    attenuator,
+                    value,
+                    moved,
+                    |ids, value| tree.insert_with(ids.iter().copied(), wrap(value), &resolve),
+                );
+                tree
+            };
 
         #[cfg(not(feature = "rayon"))]
         {
@@ -202,7 +201,7 @@ impl<P> Falloff<P> {
             use rayon::prelude::*;
             // 入力を区切って読むので、一度に持つ入力はこの数までに収まる
             const CHUNK: usize = 1 << 16;
-            let merge = |mut a: FlexTreeCore<A, NoSummary>, b: FlexTreeCore<A, NoSummary>| {
+            let merge = |mut a: FlexTreeCore<A>, b: FlexTreeCore<A>| {
                 a.merge_with(&b, &resolve);
                 a
             };
@@ -260,7 +259,7 @@ where
             |a, b| [a.as_slice(), b].concat(),
         )?;
         // FlexTreeCore から出てくる列はカノニカル列なので、collect は木を下から一括で組める
-        let inner: FlexTreeCore<V, NoSummary> = gathered
+        let inner: FlexTreeCore<V> = gathered
             .iter()
             .filter_map(|(id, values)| Some((id, P::resolve_many(values.iter().cloned())?)))
             .collect();

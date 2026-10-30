@@ -5,7 +5,6 @@ pub(crate) mod core;
 mod json;
 mod map;
 mod set;
-pub mod summary;
 pub(crate) mod time_reconstruct;
 mod traits;
 

@@ -158,10 +158,8 @@ impl<V> Iterator for QueryIter<'_, V> {
     }
 }
 
-impl<'a, V: SafeValue + 'static, S: Send + Sync + 'static> From<SpatialIdMap<V, S>>
-    for QueryIter<'a, V>
-{
-    fn from(table: SpatialIdMap<V, S>) -> Self {
+impl<'a, V: SafeValue + 'static> From<SpatialIdMap<V>> for QueryIter<'a, V> {
+    fn from(table: SpatialIdMap<V>) -> Self {
         Self::from_ordered(table.into_iter().map(Ok))
     }
 }

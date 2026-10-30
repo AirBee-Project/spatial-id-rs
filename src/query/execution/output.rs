@@ -1,4 +1,4 @@
-use crate::collection::core::{FlexTreeCore, NoSummary};
+use crate::collection::core::FlexTreeCore;
 use crate::query::Query;
 use crate::query::SafeValue;
 use crate::query::cancellation::CancellationToken;
@@ -20,7 +20,7 @@ pub struct QueryOutput<'a, V: SafeValue + 'static> {
     whole: bool,
     clip: bool,
     // `targets` の和。要素との共通部分を、互いに素な FlexId の Z-order 列で取り出すのに使う
-    clipper: Option<FlexTreeCore<(), NoSummary>>,
+    clipper: Option<FlexTreeCore<()>>,
     // 切り取った断片を、返す順の逆に積んでおく
     pending: Vec<(FlexId, V)>,
     token: CancellationToken,
@@ -49,8 +49,6 @@ impl<'a, V: SafeValue + 'static> QueryOutput<'a, V> {
     }
 
     /// 結果を [`SpatialIdMap`] にして返す。
-    ///
-    /// 値で速く絞り込みたいときは、結果に [`with_summary`](SpatialIdMap::with_summary) で Summary を付ける。
     pub fn into_map(self) -> Result<SpatialIdMap<V>, Error> {
         self.collect()
     }
