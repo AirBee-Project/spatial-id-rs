@@ -5,7 +5,7 @@ pub mod impls;
 mod tests;
 use core::f64::consts::PI;
 
-use crate::{Coordinate, Error, GeometryError, Polygon, Solid, Vec3, Vec3Ecef, ZoomLevel};
+use crate::{Coordinate, Epsilon, Error, GeometryError, Polygon, Solid, Vec3, Vec3Ecef, ZoomLevel};
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// 3次元空間における円柱を表す型。
 ///
@@ -47,7 +47,7 @@ impl Cylinder {
     /// [Cylinder]を近似した[Solid]を作成する関数
     pub fn rough_solid(&self) -> Solid {
         let polygons = self.rough_surfaces_without_z().collect();
-        Solid::new(polygons, 1e-10).unwrap()
+        Solid::with_epsilon(polygons, Epsilon::ZERO).unwrap()
     }
 
     /// [Cylinder]を近似した立体の表面を、ズームレベルを指定せずに[Polygon]として返す関数
@@ -66,6 +66,8 @@ impl Cylinder {
             })
             .collect();
 
+        // 共有頂点は同じ Vec3 から計算されビット単位で一致するため、許容誤差は不要。
+        // DEFAULT を使うと許容誤差より細い円柱が縮退して面が消える。
         let to_coord = |v: Vec3Ecef| Coordinate::try_from(v).unwrap();
 
         // 側面の頂点リスト（イテレータ）を作成
@@ -74,14 +76,14 @@ impl Cylinder {
             let v_curr = vertices[i as usize];
             let v_next = vertices[next_i as usize];
 
-            Polygon::new(
+            Polygon::with_epsilon(
                 vec![
                     to_coord(v_curr[0]),
                     to_coord(v_next[0]),
                     to_coord(v_next[1]),
                     to_coord(v_curr[1]),
                 ],
-                1e-10,
+                Epsilon::ZERO,
             )
         });
 
@@ -90,14 +92,14 @@ impl Cylinder {
         let mut raw_surfaces: Vec<Polygon> = side_surfaces.collect();
 
         // 底面
-        raw_surfaces.push(Polygon::new(
+        raw_surfaces.push(Polygon::with_epsilon(
             vertices.iter().rev().map(|v| to_coord(v[0])).collect(),
-            1e-10,
+            Epsilon::ZERO,
         ));
         // 上面
-        raw_surfaces.push(Polygon::new(
+        raw_surfaces.push(Polygon::with_epsilon(
             vertices.iter().map(|v| to_coord(v[1])).collect(),
-            1e-10,
+            Epsilon::ZERO,
         ));
 
         raw_surfaces.into_iter()
@@ -120,6 +122,8 @@ impl Cylinder {
             })
             .collect();
 
+        // 共有頂点は同じ Vec3 から計算されビット単位で一致するため、許容誤差は不要。
+        // DEFAULT を使うと許容誤差より細い円柱が縮退して面が消える。
         let to_coord = |v: Vec3Ecef| Coordinate::try_from(v).unwrap();
 
         // 側面の頂点リスト（イテレータ）を作成
@@ -128,14 +132,14 @@ impl Cylinder {
             let v_curr = vertices[i as usize];
             let v_next = vertices[next_i as usize];
 
-            Polygon::new(
+            Polygon::with_epsilon(
                 vec![
                     to_coord(v_curr[0]),
                     to_coord(v_next[0]),
                     to_coord(v_next[1]),
                     to_coord(v_curr[1]),
                 ],
-                1e-10,
+                Epsilon::ZERO,
             )
         });
 
@@ -144,14 +148,14 @@ impl Cylinder {
         let mut raw_surfaces: Vec<Polygon> = side_surfaces.collect();
 
         // 底面
-        raw_surfaces.push(Polygon::new(
+        raw_surfaces.push(Polygon::with_epsilon(
             vertices.iter().rev().map(|v| to_coord(v[0])).collect(),
-            1e-10,
+            Epsilon::ZERO,
         ));
         // 上面
-        raw_surfaces.push(Polygon::new(
+        raw_surfaces.push(Polygon::with_epsilon(
             vertices.iter().map(|v| to_coord(v[1])).collect(),
-            1e-10,
+            Epsilon::ZERO,
         ));
 
         raw_surfaces.into_iter()

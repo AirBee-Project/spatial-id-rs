@@ -223,13 +223,6 @@ impl Coordinate {
         e1.distance(&e2)
     }
 
-    /// [`Coordinate`] が同じ位置にあるかを判定する。
-    /// 2点間の直線距離が epsilon 以内にあるかを判定する。
-    pub fn eq_epsilon(&self, other: &Coordinate, epsilon: f64) -> bool {
-        let distance = self.distance(other);
-        distance <= epsilon
-    }
-
     /// 与えられた座標群の重心を計算する。
     ///
     /// この関数は [`IntoIterator`] を受け入れるため、スライス `&[Coordinate]`、

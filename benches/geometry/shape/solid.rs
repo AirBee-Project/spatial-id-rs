@@ -23,17 +23,14 @@ fn bench_solid(c: &mut Criterion) {
                 let p3_t = Coordinate::new(base_lat + 0.001, base_lon + 0.001, top_alt).unwrap();
                 let p4_t = Coordinate::new(base_lat, base_lon + 0.001, top_alt).unwrap();
 
-                let solid = Solid::new(
-                    vec![
-                        Polygon::new(vec![p1_b, p4_b, p3_b, p2_b], 1e-6), // Bottom
-                        Polygon::new(vec![p1_t, p2_t, p3_t, p4_t], 1e-6), // Top
-                        Polygon::new(vec![p1_b, p2_b, p2_t, p1_t], 1e-6), // Side
-                        Polygon::new(vec![p2_b, p3_b, p3_t, p2_t], 1e-6), // Side
-                        Polygon::new(vec![p3_b, p4_b, p4_t, p3_t], 1e-6), // Side
-                        Polygon::new(vec![p4_b, p1_b, p1_t, p4_t], 1e-6), // Side
-                    ],
-                    1e-6,
-                )
+                let solid = Solid::new(vec![
+                    Polygon::new(vec![p1_b, p4_b, p3_b, p2_b]), // Bottom
+                    Polygon::new(vec![p1_t, p2_t, p3_t, p4_t]), // Top
+                    Polygon::new(vec![p1_b, p2_b, p2_t, p1_t]), // Side
+                    Polygon::new(vec![p2_b, p3_b, p3_t, p2_t]), // Side
+                    Polygon::new(vec![p3_b, p4_b, p4_t, p3_t]), // Side
+                    Polygon::new(vec![p4_b, p1_b, p1_t, p4_t]), // Side
+                ])
                 .unwrap();
 
                 let iter = solid
@@ -61,17 +58,14 @@ fn bench_solid(c: &mut Criterion) {
                 let p3_t = Coordinate::new(base_lat + scale, base_lon + scale, top_alt).unwrap();
                 let p4_t = Coordinate::new(base_lat, base_lon + scale, top_alt).unwrap();
 
-                let solid = Solid::new(
-                    vec![
-                        Polygon::new(vec![p1_b, p4_b, p3_b, p2_b], 1e-6),
-                        Polygon::new(vec![p1_t, p2_t, p3_t, p4_t], 1e-6),
-                        Polygon::new(vec![p1_b, p2_b, p2_t, p1_t], 1e-6),
-                        Polygon::new(vec![p2_b, p3_b, p3_t, p2_t], 1e-6),
-                        Polygon::new(vec![p3_b, p4_b, p4_t, p3_t], 1e-6),
-                        Polygon::new(vec![p4_b, p1_b, p1_t, p4_t], 1e-6),
-                    ],
-                    1e-6,
-                )
+                let solid = Solid::new(vec![
+                    Polygon::new(vec![p1_b, p4_b, p3_b, p2_b]),
+                    Polygon::new(vec![p1_t, p2_t, p3_t, p4_t]),
+                    Polygon::new(vec![p1_b, p2_b, p2_t, p1_t]),
+                    Polygon::new(vec![p2_b, p3_b, p3_t, p2_t]),
+                    Polygon::new(vec![p3_b, p4_b, p4_t, p3_t]),
+                    Polygon::new(vec![p4_b, p1_b, p1_t, p4_t]),
+                ])
                 .unwrap();
 
                 let iter = solid

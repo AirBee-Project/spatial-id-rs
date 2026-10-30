@@ -1,47 +1,45 @@
 use super::node::{Branch, Node};
-use crate::collection::summary::Summary;
 use crate::{FlexId, Side, id::dimension::Dimension};
 use core::ptr;
 use triomphe::Arc;
 
 /// 領域 `this` の上の Node を借りて見たもの。
-pub(super) enum View<'a, V, S> {
+pub(super) enum View<'a, V> {
     Empty,
     Leaf(&'a V),
-    Branch(&'a Arc<Branch<V, S>>),
+    Branch(&'a Arc<Branch<V>>),
     /// 領域のうち `region` だけに `child` があり、外側は空。
     Skip {
         region: FlexId,
-        child: Target<'a, V, S>,
+        child: Target<'a, V>,
     },
 }
 
 /// Skip の先にある、空でも Skip でもない Node を借りたもの。
-pub(super) enum Target<'a, V, S> {
+pub(super) enum Target<'a, V> {
     Leaf(&'a V),
-    Branch(&'a Arc<Branch<V, S>>),
+    Branch(&'a Arc<Branch<V>>),
 }
 
-// derive では `V: Copy` まで要求されるが、参照の複製に値の複製は要らない
-impl<V, S> Clone for View<'_, V, S> {
+impl<V> Clone for View<'_, V> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<V, S> Copy for View<'_, V, S> {}
+impl<V> Copy for View<'_, V> {}
 
-impl<V, S> Clone for Target<'_, V, S> {
+impl<V> Clone for Target<'_, V> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<V, S> Copy for Target<'_, V, S> {}
+impl<V> Copy for Target<'_, V> {}
 
-impl<'a, V, S> Target<'a, V, S> {
+impl<'a, V> Target<'a, V> {
     /// Leaf か Branch の `node` を借りる。
-    pub(super) fn of(node: &'a Node<V, S>) -> Self {
+    pub(super) fn of(node: &'a Node<V>) -> Self {
         match node {
             Node::Leaf(value) => Target::Leaf(value),
             Node::Branch(branch) => Target::Branch(branch),
@@ -57,9 +55,9 @@ impl<'a, V, S> Target<'a, V, S> {
     }
 }
 
-impl<'a, V, S> View<'a, V, S> {
+impl<'a, V> View<'a, V> {
     /// 領域 `this` の `node` を見る。
-    pub(super) fn of(node: &'a Node<V, S>, this: &FlexId) -> Self {
+    pub(super) fn of(node: &'a Node<V>, this: &FlexId) -> Self {
         match node {
             Node::Empty => View::Empty,
             Node::Leaf(value) => View::Leaf(value),
@@ -72,7 +70,7 @@ impl<'a, V, S> View<'a, V, S> {
     }
 
     /// 領域 `this` のうち `region` だけに、領域 `region` の `node` がある View。
-    pub(super) fn skip(this: &FlexId, region: FlexId, node: &'a Node<V, S>) -> Self {
+    pub(super) fn skip(this: &FlexId, region: FlexId, node: &'a Node<V>) -> Self {
         match View::of(node, &region) {
             View::Empty => View::Empty,
             View::Leaf(value) => View::at(this, region, Target::Leaf(value)),
@@ -82,7 +80,7 @@ impl<'a, V, S> View<'a, V, S> {
     }
 
     /// 領域 `this` のうち `region` だけに `child` がある View。
-    pub(super) fn at(this: &FlexId, region: FlexId, child: Target<'a, V, S>) -> Self {
+    pub(super) fn at(this: &FlexId, region: FlexId, child: Target<'a, V>) -> Self {
         match child {
             _ if region != *this => View::Skip { region, child },
             Target::Leaf(value) => View::Leaf(value),
@@ -105,10 +103,9 @@ impl<'a, V, S> View<'a, V, S> {
     /// 領域 `this` の `node` と同じ領域に同じ Branch の Arc を見ているなら true。値の型が違う Node とも比べられる。
     // `merge` の各段で呼ぶので展開させる
     #[inline(always)]
-    pub(super) fn ptr_eq<W, T>(&self, this: &FlexId, node: &Node<W, T>) -> bool {
-        let same = |a: &Arc<Branch<V, S>>, b: &Arc<Branch<W, T>>| {
-            ptr::addr_eq(Arc::as_ptr(a), Arc::as_ptr(b))
-        };
+    pub(super) fn ptr_eq<W>(&self, this: &FlexId, node: &Node<W>) -> bool {
+        let same =
+            |a: &Arc<Branch<V>>, b: &Arc<Branch<W>>| ptr::addr_eq(Arc::as_ptr(a), Arc::as_ptr(b));
         match (self, node) {
             (View::Branch(a), Node::Branch(b)) => same(a, b),
             // 行き先の領域を求めるのは、先の Branch が同じときだけ
@@ -134,7 +131,7 @@ impl<'a, V, S> View<'a, V, S> {
     }
 
     /// Skip なら、行き先の領域とその先。
-    pub(super) fn as_skip(&self) -> Option<(FlexId, Target<'a, V, S>)> {
+    pub(super) fn as_skip(&self) -> Option<(FlexId, Target<'a, V>)> {
         match *self {
             View::Skip { region, child } => Some((region, child)),
             _ => None,
@@ -185,9 +182,9 @@ impl<'a, V, S> View<'a, V, S> {
     }
 }
 
-impl<V: PartialEq + Clone, S: Summary<V>> View<'_, V, S> {
+impl<V: PartialEq + Clone> View<'_, V> {
     /// 領域 `this` の Node として取り出す。
-    pub(super) fn to_node(self, this: &FlexId) -> Node<V, S> {
+    pub(super) fn to_node(self, this: &FlexId) -> Node<V> {
         match self {
             View::Empty => Node::Empty,
             View::Leaf(value) => Node::Leaf(value.clone()),

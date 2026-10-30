@@ -226,13 +226,6 @@ impl Ecef {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
 
-    /// [`Ecef`] が同じ位置にあるかを判定する。
-    /// 2点間の直線距離が epsilon 以内にあるかを判定する。
-    pub fn eq_epsilon(&self, other: &Ecef, epsilon: f64) -> bool {
-        let distance = self.distance(other);
-        distance < epsilon
-    }
-
     /// 指定された軸インデックス (0=x, 1=y, 2=z) の成分を返す。
     /// 投影計算などで軸を動的に扱いたい場合に有用。
     pub(crate) fn get_component(&self, index: usize) -> f64 {

@@ -15,7 +15,7 @@ fn bench_polygon(c: &mut Criterion) {
                 let p2 = Coordinate::new(base_lat + 0.001, base_lon, base_alt).unwrap();
                 let p3 = Coordinate::new(base_lat + 0.001, base_lon + 0.001, base_alt).unwrap();
                 let p4 = Coordinate::new(base_lat, base_lon + 0.001, base_alt).unwrap();
-                let polygon = Polygon::new(vec![p1, p2, p3, p4], 1e-6);
+                let polygon = Polygon::new(vec![p1, p2, p3, p4]);
                 let iter = polygon
                     .cover_single_ids(z as u8)
                     .expect("Failed to get iterator");
@@ -35,7 +35,7 @@ fn bench_polygon(c: &mut Criterion) {
                 let p2 = Coordinate::new(base_lat + scale, base_lon, base_alt).unwrap();
                 let p3 = Coordinate::new(base_lat + scale, base_lon + scale, base_alt).unwrap();
                 let p4 = Coordinate::new(base_lat, base_lon + scale, base_alt).unwrap();
-                let polygon = Polygon::new(vec![p1, p2, p3, p4], 1e-6);
+                let polygon = Polygon::new(vec![p1, p2, p3, p4]);
                 let iter = polygon
                     .cover_single_ids(20)
                     .expect("Failed to get iterator");

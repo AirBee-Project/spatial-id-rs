@@ -1,4 +1,4 @@
-use crate::collection::core::{FlexTreeCore, IntoIter, NoSummary};
+use crate::collection::core::{FlexTreeCore, IntoIter};
 use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId};
 use core::iter::Map;
 pub(crate) mod convert;
@@ -20,7 +20,7 @@ mod tests;
 /// - 空間ごとに値を持たせたい場合は [`SpatialIdMap`](crate::SpatialIdMap) を使用する。
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct SpatialIdSet {
-    pub(crate) inner: FlexTreeCore<(), NoSummary>,
+    pub(crate) inner: FlexTreeCore<()>,
 }
 
 impl SpatialIdSet {
@@ -190,7 +190,7 @@ impl SpatialIdSet {
 
 impl IntoIterator for SpatialIdSet {
     type Item = FlexId;
-    type IntoIter = Map<IntoIter<(), NoSummary>, fn((FlexId, ())) -> FlexId>;
+    type IntoIter = Map<IntoIter<()>, fn((FlexId, ())) -> FlexId>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter().map(|(flex_id, ())| flex_id)

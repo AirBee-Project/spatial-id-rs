@@ -13,9 +13,11 @@ pub(crate) mod traits;
 
 pub(crate) mod vec3;
 
+pub mod epsilon;
 pub mod format;
 
 pub use crate::error::GeometryError;
+pub use epsilon::Epsilon;
 pub use point::{coordinate::Coordinate, ecef::Ecef, fractionalid::FractionalId, traits::Point};
 pub use shape::traits::{ExpandCoordinates, ExpandLines, ExpandPolygons, ExpandTriangles, Shape};
 pub use shape::{

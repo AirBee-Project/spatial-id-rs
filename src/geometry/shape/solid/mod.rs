@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 
+use crate::geometry::Epsilon;
 use crate::geometry::shape::polygon::Polygon;
 use crate::{CoverSingleIds as _, Ecef, Error, ExpandTriangles, GeometryError, SingleId, Triangle};
 use hashbrown::{HashMap, HashSet};
@@ -20,7 +21,7 @@ pub struct Solid {
 }
 
 impl Solid {
-    /// 生の座標リスト群から [Solid] 作成。
+    /// 構成する面のリストからデフォルト許容誤差（[Epsilon::DEFAULT]）を使用して [Solid] を作成。
     ///
     /// # 処理内容
     /// - 各面を[Polygon] に変換。
@@ -28,9 +29,22 @@ impl Solid {
     /// - 穴がある場合は [GeometryError::SolidNotWatertight] を返す。
     ///
     /// # 引数
-    /// -  `polygons` - 立体を構成する面のリスト。
-    /// - `epsilon` - 同一点とみなす許容誤差（メートル単位）。
-    pub fn new(polygons: Vec<Polygon>, epsilon: f64) -> Result<Self, Error> {
+    /// - `polygons` - 立体を構成する面のリスト。
+    pub fn new(polygons: Vec<Polygon>) -> Result<Self, Error> {
+        Self::with_epsilon(polygons, Epsilon::DEFAULT)
+    }
+
+    /// 構成する面のリストと指定された許容誤差から [Solid] を作成。
+    ///
+    /// # 処理内容
+    /// - 各面を[Polygon] に変換。
+    /// - 閉合性の検証。
+    /// - 穴がある場合は [GeometryError::SolidNotWatertight] を返す。
+    ///
+    /// # 引数
+    /// - `polygons` - 立体を構成する面のリスト。
+    /// - `epsilon` - 同一点とみなす許容誤差。
+    pub fn with_epsilon(polygons: Vec<Polygon>, epsilon: Epsilon) -> Result<Self, Error> {
         let filtered_polygons: Vec<Polygon> = polygons
             .into_iter()
             .filter(|p| !p.vertices().is_empty()) // 無効な面は除外
@@ -60,9 +74,10 @@ impl Solid {
     }
 
     /// 閉じていないエッジの数を数える内部ヘルパー関数
-    fn count_open_edges(polygons: &[Polygon], epsilon: f64) -> usize {
+    fn count_open_edges(polygons: &[Polygon], epsilon: Epsilon) -> usize {
         // エッジの出現回数を記録するマップ
         let mut edge_counts: HashMap<(QuantizedCoord, QuantizedCoord), usize> = HashMap::new();
+        let precision = epsilon.as_meters();
 
         for polygon in polygons {
             let vertices = &polygon.vertices();
@@ -78,8 +93,8 @@ impl Solid {
                 // ECEF座標系で量子化
                 let e1: Ecef = (*p1).into();
                 let e2: Ecef = (*p2).into();
-                let q1 = QuantizedCoord::new(&e1, epsilon);
-                let q2 = QuantizedCoord::new(&e2, epsilon);
+                let q1 = QuantizedCoord::new(&e1, precision);
+                let q2 = QuantizedCoord::new(&e2, precision);
 
                 // 縮退辺は無視
                 if q1 == q2 {
@@ -129,10 +144,19 @@ struct QuantizedCoord {
 
 impl QuantizedCoord {
     fn new(e: &Ecef, precision: f64) -> Self {
-        Self {
-            x: libm::round(e.x() / precision) as i64,
-            y: libm::round(e.y() / precision) as i64,
-            z: libm::round(e.z() / precision) as i64,
+        if precision == 0.0 {
+            // -0.0 と 0.0 を同じビット列にそろえる
+            Self {
+                x: (e.x() + 0.0).to_bits() as i64,
+                y: (e.y() + 0.0).to_bits() as i64,
+                z: (e.z() + 0.0).to_bits() as i64,
+            }
+        } else {
+            Self {
+                x: libm::round(e.x() / precision) as i64,
+                y: libm::round(e.y() / precision) as i64,
+                z: libm::round(e.z() / precision) as i64,
+            }
         }
     }
 }

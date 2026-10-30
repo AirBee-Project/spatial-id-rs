@@ -10,9 +10,6 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
-// derive マクロが生成する `::spatial_id::…` を、このクレートの中でも解決できるようにする。
-extern crate self as spatial_id;
-
 /// 発生し得るすべてのエラーを`enum` 型として定義・集約。
 mod error;
 
@@ -23,6 +20,7 @@ pub mod query;
 pub mod time;
 
 pub use error::Error;
+pub use geometry::Epsilon;
 pub use id::{
     FlexId, IntoRange, RangeId, Side, SingleId, SpatialId, SpatialIdError, Zoom, ZoomLevel,
 };
@@ -31,8 +29,6 @@ pub use id::{
 pub(crate) use error::{GeometryError, QueryError};
 
 // クレート内部では、公開パスを書かずに短く参照する
-#[allow(unused_imports)]
-pub(crate) use collection::summary::{BitMask, MinMax, NoSummary, Summary, ValueSet};
 #[allow(unused_imports)]
 pub(crate) use collection::{SpatialIdMap, SpatialIdSet};
 #[allow(unused_imports)]

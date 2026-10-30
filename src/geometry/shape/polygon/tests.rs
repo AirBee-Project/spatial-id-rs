@@ -23,7 +23,7 @@ mod cover_single_ids {
         let p1 = Coordinate::new(35.684, 139.766, 10.0).unwrap();
         let p2 = Coordinate::new(35.684, 139.769, 10.0).unwrap();
         let p3 = Coordinate::new(35.681, 139.769, 10.0).unwrap();
-        let polygon = Polygon::new(vec![p0, p1, p2, p3], 0.01);
+        let polygon = Polygon::new(vec![p0, p1, p2, p3]);
         insta::assert_debug_snapshot!(sorted_ids(&polygon, 18));
     }
 
@@ -33,7 +33,7 @@ mod cover_single_ids {
         let p0 = Coordinate::new(35.681, 139.766, 10.0).unwrap();
         let p1 = Coordinate::new(35.684, 139.766, 10.0).unwrap();
         let p2 = Coordinate::new(35.682, 139.769, 10.0).unwrap();
-        let polygon = Polygon::new(vec![p0, p1, p2], 0.01);
+        let polygon = Polygon::new(vec![p0, p1, p2]);
         insta::assert_debug_snapshot!(sorted_ids(&polygon, 18));
     }
 
@@ -45,7 +45,30 @@ mod cover_single_ids {
         let p2 = Coordinate::new(35.684, 139.767, 10.0).unwrap();
         let p3 = Coordinate::new(35.684, 139.769, 10.0).unwrap();
         let p4 = Coordinate::new(35.681, 139.769, 10.0).unwrap();
-        let polygon = Polygon::new(vec![p0, p1, p2, p3, p4], 0.01);
+        let polygon = Polygon::new(vec![p0, p1, p2, p3, p4]);
         insta::assert_debug_snapshot!(sorted_ids(&polygon, 18));
+    }
+
+    #[test]
+    fn polygon_with_epsilon() {
+        use crate::Epsilon;
+        let p0 = Coordinate::new(35.0, 139.0, 0.0).unwrap();
+        let p1 = Coordinate::new(35.0, 139.001, 0.0).unwrap();
+        let p2 = Coordinate::new(35.001, 139.0, 0.0).unwrap();
+        let p_close = Coordinate::new(35.001000001, 139.0, 0.0).unwrap();
+
+        // 許容誤差大: p_close は p2 と同一視されて縮退
+        let poly = Polygon::with_epsilon(
+            vec![p0, p1, p2, p_close],
+            Epsilon::from_meters(1.0).unwrap(),
+        );
+        assert_eq!(poly.vertices().len(), 3);
+
+        // 許容誤差極小: p_close は独立した頂点
+        let poly_strict = Polygon::with_epsilon(
+            vec![p0, p1, p2, p_close],
+            Epsilon::from_meters(1e-6).unwrap(),
+        );
+        assert_eq!(poly_strict.vertices().len(), 4);
     }
 }

@@ -25,7 +25,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 [workspace]
 members = [
     ".",
-    "spatial-id-derive",
 ]
 
 [workspace.package]
@@ -37,8 +36,6 @@ rust-version = "1.88"
 [dependencies]
 # デフォルトで必要なもの
 hashbrown = "0.17.1"
-# derive の生成コードは本体のパスを参照するため、同一バージョンに固定する。
-spatial-id-derive = { version = "=0.1.0", path = "spatial-id-derive" }
 libm = "0.2.16"
 triomphe = { version = "0.1.17", default-features = false }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
