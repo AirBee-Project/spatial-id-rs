@@ -5,19 +5,8 @@ pr_labels = ["release"]
 
 [[package]]
 name = "spatial-id"
-# derive クレートと常に同じバージョンでリリースする
-version_group = "spatial-id"
-changelog_include = ["spatial-id-derive"]
 git_tag_name = "v{{ version }}"
 git_release_name = "v{{ version }}"
-
-[[package]]
-name = "spatial-id-derive"
-version_group = "spatial-id"
-# タグ・Release・CHANGELOG は spatial-id 側に統一する
-changelog_update = false
-git_tag_enable = false
-git_release_enable = false
 
 [changelog]
 header = """# Changelog
