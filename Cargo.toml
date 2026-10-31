@@ -28,11 +28,10 @@ geojson = { version = "1.0.0", default-features = false, optional = true }
 default = ["std", "rayon", "temporal_id"]
 std = ["dep:geojson"]
 rayon = ["dep:rayon", "std"]
-random = [ "rand" ]
+random = ["dep:rand"]
 temporal_id = []
 # 破壊的な変更があり得るAPI
 unstable = ["dep:serde", "dep:serde_json"]
-rand = ["dep:rand"]
 
 [dev-dependencies]
 rand = "0.10.1"
