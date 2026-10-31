@@ -130,7 +130,7 @@ fn zoom_out_lazily_short_circuits() {
     }
 
     let op = ZoomOut::<i32, Max>::new(ZoomLevel::new(1).unwrap());
-    let iter = QueryIter::from_ordered(PanicAfterFirst { count: 0 });
+    let iter = QueryIter::new(PanicAfterFirst { count: 0 });
     let mut out = op.run(iter).unwrap();
 
     let first = out.next().unwrap().unwrap();
@@ -152,7 +152,7 @@ fn zoom_out_propagates_stream_error() {
             "stream error".into(),
         ))),
     ];
-    let iter = QueryIter::from_ordered(items.into_iter());
+    let iter = QueryIter::new(items.into_iter());
     let op = ZoomOut::<i32, Max>::new(ZoomLevel::new(1).unwrap());
     let mut out = op.run(iter).unwrap();
 
