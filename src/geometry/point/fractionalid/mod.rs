@@ -234,41 +234,9 @@ impl FractionalId {
         }
     }
 
-    /// ズームレベルを `z` に変更し、F, X, Y を同じ位置を指す値に変換する。
-    ///
-    /// ズームレベルが 1 深くなるごとに各インデックスは 2 倍になり、浅くなるごとに半分になる。
-    /// `z` が範囲外の場合は [`Error`] を返し、値は変更されない。
-    ///
-    /// # Examples
-    /// ```
-    /// # use spatial_id::geometry::FractionalId;
-    ///
-    /// let mut fid = FractionalId::new(4, 5.5, 6.25, 7.75).unwrap();
-    /// fid.change_zoomlevel(6).unwrap();
-    /// assert_eq!(fid.z(), 6);
-    /// assert_eq!(fid.f(), 22.0);
-    /// assert_eq!(fid.x(), 25.0);
-    /// assert_eq!(fid.y(), 31.0);
-    ///
-    /// // 範囲外のズームレベルはエラーになり、値は変わらない
-    /// assert!(fid.change_zoomlevel(31).is_err());
-    /// assert_eq!(fid.z(), 6);
-    /// assert_eq!(fid.x(), 25.0);
-    /// ```
-    pub fn change_zoomlevel(&mut self, z: impl Into<u8>) -> Result<(), Error> {
-        let z = z.into();
-        let dz = z as i32 - self.z.get() as i32;
-        self.z = ZoomLevel::new(z)?;
-        let scale = libm::ldexp(1.0, dz); // 2^dz
-        self.f *= scale;
-        self.x *= scale;
-        self.y *= scale;
-        Ok(())
-    }
-
     /// ズームレベルを `z` に変更した [`FractionalId`] を、同じ位置を指す値として返す。
     ///
-    /// [`FractionalId::change_zoomlevel`] の、元の値を変更しない版。
+    /// ズームレベルが 1 深くなるごとに各インデックスは 2 倍になり、浅くなるごとに半分になる。
     /// `z` が範囲外の場合は [`Error`] を返す。
     ///
     /// # Examples

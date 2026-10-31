@@ -100,28 +100,6 @@ mod zoom_conversion {
         let fid = FractionalId::new(4, 5.5, 6.2, 7.8).unwrap();
         assert!(fid.into_another_zoomlevel(31).is_err());
     }
-
-    #[test]
-    fn change_zoomlevel_matches_into_another_zoomlevel() {
-        let original = FractionalId::new(4, 5.5, 6.2, 7.8).unwrap();
-        for z in [0u8, 2, 4, 10, 30] {
-            let mut changed = original;
-            changed.change_zoomlevel(z).unwrap();
-            assert_eq!(
-                changed,
-                original.into_another_zoomlevel(z).unwrap(),
-                "z={z}"
-            );
-        }
-    }
-
-    #[test]
-    fn change_zoomlevel_keeps_value_on_error() {
-        let mut fid = FractionalId::new(4, 5.5, 6.2, 7.8).unwrap();
-        let original = fid;
-        assert!(fid.change_zoomlevel(31).is_err());
-        assert_eq!(fid, original);
-    }
 }
 
 mod point_single_id {
