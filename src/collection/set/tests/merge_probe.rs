@@ -66,7 +66,7 @@ fn f_collapse_reduces_max_zoom() {
     }
     assert_eq!(set.count(), 1, "2x2x2 block collapses to 1");
     assert_eq!(
-        set.max_zoomlevel(),
+        set.max_zoomlevel().map(u8::from),
         Some(3),
         "f-collapse must drop max_zoom 4 -> 3"
     );

@@ -1,5 +1,5 @@
 use crate::collection::time_reconstruct;
-use crate::{AllowedIntervals, FlexId, RangeId, Side, SingleId, SpatialId};
+use crate::{AllowedIntervals, FlexId, RangeId, Side, SingleId, SpatialId, ZoomLevel};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 use core::cell::RefCell;
@@ -59,10 +59,8 @@ impl<V> FlexTreeCore<V> {
     /// 値を持つ[FlexId]の F/X/Y のズームレベルのうち、最も高いもの。空なら [`None`]。
     ///
     /// キャッシュを持たず、値を持つ全ての[FlexId]を走査する（O(n)）。
-    pub fn max_zoomlevel(&self) -> Option<u8> {
-        self.iter()
-            .map(|(id, _)| id.f_zoomlevel().max(id.x_zoomlevel()).max(id.y_zoomlevel()))
-            .max()
+    pub fn max_zoomlevel(&self) -> Option<ZoomLevel> {
+        self.iter().map(|(id, _)| id.max_spatial_zoomlevel()).max()
     }
 
     /// 全ての値を消す。
@@ -220,7 +218,7 @@ impl<V: PartialEq> FlexTreeCore<V> {
         &'a self,
         allowed_intervals: Option<&'a AllowedIntervals>,
     ) -> impl Iterator<Item = (SingleId, &'a V)> + 'a {
-        let max_z = self.max_zoomlevel().unwrap_or(0);
+        let max_z = self.max_zoomlevel().unwrap_or(ZoomLevel::MIN).get();
         self.reconstructed_time_ranges(allowed_intervals)
             .flat_map(move |(range, value)| {
                 let range = if range.z() == max_z {
