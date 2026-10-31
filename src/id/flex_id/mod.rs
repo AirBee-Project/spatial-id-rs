@@ -52,7 +52,7 @@ pub struct FlexId {
 }
 
 impl FlexId {
-    pub(crate) const UPPER_MAX: FlexId = FlexId {
+    pub const UPPER_MAX: FlexId = FlexId {
         f_zoomlevel: ZoomLevel::MIN,
         f_index: 0,
         x_zoomlevel: ZoomLevel::MIN,
@@ -65,7 +65,7 @@ impl FlexId {
         t_index: 0,
     };
 
-    pub(crate) const LOWER_MAX: FlexId = FlexId {
+    pub const LOWER_MAX: FlexId = FlexId {
         f_zoomlevel: ZoomLevel::MIN,
         f_index: -1,
         x_zoomlevel: ZoomLevel::MIN,

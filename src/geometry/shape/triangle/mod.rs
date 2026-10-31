@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use hashbrown::HashSet;
 
-use crate::{Coordinate, Error, Point, SingleId, Vec3, Vec3Ecef, Vec3FractionalId};
+use crate::{Coordinate, Ecef, Error, Point, SingleId, Vec3, Vec3Ecef, Vec3FractionalId};
 pub mod geometry_relation;
 pub mod impls;
 #[cfg(test)]
@@ -36,6 +36,16 @@ impl Triangle {
         let b = p2 - p0;
         let dot = a.dot(&b);
         libm::sqrt(a.norm_squared() * b.norm_squared() - dot * dot) * 0.5
+    }
+
+    ///三角形の3辺の長さを返す
+    /// point\[0\]と\[1\],\[1\]と\[2\],\[2\]と\[0\]の順に返す
+    #[allow(dead_code)]
+    pub(crate) fn sides(&self) -> [f64; 3] {
+        let p0: Ecef = self.points[0].into();
+        let p1: Ecef = self.points[1].into();
+        let p2: Ecef = self.points[2].into();
+        [p0.distance(&p1), p1.distance(&p2), p2.distance(&p0)]
     }
 
     pub(crate) fn divide(&self, steps: u32) -> Result<impl Iterator<Item = Triangle>, Error> {
