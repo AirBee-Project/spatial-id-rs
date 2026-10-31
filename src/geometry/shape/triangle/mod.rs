@@ -40,14 +40,15 @@ impl Triangle {
 
     ///三角形の3辺の長さを返す
     /// point\[0\]と\[1\],\[1\]と\[2\],\[2\]と\[0\]の順に返す
-    pub fn sides(&self) -> [f64; 3] {
+    #[allow(dead_code)]
+    pub(crate) fn sides(&self) -> [f64; 3] {
         let p0: Ecef = self.points[0].into();
         let p1: Ecef = self.points[1].into();
         let p2: Ecef = self.points[2].into();
         [p0.distance(&p1), p1.distance(&p2), p2.distance(&p0)]
     }
 
-    pub fn divide(&self, steps: u32) -> Result<impl Iterator<Item = Triangle>, Error> {
+    pub(crate) fn divide(&self, steps: u32) -> Result<impl Iterator<Item = Triangle>, Error> {
         let steps_f = steps as f64;
         let p0: Vec3Ecef = self.points[0].into();
         let p1: Vec3Ecef = self.points[1].into();

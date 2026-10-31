@@ -113,7 +113,7 @@ where
             }
         });
 
-        Ok(QueryIter::from_ordered(iter))
+        Ok(QueryIter::new(iter))
     }
 
     fn validate(&self) -> Result<(), crate::Error> {

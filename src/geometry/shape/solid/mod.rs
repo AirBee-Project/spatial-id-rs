@@ -112,7 +112,7 @@ impl Solid {
     }
 
     /// 指定されたズームレベル `z` における、この [Solid] の表面を覆う [SingleId] の集合を返す。
-    pub fn surface_single_ids(
+    pub(crate) fn surface_single_ids(
         &self,
         z: impl Into<u8>,
     ) -> Result<impl Iterator<Item = SingleId>, Error> {

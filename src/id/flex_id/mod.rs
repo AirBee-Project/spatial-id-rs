@@ -1,5 +1,6 @@
 pub mod constructor;
 pub mod convert;
+#[cfg(feature = "unstable")]
 pub mod encode;
 pub mod impls;
 pub mod ops;
@@ -78,7 +79,7 @@ impl FlexId {
     };
 
     /// 全空間を重ならずに覆う最大の [`FlexId`]。`[UPPER_MAX, LOWER_MAX]` の順。
-    pub const ROOTS: [FlexId; 2] = [Self::UPPER_MAX, Self::LOWER_MAX];
+    pub(crate) const ROOTS: [FlexId; 2] = [Self::UPPER_MAX, Self::LOWER_MAX];
 
     /// [`ROOTS`](Self::ROOTS) のうち、自身を含むものの添字。
     pub(crate) fn root_index(&self) -> usize {
@@ -313,7 +314,7 @@ impl FlexId {
     /// - `zoom` は [`TZoomLevel::MAX`]（35）以下でなければならない。
     /// - `index` は `2^zoom - 1` 以下でなければならない。
     /// - `temporal_id` feature が無効な場合、`zoom == 0 && index == 0` でなければならない。
-    pub unsafe fn with_time_segment_unchecked(
+    pub(crate) unsafe fn with_time_segment_unchecked(
         #[cfg_attr(not(feature = "temporal_id"), allow(unused_mut))] mut self,
         zoom: u8,
         index: u64,
@@ -555,6 +556,7 @@ impl FlexId {
     ///
     /// 位置はルート（F の符号）、続いてズーム 1, 2, … の各ズームで F→X→Y→T の順。
     /// 自身がその位置で割られていなければ [`None`]、割られていれば上側なら `true`。
+    #[cfg(any(feature = "unstable", test))]
     fn zorder_sides(&self) -> impl Iterator<Item = Option<bool>> + '_ {
         let levels = (1..=TZoomLevel::MAX.get()).flat_map(move |level| {
             Dimension::ALL
@@ -573,6 +575,7 @@ impl FlexId {
     /// 先に割る位置を上位ビットとし、各位置の側（上側なら 1、割られていなければ 0）を並べた値。
     /// FlexId の Z-order 列（[`QueryIter`](crate::query::QueryIter) が満たす列）は、
     /// このキーの狭義の昇順に並ぶ。
+    #[cfg(any(feature = "unstable", test))]
     pub fn zorder_key(&self) -> u128 {
         self.zorder_sides()
             .fold(0, |key, side| key << 1 | u128::from(side == Some(true)))

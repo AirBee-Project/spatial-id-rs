@@ -96,7 +96,7 @@ pub(crate) fn run_binary<'a, V: SafeValue + 'static>(
     let mut cur_b = StreamCursor::new(rhs);
     let mut done = false;
 
-    Ok(QueryIter::from_ordered(core::iter::from_fn(move || {
+    Ok(QueryIter::new(core::iter::from_fn(move || {
         if done {
             return None;
         }
@@ -271,7 +271,7 @@ mod test {
             _targets: &[RangeId],
             _token: &CancellationToken,
         ) -> Result<QueryIter<'a, i32>, Error> {
-            Ok(QueryIter::from_ordered(core::iter::from_fn(|| {
+            Ok(QueryIter::new(core::iter::from_fn(|| {
                 panic!("短絡評価されるべき右辺がポーリングされた")
             })))
         }
