@@ -145,9 +145,7 @@ where
     F: FnMut(Option<&'a Feature>) -> V,
 {
     use rayon::prelude::*;
-    let later_wins = |a: SpatialIdMap<V>, b: SpatialIdMap<V>| SpatialIdMap {
-        inner: b.inner.union(&a.inner),
-    };
+    let later_wins = |a: SpatialIdMap<V>, b: SpatialIdMap<V>| b.union(&a);
 
     match geojson {
         GeoJson::Geometry(geometry) => {

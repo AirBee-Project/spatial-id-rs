@@ -3,12 +3,11 @@ pub(crate) mod query;
 #[cfg(test)]
 mod test;
 
-use crate::collection::core::FlexTreeCore;
 use crate::query::SafeValue;
 use crate::query::merge_policy::MergePolicy;
 use crate::query::ops::unary::sort_by_flex_id;
 use crate::query::{QueryIter, UnaryOperator};
-use crate::{Error, FlexId, ZoomLevel};
+use crate::{Error, FlexId, SpatialIdMap, ZoomLevel};
 use alloc::vec::Vec;
 use core::mem::replace;
 
@@ -159,11 +158,11 @@ fn resolve_overlapping<V: SafeValue + 'static, P: MergePolicy<V>>(
     let mut drained = earlier.drain(..).peekable();
     // T のズームが違う親どうしは重なりうるので、重なりも MergePolicy で合成する
     let resolve = |a: &V, b: &V| P::resolve(a.clone(), b.clone());
-    let mut tree = FlexTreeCore::<V>::default();
+    let mut tree = SpatialIdMap::<V>::new();
     while let Some((id, first)) = drained.next() {
         let rest = core::iter::from_fn(|| drained.next_if(|(next, _)| *next == id).map(|(_, v)| v));
         if let Some(value) = P::resolve_many(core::iter::once(first).chain(rest)) {
-            tree.insert_with([id], value, resolve);
+            tree.insert_with(id, value, resolve);
         }
         // resolve_many が読み残した同じ親の値を、次の親として扱わない
         while drained.next_if(|(next, _)| *next == id).is_some() {}
