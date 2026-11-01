@@ -86,6 +86,11 @@ impl FlexId {
         usize::from(self.f_index.is_negative())
     }
 
+    /// F/X/Y のズームレベルのうち、最も高いもの。
+    pub(crate) fn max_spatial_zoomlevel(&self) -> ZoomLevel {
+        self.f_zoomlevel.max(self.x_zoomlevel).max(self.y_zoomlevel)
+    }
+
     pub fn f_zoomlevel(&self) -> u8 {
         self.f_zoomlevel.get()
     }

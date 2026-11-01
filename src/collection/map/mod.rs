@@ -8,7 +8,7 @@ pub(crate) mod par;
 #[cfg(test)]
 mod test;
 
-use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId};
+use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId, ZoomLevel};
 
 /// 空間IDごとに値を持つマップ。
 ///
@@ -174,7 +174,7 @@ where
     /// 保持しているすべての [FlexId] のうち、最大のズームレベル値を返す。空なら [`None`]。
     ///
     /// キャッシュを持たず、すべての [FlexId] を走査する（O(n)）。
-    pub fn max_zoomlevel(&self) -> Option<u8> {
+    pub fn max_zoomlevel(&self) -> Option<ZoomLevel> {
         self.inner.max_zoomlevel()
     }
 
