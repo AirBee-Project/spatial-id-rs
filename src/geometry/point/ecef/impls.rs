@@ -1,8 +1,8 @@
 use core::fmt;
 
 use crate::{
-    Coordinate, Ecef, Error, FractionalId, Point, WGS84_A, WGS84_E2, WGS84_F,
-    geometry::traits::CoverSingleIds,
+    ALT_ABS_MAX, Coordinate, Ecef, Error, FractionalId, LAT_ABS_MAX, Point, WGS84_A, WGS84_E2,
+    WGS84_F, geometry::traits::CoverSingleIds,
 };
 
 impl fmt::Debug for Ecef {
@@ -22,12 +22,6 @@ impl From<Ecef> for Coordinate {
         unsafe { Coordinate::new_unchecked(lat, lon, h) }
     }
 }
-
-/// [`Coordinate`] が扱える緯度の上限（絶対値）\[deg\]。
-const MAX_LATITUDE: f64 = 85.0511;
-
-/// [`Coordinate`] が扱える高度の上限（絶対値）\[m\]。
-const MAX_ALTITUDE: f64 = 33_554_432.0;
 
 /// 往復変換（地理座標 → ECEF → 地理座標）で生じる緯度の浮動小数点誤差の許容幅 \[deg\]。
 ///
@@ -67,9 +61,9 @@ pub(crate) fn ecef_to_geodetic(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
     }
 
     (
-        snap_to_bound(lat.to_degrees(), MAX_LATITUDE, LATITUDE_TOLERANCE),
+        snap_to_bound(lat.to_degrees(), LAT_ABS_MAX, LATITUDE_TOLERANCE),
         lon.to_degrees(),
-        snap_to_bound(h, MAX_ALTITUDE, ALTITUDE_TOLERANCE),
+        snap_to_bound(h, ALT_ABS_MAX, ALTITUDE_TOLERANCE),
     )
 }
 

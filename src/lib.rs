@@ -30,7 +30,9 @@ pub(crate) use error::{GeometryError, QueryError};
 #[allow(unused_imports)]
 pub(crate) use collection::{SpatialIdMap, SpatialIdSet};
 #[allow(unused_imports)]
-pub(crate) use geometry::constants::{WGS84_A, WGS84_E2, WGS84_F};
+pub(crate) use geometry::constants::{
+    ALT_ABS_MAX, LAT_ABS_MAX, LON_ABS_MAX, WGS84_A, WGS84_E2, WGS84_F,
+};
 #[allow(unused_imports)]
 pub(crate) use geometry::vec3::{
     traits::Vec3, vec3_ecef::Vec3Ecef, vec3_fractionalid::Vec3FractionalId,

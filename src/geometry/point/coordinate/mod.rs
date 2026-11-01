@@ -6,7 +6,7 @@ mod tests;
 use core::borrow::Borrow;
 
 use crate::{
-    Ecef,
+    ALT_ABS_MAX, Ecef, LAT_ABS_MAX, LON_ABS_MAX,
     error::{Error, GeometryError},
 };
 
@@ -55,15 +55,15 @@ impl Coordinate {
     /// assert_eq!(coord.altitude(), 10.0);
     /// ```
     pub fn new(latitude: f64, longitude: f64, altitude: f64) -> Result<Self, Error> {
-        if !(-85.0511..=85.0511).contains(&latitude) {
+        if !(-LAT_ABS_MAX..=LAT_ABS_MAX).contains(&latitude) {
             return Err(GeometryError::LatitudeOutOfRange { latitude }.into());
         }
 
-        if !(-180.0..=180.0).contains(&longitude) {
+        if !(-LON_ABS_MAX..=LON_ABS_MAX).contains(&longitude) {
             return Err(GeometryError::LongitudeOutOfRange { longitude }.into());
         }
 
-        if !(-33_554_432.0..=33_554_432.0).contains(&altitude) {
+        if !(-ALT_ABS_MAX..=ALT_ABS_MAX).contains(&altitude) {
             return Err(GeometryError::AltitudeOutOfRange { altitude }.into());
         }
 
@@ -150,7 +150,7 @@ impl Coordinate {
     /// assert_eq!(coord.latitude(), 43.068564);
     /// ```
     pub fn set_latitude(&mut self, latitude: f64) -> Result<(), Error> {
-        if !(-85.0511..=85.0511).contains(&latitude) {
+        if !(-LAT_ABS_MAX..=LAT_ABS_MAX).contains(&latitude) {
             return Err(GeometryError::LatitudeOutOfRange { latitude }.into());
         }
         self.latitude = latitude;
@@ -170,7 +170,7 @@ impl Coordinate {
     /// assert_eq!(coord.longitude(), 136.7566027);
     /// ```
     pub fn set_longitude(&mut self, longitude: f64) -> Result<(), Error> {
-        if !(-180.0..=180.0).contains(&longitude) {
+        if !(-LON_ABS_MAX..=LON_ABS_MAX).contains(&longitude) {
             return Err(GeometryError::LongitudeOutOfRange { longitude }.into());
         }
         self.longitude = longitude;
@@ -191,7 +191,7 @@ impl Coordinate {
     /// assert_eq!(coord.altitude(), 20.0);
     /// ```
     pub fn set_altitude(&mut self, altitude: f64) -> Result<(), Error> {
-        if !(-33_554_432.0..=33_554_432.0).contains(&altitude) {
+        if !(-ALT_ABS_MAX..=ALT_ABS_MAX).contains(&altitude) {
             return Err(GeometryError::AltitudeOutOfRange { altitude }.into());
         }
         self.altitude = altitude;
