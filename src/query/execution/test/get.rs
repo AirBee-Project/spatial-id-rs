@@ -262,9 +262,7 @@ impl crate::Source for FailingSource {
                 "broken".into(),
             ))),
         ];
-        Ok(crate::query::query_iter::QueryIter::from_ordered(
-            items.into_iter(),
-        ))
+        Ok(crate::query::query_iter::QueryIter::new(items.into_iter()))
     }
 }
 

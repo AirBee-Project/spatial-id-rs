@@ -45,7 +45,7 @@ impl Cylinder {
     }
 
     /// [Cylinder]を近似した[Solid]を作成する関数
-    pub fn rough_solid(&self) -> Solid {
+    pub(crate) fn rough_solid(&self) -> Solid {
         let polygons = self.rough_surfaces_without_z().collect();
         Solid::with_epsilon(polygons, Epsilon::ZERO).unwrap()
     }

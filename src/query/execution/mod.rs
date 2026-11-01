@@ -326,12 +326,12 @@ fn read_source<'a, V: SafeValue + 'static>(
 ) -> Result<QueryIter<'a, V>, Error> {
     let token = token.clone();
     let mut counter = 0u32;
-    Ok(QueryIter::from_ordered(
-        source.read_flex_ids(bounds, &token)?.map(move |item| {
+    Ok(QueryIter::new(source.read_flex_ids(bounds, &token)?.map(
+        move |item| {
             token.check_amortized(&mut counter)?;
             item
-        }),
-    ))
+        },
+    )))
 }
 
 impl<V: SafeValue + 'static> Query<V> {
@@ -347,7 +347,7 @@ impl<V: SafeValue + 'static> Query<V> {
             return Err(Error::Query(QueryError::Cancelled));
         }
         if bounds.is_empty() {
-            return Ok(QueryIter::from_ordered(core::iter::empty()));
+            return Ok(QueryIter::new(core::iter::empty()));
         }
 
         match &self.0 {
@@ -363,7 +363,7 @@ impl<V: SafeValue + 'static> Query<V> {
                     next.dedup();
                     req = next;
                     if req.is_empty() {
-                        return Ok(QueryIter::from_ordered(core::iter::empty()));
+                        return Ok(QueryIter::new(core::iter::empty()));
                     }
                 }
                 let input_stream = input.stream_within(req, token)?;
