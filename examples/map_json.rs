@@ -2,7 +2,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! spatial-id = { version = "*" }
+//! spatial-id = { version = "0.1", features = ["unstable"] }
 //! serde_json = "1"
 //! ```
 

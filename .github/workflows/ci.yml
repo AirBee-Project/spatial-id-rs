@@ -1,0 +1,241 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  # PR から復元できるキャッシュは自 PR と main で保存したものだけなので、main でも実行して保存しておく
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
+      - name: Setup mold
+        uses: rui314/setup-mold@v1
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "clippy-ubuntu-24.04"
+
+      - name: Clippy (workspace, all features, all targets)
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Clippy (each feature, lib)
+        run: cargo hack clippy --each-feature --lib --locked -- -D warnings
+
+  test:
+    name: cargo test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Setup mold
+        uses: rui314/setup-mold@v1
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "test-ubuntu-24.04"
+
+      - name: Test (workspace, all features)
+        run: cargo nextest run --workspace --all-features --locked
+
+      - name: Test (feature combinations)
+        shell: bash
+        run: |
+          set -euo pipefail
+          features=("std" "std,rayon" "std,random,temporal_id" "std,rayon,random,temporal_id" "std,unstable")
+          for feature in "${features[@]}"; do
+            cargo nextest run -p spatial-id --locked --no-default-features --features "$feature"
+          done
+
+      - name: Test ignored
+        shell: bash
+        run: |
+          set -euo pipefail
+          features=("std" "std,rayon,random,temporal_id,unstable")
+          for feature in "${features[@]}"; do
+            cargo nextest run -p spatial-id --locked --no-default-features --features "$feature" --run-ignored ignored-only
+          done
+
+      - name: Doctest
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo test --workspace --locked --doc --all-features
+          cargo test -p spatial-id --locked --doc --no-default-features --features std
+
+  msrv:
+    name: MSRV (rust-version)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+
+      - name: Setup mold
+        uses: rui314/setup-mold@v1
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "msrv-ubuntu-24.04"
+
+      - name: Check with rust-version
+        run: cargo hack check --rust-version --workspace --all-targets --ignore-private --locked
+
+  docs:
+    name: cargo doc
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup mold
+        uses: rui314/setup-mold@v1
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "docs-ubuntu-24.04"
+
+      - name: Rustdoc (workspace, all features)
+        run: cargo doc --workspace --no-deps --all-features --locked
+
+      - name: Rustdoc (feature combinations)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo doc -p spatial-id --no-deps --locked --no-default-features
+          cargo doc -p spatial-id --no-deps --locked --no-default-features --features temporal_id
+          cargo doc -p spatial-id --no-deps --locked --no-default-features --features std
+
+  docs-nightly:
+    name: cargo doc (docs.rs settings)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      RUSTDOCFLAGS: --cfg docsrs -D warnings
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Rust (nightly)
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Setup mold
+        uses: rui314/setup-mold@v1
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "docs-nightly-ubuntu-24.04"
+
+      - name: Rustdoc (docs.rs settings)
+        run: cargo doc --workspace --no-deps --all-features --locked
+
+  deny:
+    name: cargo deny (${{ matrix.checks }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        checks:
+          - advisories
+          - bans licenses sources
+    # 新しい advisory で CI 全体を落とさない
+    continue-on-error: ${{ matrix.checks == 'advisories' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: cargo deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check ${{ matrix.checks }}
+
+  # ブランチ保護の必須チェック用
+  ci-success:
+    name: ci-success
+    if: always()
+    needs:
+      - fmt
+      - clippy
+      - test
+      - msrv
+      - docs
+      - docs-nightly
+      - deny
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any required job did not succeed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}
+        run: exit 1
+
+      - name: All required jobs succeeded
+        run: echo "ok"
