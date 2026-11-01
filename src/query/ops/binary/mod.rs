@@ -234,7 +234,7 @@ mod test {
                     .get(..)
                     .into_map()
                     .unwrap();
-                assert_eq!(inter.inner, a.inner.intersection(&b.inner));
+                assert_eq!(inter, a.intersection(&b));
 
                 let diff = a
                     .clone()
@@ -243,7 +243,7 @@ mod test {
                     .get(..)
                     .into_map()
                     .unwrap();
-                assert_eq!(diff.inner, a.inner.difference(&b.inner));
+                assert_eq!(diff, a.difference(&b));
 
                 let merged = a
                     .clone()
@@ -254,9 +254,9 @@ mod test {
                     .unwrap();
                 let mut expected_merge = a.clone();
                 for (id, &val) in b.iter() {
-                    expected_merge.inner.insert_with(id, val, |x, y| x + y);
+                    expected_merge.insert_with(id, val, |x, y| x + y);
                 }
-                assert_eq!(merged.inner, expected_merge.inner);
+                assert_eq!(merged, expected_merge);
             }
         }
     }

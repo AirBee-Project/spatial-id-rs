@@ -4,7 +4,6 @@ pub(crate) mod query;
 #[cfg(test)]
 mod test;
 
-use crate::collection::core::FlexTreeCore;
 use crate::id::helpers::Side;
 use crate::query::{
     SafeValue, merge_policy::MergePolicy, query_iter::QueryIter, traits::UnaryOperator,
@@ -160,7 +159,7 @@ impl<P> Falloff<P> {
         attenuator: &Attenuator<V>,
         wrap: impl Fn(V) -> A + Send + Sync,
         resolve: impl Fn(&A, &A) -> A + Send + Sync,
-    ) -> Result<FlexTreeCore<A>, Error>
+    ) -> Result<SpatialIdMap<A>, Error>
     where
         V: SafeValue
             + Add<Output = V>
@@ -172,7 +171,7 @@ impl<P> Falloff<P> {
         A: SafeValue,
     {
         let spread_into =
-            |mut tree: FlexTreeCore<A>, moved: &mut Vec<FlexId>, (id, value): &(FlexId, V)| {
+            |mut tree: SpatialIdMap<A>, moved: &mut Vec<FlexId>, (id, value): &(FlexId, V)| {
                 id.falloff_each(
                     self.axis,
                     self.z,
@@ -188,7 +187,7 @@ impl<P> Falloff<P> {
 
         #[cfg(not(feature = "rayon"))]
         {
-            let mut tree = FlexTreeCore::default();
+            let mut tree = SpatialIdMap::default();
             let mut moved = Vec::new();
             for item in input {
                 tree = spread_into(tree, &mut moved, &item?);
@@ -201,7 +200,7 @@ impl<P> Falloff<P> {
             use rayon::prelude::*;
             // 入力を区切って読むので、一度に持つ入力はこの数までに収まる
             const CHUNK: usize = 1 << 16;
-            let merge = |mut a: FlexTreeCore<A>, b: FlexTreeCore<A>| {
+            let merge = |mut a: SpatialIdMap<A>, b: SpatialIdMap<A>| {
                 a.merge_with(&b, &resolve);
                 a
             };
@@ -215,14 +214,14 @@ impl<P> Falloff<P> {
                     chunk
                         .par_iter()
                         .fold(
-                            || (FlexTreeCore::default(), Vec::new()),
+                            || (SpatialIdMap::default(), Vec::new()),
                             |(tree, mut moved), item| (spread_into(tree, &mut moved, item), moved),
                         )
                         .map(|(tree, _)| tree)
-                        .reduce(FlexTreeCore::default, merge),
+                        .reduce(SpatialIdMap::default, merge),
                 );
             }
-            Ok(parts.into_par_iter().reduce(FlexTreeCore::default, merge))
+            Ok(parts.into_par_iter().reduce(SpatialIdMap::default, merge))
         }
     }
 }
@@ -246,8 +245,9 @@ where
 
         if P::IS_COMMUTATIVE {
             let resolve = |a: &V, b: &V| P::resolve(a.clone(), b.clone());
-            let inner = self.spread(input, &attenuator, |value| value, resolve)?;
-            return Ok(SpatialIdMap { inner }.into());
+            return Ok(self
+                .spread(input, &attenuator, |value| value, resolve)?
+                .into());
         }
 
         // 順序を問う規則や平均のように resolve_many を持つ規則は、2件ずつ畳み込むと値が変わるので、
@@ -258,12 +258,12 @@ where
             |value| vec![value],
             |a, b| [a.as_slice(), b].concat(),
         )?;
-        // FlexTreeCore から出てくる列はカノニカル列なので、collect は木を下から一括で組める
-        let inner: FlexTreeCore<V> = gathered
+        // SpatialIdMap から出てくる列はカノニカル列なので、collect は木を下から一括で組める
+        let resolved: SpatialIdMap<V> = gathered
             .iter()
             .filter_map(|(id, values)| Some((id, P::resolve_many(values.iter().cloned())?)))
             .collect();
-        Ok(SpatialIdMap { inner }.into())
+        Ok(resolved.into())
     }
 
     fn reverse_target(&self, bounds: RangeId, out: &mut Vec<RangeId>) {

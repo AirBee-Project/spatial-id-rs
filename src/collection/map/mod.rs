@@ -21,7 +21,7 @@ use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId};
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpatialIdMap<V> {
-    pub(crate) inner: FlexTreeCore<V>,
+    pub(in crate::collection) inner: FlexTreeCore<V>,
 }
 
 impl<V> Default for SpatialIdMap<V> {
@@ -85,8 +85,45 @@ where
 
     /// まだ値のない場所にだけ挿入する（Upsert）。既に値がある場所はそのまま保つ。
     pub fn upsert<T: SpatialId>(&mut self, target: T, value: V) {
-        self.inner
-            .insert_with(target, value, |existing, _| existing.clone());
+        self.insert_with(target, value, |existing, _| existing.clone());
+    }
+
+    /// `target` の領域に `value` を挿入する。既に値がある場所は `resolve(既存の値, value)` にする。
+    ///
+    /// `target` には [`SpatialId`] のほか、[`FlexId`] の列も渡せる。列の各領域へ同じ `value` を、複製せずに書き込む。
+    pub fn insert_with(
+        &mut self,
+        target: impl IntoIterator<Item = FlexId>,
+        value: V,
+        resolve: impl Fn(&V, &V) -> V,
+    ) {
+        self.inner.insert_with(target, value, resolve);
+    }
+
+    /// `other` を重ねる。両方に値がある場所は `resolve(self の値, other の値)` にする。
+    pub fn merge_with(&mut self, other: &Self, resolve: impl Fn(&V, &V) -> V) {
+        self.inner.merge_with(&other.inner, resolve);
+    }
+
+    /// 和を作る。両方に値がある場所は `self` の値を使う。
+    pub fn union(&self, other: &Self) -> Self {
+        Self {
+            inner: self.inner.union(&other.inner),
+        }
+    }
+
+    /// `other` にも値がある場所だけ、`self` の値を残したテーブルを作る。
+    pub fn intersection<W: PartialEq>(&self, other: &SpatialIdMap<W>) -> Self {
+        Self {
+            inner: self.inner.intersection(&other.inner),
+        }
+    }
+
+    /// `other` に値がある場所を `self` から取り除いたテーブルを作る。
+    pub fn difference<W: PartialEq>(&self, other: &SpatialIdMap<W>) -> Self {
+        Self {
+            inner: self.inner.difference(&other.inner),
+        }
     }
 
     /// 指定した空間と重なる領域を、指定した空間との共通部分に切り取って値への参照とともに返す。

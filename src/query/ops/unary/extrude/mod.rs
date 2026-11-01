@@ -109,19 +109,13 @@ where
             if let Some(merged) = P::resolve_many(chunk.iter().map(|(_, v)| v.clone())) {
                 match self.axis {
                     ExtrudeAxis::F(s, e) => {
-                        table
-                            .inner
-                            .insert_with(id.extrude_f(z, s, e)?, merged, resolve)
+                        table.insert_with(id.extrude_f(z, s, e)?, merged, resolve)
                     }
                     ExtrudeAxis::X(s, e) => {
-                        table
-                            .inner
-                            .insert_with(id.extrude_x(z, s, e)?, merged, resolve)
+                        table.insert_with(id.extrude_x(z, s, e)?, merged, resolve)
                     }
                     ExtrudeAxis::Y(s, e) => {
-                        table
-                            .inner
-                            .insert_with(id.extrude_y(z, s, e)?, merged, resolve)
+                        table.insert_with(id.extrude_y(z, s, e)?, merged, resolve)
                     }
                 }
             }

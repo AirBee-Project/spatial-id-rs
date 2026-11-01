@@ -260,7 +260,6 @@ impl<V: PartialEq + Clone> FlexTreeCore<V> {
     }
 
     /// `other` を重ねる。両方に値がある場所は `resolve(self の値, other の値)` にする。
-    #[cfg(feature = "rayon")]
     pub fn merge_with(&mut self, other: &Self, resolve: impl Fn(&V, &V) -> V) {
         self.merge(other, &Self::resolve_rule(resolve));
     }

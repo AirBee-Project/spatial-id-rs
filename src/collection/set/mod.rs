@@ -20,7 +20,7 @@ mod tests;
 /// - 空間ごとに値を持たせたい場合は [`SpatialIdMap`](crate::SpatialIdMap) を使用する。
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct SpatialIdSet {
-    pub(crate) inner: FlexTreeCore<()>,
+    pub(in crate::collection) inner: FlexTreeCore<()>,
 }
 
 impl SpatialIdSet {

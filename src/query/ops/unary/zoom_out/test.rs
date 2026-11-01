@@ -230,10 +230,8 @@ fn zoom_out_resolves_parents_overlapping_in_t() {
     let parent = FlexId::new(5, 0, 5, 0, 5, 0).unwrap();
     let mut expected = SpatialIdMap::<i32>::new();
     expected.insert(parent.with_time_segment(6, 0).unwrap(), 1);
-    expected
-        .inner
-        .insert_with([parent.with_time_segment(8, 1).unwrap()], 10, |x, y| x + y);
-    assert_eq!(out.inner, expected.inner);
+    expected.insert_with(parent.with_time_segment(8, 1).unwrap(), 10, |x, y| x + y);
+    assert_eq!(out, expected);
 }
 
 #[test]
@@ -283,8 +281,8 @@ fn zoom_out_sum_matches_inserting_each_parent() {
         let mut expected = SpatialIdMap::<i32>::new();
         for (id, &v) in table.iter() {
             let parent = id.spatial_parent_at_zoom(target_z).unwrap();
-            expected.inner.insert_with([parent], v, |a, b| a + b);
+            expected.insert_with(parent, v, |a, b| a + b);
         }
-        assert_eq!(out.inner, expected.inner);
+        assert_eq!(out, expected);
     }
 }
