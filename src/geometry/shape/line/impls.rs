@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::{
-    Coordinate, Error, LON_ABS_MAX, Line, Point, Shape, SingleId, Vec3, Vec3Ecef,
+    Coordinate, Error, Line, Point, Shape, SingleId, Vec3, Vec3Ecef,
     geometry::traits::CoverSingleIds,
 };
 
@@ -173,7 +173,7 @@ fn coordinate_to_matrix(p: Coordinate, z: u8) -> [f64; 3] {
     let f = factor * alt;
 
     let n = 2u64.pow(z as u32) as f64;
-    let x = (lon + LON_ABS_MAX) / (2.0 * LON_ABS_MAX) * n;
+    let x = (lon + Coordinate::LON_ABS_MAX) / (2.0 * Coordinate::LON_ABS_MAX) * n;
 
     let lat_rad = lat.to_radians();
     let y = (1.0

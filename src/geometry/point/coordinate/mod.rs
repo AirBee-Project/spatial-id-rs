@@ -6,7 +6,7 @@ mod tests;
 use core::borrow::Borrow;
 
 use crate::{
-    ALT_ABS_MAX, Ecef, LAT_ABS_MAX, LON_ABS_MAX,
+    Ecef,
     error::{Error, GeometryError},
 };
 
@@ -31,6 +31,13 @@ pub struct Coordinate {
 }
 
 impl Coordinate {
+    /// 扱える緯度の上限（絶対値）\[deg\]。
+    pub(crate) const LAT_ABS_MAX: f64 = 85.0511;
+    /// 扱える経度の上限（絶対値）\[deg\]。
+    pub(crate) const LON_ABS_MAX: f64 = 180.0;
+    /// 扱える高度の上限（絶対値）\[m\]。
+    pub(crate) const ALT_ABS_MAX: f64 = 33_554_432.0;
+
     /// 指定された緯度・経度・高度から [Coordinate] を生成する。
     ///
     /// 各引数は、空間 ID 上で扱える座標として有効な範囲に収まっている必要がある。
@@ -55,15 +62,15 @@ impl Coordinate {
     /// assert_eq!(coord.altitude(), 10.0);
     /// ```
     pub fn new(latitude: f64, longitude: f64, altitude: f64) -> Result<Self, Error> {
-        if !(-LAT_ABS_MAX..=LAT_ABS_MAX).contains(&latitude) {
+        if !(-Self::LAT_ABS_MAX..=Self::LAT_ABS_MAX).contains(&latitude) {
             return Err(GeometryError::LatitudeOutOfRange { latitude }.into());
         }
 
-        if !(-LON_ABS_MAX..=LON_ABS_MAX).contains(&longitude) {
+        if !(-Self::LON_ABS_MAX..=Self::LON_ABS_MAX).contains(&longitude) {
             return Err(GeometryError::LongitudeOutOfRange { longitude }.into());
         }
 
-        if !(-ALT_ABS_MAX..=ALT_ABS_MAX).contains(&altitude) {
+        if !(-Self::ALT_ABS_MAX..=Self::ALT_ABS_MAX).contains(&altitude) {
             return Err(GeometryError::AltitudeOutOfRange { altitude }.into());
         }
 
@@ -150,7 +157,7 @@ impl Coordinate {
     /// assert_eq!(coord.latitude(), 43.068564);
     /// ```
     pub fn set_latitude(&mut self, latitude: f64) -> Result<(), Error> {
-        if !(-LAT_ABS_MAX..=LAT_ABS_MAX).contains(&latitude) {
+        if !(-Self::LAT_ABS_MAX..=Self::LAT_ABS_MAX).contains(&latitude) {
             return Err(GeometryError::LatitudeOutOfRange { latitude }.into());
         }
         self.latitude = latitude;
@@ -170,7 +177,7 @@ impl Coordinate {
     /// assert_eq!(coord.longitude(), 136.7566027);
     /// ```
     pub fn set_longitude(&mut self, longitude: f64) -> Result<(), Error> {
-        if !(-LON_ABS_MAX..=LON_ABS_MAX).contains(&longitude) {
+        if !(-Self::LON_ABS_MAX..=Self::LON_ABS_MAX).contains(&longitude) {
             return Err(GeometryError::LongitudeOutOfRange { longitude }.into());
         }
         self.longitude = longitude;
@@ -191,7 +198,7 @@ impl Coordinate {
     /// assert_eq!(coord.altitude(), 20.0);
     /// ```
     pub fn set_altitude(&mut self, altitude: f64) -> Result<(), Error> {
-        if !(-ALT_ABS_MAX..=ALT_ABS_MAX).contains(&altitude) {
+        if !(-Self::ALT_ABS_MAX..=Self::ALT_ABS_MAX).contains(&altitude) {
             return Err(GeometryError::AltitudeOutOfRange { altitude }.into());
         }
         self.altitude = altitude;

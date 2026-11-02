@@ -1,7 +1,7 @@
 pub mod impls;
 
 use crate::{
-    ALT_ABS_MAX, Vec3, Vec3Ecef,
+    Vec3, Vec3Ecef,
     error::Error,
     geometry::{constants::WGS84_B, point::coordinate::Coordinate},
 };
@@ -23,7 +23,7 @@ pub struct Ecef {
 
 const NEAREDGE_P2: f64 = 336394929032.94604;
 const NEAREDGE_Z2: f64 = 40074157011110.21;
-const MAX_R2: f64 = (WGS84_B + ALT_ABS_MAX) * (WGS84_B + ALT_ABS_MAX);
+const MAX_R2: f64 = (WGS84_B + Coordinate::ALT_ABS_MAX) * (WGS84_B + Coordinate::ALT_ABS_MAX);
 impl Ecef {
     /// 指定された XYZ 成分から [`Ecef`] を生成する。
     ///

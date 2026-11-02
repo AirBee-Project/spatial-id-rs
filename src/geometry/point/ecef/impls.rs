@@ -1,8 +1,8 @@
 use core::fmt;
 
 use crate::{
-    ALT_ABS_MAX, Coordinate, Ecef, Error, FractionalId, LAT_ABS_MAX, Point, WGS84_A, WGS84_E2,
-    WGS84_F, geometry::traits::CoverSingleIds,
+    Coordinate, Ecef, Error, FractionalId, Point, WGS84_A, WGS84_E2, WGS84_F,
+    geometry::traits::CoverSingleIds,
 };
 
 impl fmt::Debug for Ecef {
@@ -61,9 +61,13 @@ pub(crate) fn ecef_to_geodetic(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
     }
 
     (
-        snap_to_bound(lat.to_degrees(), LAT_ABS_MAX, LATITUDE_TOLERANCE),
+        snap_to_bound(
+            lat.to_degrees(),
+            Coordinate::LAT_ABS_MAX,
+            LATITUDE_TOLERANCE,
+        ),
         lon.to_degrees(),
-        snap_to_bound(h, ALT_ABS_MAX, ALTITUDE_TOLERANCE),
+        snap_to_bound(h, Coordinate::ALT_ABS_MAX, ALTITUDE_TOLERANCE),
     )
 }
 
