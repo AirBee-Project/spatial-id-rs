@@ -198,3 +198,7 @@ required-features = ["rayon", "unstable"]
 [[example]]
 name = "map_json"
 required-features = ["unstable"]
+
+[[example]]
+name = "riskmap"
+required-features = ["unstable"]
