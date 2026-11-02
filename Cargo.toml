@@ -17,6 +17,7 @@ libm = "0.2.16"
 triomphe = { version = "0.1.17", default-features = false }
 serde = { version = "1", default-features = false, features = ["alloc", "derive"], optional = true }
 serde_json = { version = "1", default-features = false, features = ["alloc"], optional = true }
+embed-doc-image = "0.1.4"
 
 # featuresで切り替え可能なもの
 rand = { version = "0.10.2", optional = true }

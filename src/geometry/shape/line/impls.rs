@@ -11,6 +11,13 @@ impl Shape for Line {
     }
 }
 
+/// 線分（左）を、それが覆う空間ID（右）へ変換する。図はズームレベル 21 の例。
+///
+/// ![線分と、それが覆う空間ID][line_cover]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("line_cover", "docs/images/line_cover.jpg")
+)]
 impl CoverSingleIds for Line {
     type Value<'a> = ();
 

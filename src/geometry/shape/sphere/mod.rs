@@ -4,6 +4,12 @@ pub mod impls;
 mod tests;
 
 /// 球体を表す型。
+///
+/// ![球][sphere]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("sphere", "docs/images/sphere.jpg")
+)]
 pub struct Sphere {
     center: Coordinate,
     radius_m: f64,
