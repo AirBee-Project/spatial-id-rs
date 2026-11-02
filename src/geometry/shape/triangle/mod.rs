@@ -9,6 +9,12 @@ pub mod impls;
 mod tests;
 
 /// 三角形を表す型。
+///
+/// ![三角形][triangle]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("triangle", "docs/images/triangle.jpg")
+)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Triangle {
     points: [Coordinate; 3],

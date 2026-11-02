@@ -14,6 +14,13 @@ impl Shape for Solid {
     }
 }
 
+/// 立体（左）を、それが覆う空間ID（右）へ変換する。図はズームレベル 21 の例。
+///
+/// ![立体と、それが覆う空間ID][solid_cover]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("solid_cover", "docs/images/solid_cover.jpg")
+)]
 impl CoverSingleIds for Solid {
     type Value<'a> = ();
 
@@ -124,6 +131,13 @@ impl CoverSingleIds for Solid {
     }
 }
 
+/// 立体（左）を、それが覆う [`RangeId`](crate::RangeId)（右）へ変換する。図はズームレベル 21 の例。
+///
+/// ![立体と、それが覆う範囲ID][solid_cover_range]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("solid_cover_range", "docs/images/solid_cover_range.jpg")
+)]
 impl CoverRangeIds for Solid {
     fn cover_range_ids_with<'a, V, F>(
         &'a self,
