@@ -31,6 +31,8 @@ let id = SingleId::new(12, 0, 3638, 1614)?.with_time(1800, 809712)?;
 
 ## 図形から空間IDへの高精度な変換
 
+![球と、それが覆う空間ID](docs/images/sphere_cover.jpg)
+
 ```rust
 use spatial_id::geometry::{Coordinate, CoverSingleIds, Sphere};
 
@@ -39,7 +41,17 @@ let sphere = Sphere::new(center, 30.0)?;                     // 半径 30 m
 let set = sphere.cover_set(25)?;                             // ズームレベル 25 の空間IDの集合
 ```
 
-`Line` `Triangle` `Polygon` `Solid` `Cylinder` `Tube` `geojson::GeoJson` も同じように変換できます。
+ほかの図形も同じように変換できます。
+
+| `Coordinate` | `Line` |
+| :---: | :---: |
+| ![](docs/images/point_cover.jpg) | ![](docs/images/line_cover.jpg) |
+| **`Triangle`** | **`Polygon`** |
+| ![](docs/images/triangle_cover.jpg) | ![](docs/images/polygon_cover.jpg) |
+| **`Solid`** | **`Cylinder`** |
+| ![](docs/images/solid_cover.jpg) | ![](docs/images/cylinder_cover.jpg) |
+| **`Tube`** | **`geojson::GeoJson`** |
+| ![](docs/images/tube_cover.jpg) | ![](docs/images/geojson_cover.jpg) |
 
 ## 時空間データの加工
 
