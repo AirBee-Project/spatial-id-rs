@@ -199,7 +199,3 @@ required-features = ["rayon", "unstable"]
 [[example]]
 name = "map_json"
 required-features = ["unstable"]
-
-[[example]]
-name = "doc_images"
-required-features = ["std", "unstable"]
