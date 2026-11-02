@@ -4,6 +4,12 @@ use crate::{
 };
 
 /// 地域メッシュを表す型。
+///
+/// ![第3次メッシュ][regionmesh]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("regionmesh", "docs/images/regionmesh.jpg")
+)]
 //より詳細なメッシュが必要になったらu32ではなくu64でもいいと思う
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegionMesh(MeshType);
@@ -85,6 +91,13 @@ impl MeshType {
     }
 }
 
+/// 地域メッシュ（左）を、それが覆う空間ID（右）へ変換する。図はズームレベル 20 の例。
+///
+/// ![地域メッシュと、それが覆う空間ID][regionmesh_cover]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("regionmesh_cover", "docs/images/regionmesh_cover.jpg")
+)]
 impl CoverSingleIds for RegionMesh {
     type Value<'a> = ();
 
@@ -119,6 +132,15 @@ impl CoverSingleIds for RegionMesh {
 }
 
 ///標準地域メッシュを覆うようにRangeIdを生成する。Fにはデフォルトで0が割り当てられている。
+///
+/// ![地域メッシュと、それが覆う範囲ID][regionmesh_cover_range]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image(
+        "regionmesh_cover_range",
+        "docs/images/regionmesh_cover_range.jpg"
+    )
+)]
 impl CoverRangeIds for RegionMesh {
     fn cover_range_ids_with<'a, V, F>(
         &'a self,
