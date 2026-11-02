@@ -32,6 +32,9 @@ where
 {
     fn run<'a>(&'a self, input: QueryIter<'a, V>) -> Result<QueryIter<'a, V>, Error> {
         let target_z = self.target_z.get();
+        let common_ancestor = input
+            .common_ancestor()
+            .map(|opt| opt.and_then(|id| id.spatial_parent_at_zoom(target_z).ok()));
         let mut input = input.fuse();
         // 組に T が `target_z` より細かい親があるときだけ、その組のキーを持つ。
         // なければ組のキーは `current` の親と同じなので、親が変われば必ず別の組になる
@@ -112,7 +115,7 @@ where
             }
         });
 
-        Ok(QueryIter::new(iter))
+        Ok(QueryIter::new(iter).with_common_ancestor(common_ancestor))
     }
 
     fn validate(&self) -> Result<(), crate::Error> {

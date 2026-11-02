@@ -48,6 +48,22 @@ where
         self.inner.insert(target, value);
     }
 
+    /// 各ルート（`[UPPER_MAX, LOWER_MAX]`）の全要素を包む最小共通祖先の [`FlexId`] を返す。
+    /// そのルートが空なら [`None`]。
+    pub(crate) fn common_ancestor_roots(&self) -> [Option<FlexId>; 2] {
+        self.inner.common_ancestor_roots()
+    }
+
+    /// 指定したルートのうち `horizon` より前に確定した要素を抜き出し、Z-order 順で `out` へ追加する。
+    pub(crate) fn drain_confirmed(
+        &mut self,
+        root_idx: usize,
+        horizon: &FlexId,
+        out: &mut alloc::vec::Vec<(FlexId, V)>,
+    ) {
+        self.inner.drain_confirmed(root_idx, horizon, out);
+    }
+
     #[cfg(feature = "unstable")]
     /// `region` に収まるシャードを2つの領域に割り、それぞれの領域で切り取った中身を `(下, 上)` で返す。
     /// 選んだ軸がこれ以上割れなければ [`None`]。
