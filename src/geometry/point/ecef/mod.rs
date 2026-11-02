@@ -23,7 +23,7 @@ pub struct Ecef {
 
 const NEAREDGE_P2: f64 = 336394929032.94604;
 const NEAREDGE_Z2: f64 = 40074157011110.21;
-const MAX_R2: f64 = (WGS84_B + 33_554_432.0) * (WGS84_B + 33_554_432.0);
+const MAX_R2: f64 = (WGS84_B + Coordinate::ALT_ABS_MAX) * (WGS84_B + Coordinate::ALT_ABS_MAX);
 impl Ecef {
     /// 指定された XYZ 成分から [`Ecef`] を生成する。
     ///

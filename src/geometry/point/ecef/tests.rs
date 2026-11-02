@@ -59,8 +59,14 @@ mod ecef_to_coordinate {
 mod boundary_round_trip {
     use crate::{Coordinate, Ecef, Vec3, Vec3Ecef};
 
-    const LATITUDES: [f64; 5] = [85.0511, -85.0511, 0.0, 35.0, -60.0];
-    const ALTITUDES: [f64; 4] = [33_554_432.0, 0.0, -10_000.0, 1_000_000.0];
+    const LATITUDES: [f64; 5] = [
+        Coordinate::LAT_ABS_MAX,
+        -Coordinate::LAT_ABS_MAX,
+        0.0,
+        35.0,
+        -60.0,
+    ];
+    const ALTITUDES: [f64; 4] = [Coordinate::ALT_ABS_MAX, 0.0, -10_000.0, 1_000_000.0];
 
     fn boundary_coordinates() -> impl Iterator<Item = Coordinate> {
         LATITUDES.into_iter().flat_map(|lat| {
@@ -103,7 +109,9 @@ mod boundary_round_trip {
     #[test]
     fn far_out_of_range_is_still_rejected() {
         // 許容幅（1 cm）を大きく超える高度はエラーのまま
-        let coord_vec: Vec3Ecef = Coordinate::new(35.0, 135.0, 33_554_432.0).unwrap().into();
+        let coord_vec: Vec3Ecef = Coordinate::new(35.0, 135.0, Coordinate::ALT_ABS_MAX)
+            .unwrap()
+            .into();
         let scaled = coord_vec.scale(1.001);
         assert!(Coordinate::try_from(scaled).is_err());
     }
@@ -174,7 +182,7 @@ mod validation {
             // 緯度・高度の範囲の内外にまたがる点
             let (x, y, z) = xyz(
                 rng.random_range(-87.0..87.0),
-                rng.random_range(-180.0..180.0),
+                rng.random_range(-Coordinate::LON_ABS_MAX..Coordinate::LON_ABS_MAX),
                 rng.random_range(-7.0e6..3.4e7),
             );
             assert_eq!(
@@ -193,7 +201,7 @@ mod validation {
         for _ in 0..20_000 {
             let (x, y, z) = xyz(
                 rng.random_range(-85.0..85.0),
-                rng.random_range(-180.0..180.0),
+                rng.random_range(-Coordinate::LON_ABS_MAX..Coordinate::LON_ABS_MAX),
                 rng.random_range(-1.0e5..3.3e7),
             );
             let start = Ecef::new(x, y, z).unwrap();

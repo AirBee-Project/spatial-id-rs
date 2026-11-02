@@ -138,9 +138,19 @@ mod point_single_id {
         let coords = [
             Coordinate::new(35.681382, 139.766084, 10.3).unwrap(),
             Coordinate::new(0.0, 0.0, 0.0).unwrap(),
-            Coordinate::new(0.0, 180.0, 0.0).unwrap(),
-            Coordinate::new(85.0511, -180.0, 33_554_432.0).unwrap(),
-            Coordinate::new(-85.0511, 180.0, -33_554_432.0).unwrap(),
+            Coordinate::new(0.0, Coordinate::LON_ABS_MAX, 0.0).unwrap(),
+            Coordinate::new(
+                Coordinate::LAT_ABS_MAX,
+                -Coordinate::LON_ABS_MAX,
+                Coordinate::ALT_ABS_MAX,
+            )
+            .unwrap(),
+            Coordinate::new(
+                -Coordinate::LAT_ABS_MAX,
+                Coordinate::LON_ABS_MAX,
+                -Coordinate::ALT_ABS_MAX,
+            )
+            .unwrap(),
         ];
         for coord in coords {
             for z in [0u8, 5, 20, 25] {
