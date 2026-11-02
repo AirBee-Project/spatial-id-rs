@@ -21,6 +21,14 @@ impl<V: SafeValue + 'static> Query<V> {
     }
 
     /// X方向の Extrude (絶対座標による引き延ばし) 演算を適用する
+    ///
+    /// 縦の板（左）を X 方向へ押し出した例（右）。
+    ///
+    /// ![extrude_x の入力と出力][query_extrude_x]
+    #[cfg_attr(
+        doc,
+        embed_doc_image::embed_doc_image("query_extrude_x", "docs/images/query_extrude_x.jpg")
+    )]
     pub fn extrude_x<T: Into<u8>, P>(self, z: T, start_x: u32, end_x: u32, _policy: P) -> Self
     where
         P: MergePolicy<V> + Send + Sync,
@@ -29,6 +37,14 @@ impl<V: SafeValue + 'static> Query<V> {
     }
 
     /// Y方向の Extrude (絶対座標による引き延ばし) 演算を適用する
+    ///
+    /// 縦の板（左）を Y 方向へ押し出した例（右）。
+    ///
+    /// ![extrude_y の入力と出力][query_extrude_y]
+    #[cfg_attr(
+        doc,
+        embed_doc_image::embed_doc_image("query_extrude_y", "docs/images/query_extrude_y.jpg")
+    )]
     pub fn extrude_y<T: Into<u8>, P>(self, z: T, start_y: u32, end_y: u32, _policy: P) -> Self
     where
         P: MergePolicy<V> + Send + Sync,
@@ -37,6 +53,14 @@ impl<V: SafeValue + 'static> Query<V> {
     }
 
     /// F方向の Extrude (絶対座標による引き延ばし) 演算を適用する
+    ///
+    /// 地表の L 字形の敷地（左）を F 方向へ押し出した例（右）。
+    ///
+    /// ![extrude_f の入力と出力][query_extrude_f]
+    #[cfg_attr(
+        doc,
+        embed_doc_image::embed_doc_image("query_extrude_f", "docs/images/query_extrude_f.jpg")
+    )]
     pub fn extrude_f<T: Into<u8>, P>(self, z: T, start_f: i32, end_f: i32, _policy: P) -> Self
     where
         P: MergePolicy<V> + Send + Sync,
