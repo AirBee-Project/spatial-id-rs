@@ -4,14 +4,13 @@ pub(crate) mod query;
 #[cfg(test)]
 mod test;
 
-use crate::collection::core::{FlexTreeCore, NoSummary};
 use crate::id::dimension::Dimension;
 use crate::id::flex_id::ZOrderRel;
 use crate::id::helpers::Side;
 use crate::query::{
     SafeValue, merge_policy::MergePolicy, query_iter::QueryIter, traits::UnaryOperator,
 };
-use crate::{Error, FlexId, QueryError, RangeId, ZoomLevel};
+use crate::{Error, FlexId, QueryError, RangeId, SpatialIdMap, ZoomLevel};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
@@ -431,7 +430,7 @@ impl<P> Falloff<P> {
         let direction = self.direction;
 
         let mut input = input.fuse().peekable();
-        let mut tree = FlexTreeCore::<A, NoSummary>::default();
+        let mut tree = SpatialIdMap::<A>::default();
         let mut drained_raw: Vec<(FlexId, A)> = Vec::new();
         // pop() で Z-order 昇順に返すため、補充時に逆順にして積む
         let mut ready: Vec<(FlexId, V)> = Vec::new();
@@ -468,7 +467,7 @@ impl<P> Falloff<P> {
 
                 if !chunk.is_empty() {
                     let spread_into =
-                        |acc: &mut FlexTreeCore<A, NoSummary>,
+                        |acc: &mut SpatialIdMap<A>,
                          moved_buf: &mut Vec<FlexId>,
                          (id, value): &(FlexId, V)| {
                             id.falloff_each(
@@ -491,22 +490,21 @@ impl<P> Falloff<P> {
                                 spread_into(&mut tree, &mut moved, item);
                             }
                         } else {
-                            let merge =
-                                |mut a: FlexTreeCore<A, NoSummary>, b: FlexTreeCore<A, NoSummary>| {
-                                    a.merge_with(&b, &resolve);
-                                    a
-                                };
+                            let merge = |mut a: SpatialIdMap<A>, b: SpatialIdMap<A>| {
+                                a.merge_with(&b, &resolve);
+                                a
+                            };
                             let batch = chunk
                                 .par_iter()
                                 .fold(
-                                    || (FlexTreeCore::default(), Vec::new()),
+                                    || (SpatialIdMap::default(), Vec::new()),
                                     |(mut acc, mut m), item| {
                                         spread_into(&mut acc, &mut m, item);
                                         (acc, m)
-                                     },
+                                    },
                                 )
                                 .map(|(acc, _)| acc)
-                                .reduce(FlexTreeCore::default, merge);
+                                .reduce(SpatialIdMap::default, merge);
                             tree.merge_with(&batch, &resolve);
                         }
                     }
@@ -565,7 +563,7 @@ impl<P> Falloff<P> {
             }
         });
 
-        QueryIter::from_ordered(iter).with_common_ancestor(out_common_ancestor)
+        QueryIter::new(iter).with_common_ancestor(out_common_ancestor)
     }
 }
 
@@ -653,7 +651,7 @@ where
 
         // 順序を問う規則や平均のように resolve_many を持つ規則は、2件ずつ畳み込むと値が変わるので、
         // 確定した領域ごとに重なった値を resolve_many で1回だけ合成し、出力用の木で同値結合してから流す
-        let mut resolved_tree = FlexTreeCore::<V, NoSummary>::default();
+        let mut resolved_tree = SpatialIdMap::<V>::default();
         Ok(self.stream_spread(
             input,
             attenuator,
@@ -662,7 +660,7 @@ where
             move |drained, horizon_info, ready| {
                 for (id, values) in drained.drain(..) {
                     if let Some(v) = P::resolve_many(values.into_iter()) {
-                        resolved_tree.insert([id], v);
+                        resolved_tree.insert(id, v);
                     }
                 }
                 match horizon_info {

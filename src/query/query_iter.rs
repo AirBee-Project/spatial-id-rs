@@ -14,9 +14,15 @@ pub struct QueryIter<'a, V> {
 
 impl<'a, V> QueryIter<'a, V> {
     /// 制約を満たす `iter` を包む。制約を守るのは呼び出し側の責任。
+    #[cfg(feature = "unstable")]
     pub fn from_ordered(
         iter: impl Iterator<Item = Result<(FlexId, V), Error>> + Send + 'a,
     ) -> Self {
+        Self::new(iter)
+    }
+
+    /// 制約を満たす `iter` を包む。制約を守るのは呼び出し側の責任。
+    pub(crate) fn new(iter: impl Iterator<Item = Result<(FlexId, V), Error>> + Send + 'a) -> Self {
         #[cfg(debug_assertions)]
         let iter = {
             let mut prev: Option<FlexId> = None;
@@ -37,10 +43,7 @@ impl<'a, V> QueryIter<'a, V> {
         }
     }
 
-    pub(crate) fn with_common_ancestor(
-        mut self,
-        common_ancestor: [Option<FlexId>; 2],
-    ) -> Self {
+    pub(crate) fn with_common_ancestor(mut self, common_ancestor: [Option<FlexId>; 2]) -> Self {
         self.common_ancestor = common_ancestor;
         self
     }
@@ -59,7 +62,7 @@ impl<'a, V> QueryIter<'a, V> {
         V: Send + 'a,
     {
         let common_ancestor = self.common_ancestor;
-        QueryIter::from_ordered(self.filter_map(move |item| match item {
+        QueryIter::new(self.filter_map(move |item| match item {
             Ok((id, value)) => f(id, value).map(|value| Ok((id, value))),
             Err(e) => Some(Err(e)),
         }))
@@ -118,7 +121,7 @@ impl<'a, V> QueryIter<'a, V> {
         let mut limit = FIRST_CHUNK;
         let mut seq_left = 0;
 
-        QueryIter::from_ordered(core::iter::from_fn(move || {
+        QueryIter::new(core::iter::from_fn(move || {
             loop {
                 if let Some(item) = ready.next() {
                     return Some(item);
@@ -182,11 +185,9 @@ impl<V> Iterator for QueryIter<'_, V> {
     }
 }
 
-impl<'a, V: SafeValue + 'static, S: Send + Sync + 'static> From<SpatialIdMap<V, S>>
-    for QueryIter<'a, V>
-{
-    fn from(table: SpatialIdMap<V, S>) -> Self {
-        let common_ancestor = table.inner.common_ancestor_roots();
-        Self::from_ordered(table.into_iter().map(Ok)).with_common_ancestor(common_ancestor)
+impl<'a, V: SafeValue + 'static> From<SpatialIdMap<V>> for QueryIter<'a, V> {
+    fn from(table: SpatialIdMap<V>) -> Self {
+        let common_ancestor = table.common_ancestor_roots();
+        Self::new(table.into_iter().map(Ok)).with_common_ancestor(common_ancestor)
     }
 }

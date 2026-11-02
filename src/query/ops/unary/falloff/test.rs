@@ -236,9 +236,9 @@ fn falloff_lazily_short_circuits() {
     assert!(consumed < 100, "消費件数が想定より多い: {consumed}");
 }
 
-use alloc::vec::Vec;
 use crate::Side;
 use crate::ZoomLevel;
+use alloc::vec::Vec;
 
 fn expected_batch<P: crate::query::merge_policy::MergePolicy<i32>>(
     table: &SpatialIdMap<i32>,
@@ -250,7 +250,7 @@ fn expected_batch<P: crate::query::merge_policy::MergePolicy<i32>>(
 ) -> SpatialIdMap<i32> {
     use super::Attenuator;
     let attenuator = Attenuator::new(radius, pattern).unwrap();
-    let mut tree = crate::collection::core::FlexTreeCore::default();
+    let mut tree = SpatialIdMap::default();
     let mut moved = Vec::new();
     let zoom = ZoomLevel::new(z).unwrap();
 
@@ -268,12 +268,9 @@ fn expected_batch<P: crate::query::merge_policy::MergePolicy<i32>>(
                 |ids, v| tree.insert_with(ids.iter().copied(), v, &resolve),
             );
         }
-        SpatialIdMap { inner: tree }
+        tree
     } else {
-        let mut gathered = crate::collection::core::FlexTreeCore::<
-            Vec<i32>,
-            crate::collection::core::NoSummary,
-        >::default();
+        let mut gathered = SpatialIdMap::<Vec<i32>>::default();
         for (id, val) in table.clone() {
             id.falloff_each(
                 axis,
@@ -284,20 +281,19 @@ fn expected_batch<P: crate::query::merge_policy::MergePolicy<i32>>(
                 &val,
                 &mut moved,
                 |ids, v| {
-                    gathered.insert_with(ids.iter().copied(), alloc::vec![v], &|a: &Vec<i32>, b: &Vec<i32>| {
-                        [a.as_slice(), b].concat()
-                    })
+                    gathered.insert_with(
+                        ids.iter().copied(),
+                        alloc::vec![v],
+                        &|a: &Vec<i32>, b: &Vec<i32>| [a.as_slice(), b].concat(),
+                    )
                 },
             );
         }
-        let inner: crate::collection::core::FlexTreeCore<
-            i32,
-            crate::collection::core::NoSummary,
-        > = gathered
+        let resolved: SpatialIdMap<i32> = gathered
             .iter()
             .filter_map(|(id, values)| Some((id, P::resolve_many(values.iter().copied())?)))
             .collect();
-        SpatialIdMap { inner }
+        resolved
     }
 }
 
@@ -352,9 +348,33 @@ fn falloff_streaming_matches_batch() {
         table.insert(SingleId::new(20, f, x, y).unwrap(), (i % 30 + 1) as i32);
     }
 
-    assert_stream_matches_expected(&table, FalloffAxis::X, 20, 3, None, FalloffPattern::Linear, Max);
-    assert_stream_matches_expected(&table, FalloffAxis::Y, 20, 3, None, FalloffPattern::Linear, Max);
-    assert_stream_matches_expected(&table, FalloffAxis::F, 20, 2, None, FalloffPattern::Linear, Max);
+    assert_stream_matches_expected(
+        &table,
+        FalloffAxis::X,
+        20,
+        3,
+        None,
+        FalloffPattern::Linear,
+        Max,
+    );
+    assert_stream_matches_expected(
+        &table,
+        FalloffAxis::Y,
+        20,
+        3,
+        None,
+        FalloffPattern::Linear,
+        Max,
+    );
+    assert_stream_matches_expected(
+        &table,
+        FalloffAxis::F,
+        20,
+        2,
+        None,
+        FalloffPattern::Linear,
+        Max,
+    );
 }
 
 /// z=26 や z=30（最大ズーム）でアンダーフローやオーバーフローを起こさず正しく動作することを確認する。
@@ -363,10 +383,21 @@ fn falloff_high_zoom() {
     let mut table = SpatialIdMap::new();
     table.insert(SingleId::new(26, 0, 100, 0).unwrap(), 100i32);
     table.insert(SingleId::new(26, 0, 104, 0).unwrap(), 50i32);
-    assert_stream_matches_expected(&table, FalloffAxis::X, 26, 3, None, FalloffPattern::Linear, Max);
+    assert_stream_matches_expected(
+        &table,
+        FalloffAxis::X,
+        26,
+        3,
+        None,
+        FalloffPattern::Linear,
+        Max,
+    );
 
     let mut table_max = SpatialIdMap::new();
-    table_max.insert(SingleId::new(ZoomLevel::MAX.get(), 0, 100, 0).unwrap(), 100i32);
+    table_max.insert(
+        SingleId::new(ZoomLevel::MAX.get(), 0, 100, 0).unwrap(),
+        100i32,
+    );
     assert_stream_matches_expected(
         &table_max,
         FalloffAxis::X,
@@ -385,13 +416,29 @@ fn falloff_boundary_crossing_and_wrapping() {
     let mut table_f_cross = SpatialIdMap::new();
     table_f_cross.insert(SingleId::new(10, -1, 10, 10).unwrap(), 100i32);
     table_f_cross.insert(SingleId::new(10, 0, 10, 10).unwrap(), 50i32);
-    assert_stream_matches_expected(&table_f_cross, FalloffAxis::F, 10, 2, None, FalloffPattern::Linear, Max);
+    assert_stream_matches_expected(
+        &table_f_cross,
+        FalloffAxis::F,
+        10,
+        2,
+        None,
+        FalloffPattern::Linear,
+        Max,
+    );
 
     // X 軸で東端 (2^z - 1) を超えて折り返すケース
     let limit = (1u32 << 10) - 1;
     let mut table_x_wrap = SpatialIdMap::new();
     table_x_wrap.insert(SingleId::new(10, 0, limit - 1, 10).unwrap(), 80i32);
-    assert_stream_matches_expected(&table_x_wrap, FalloffAxis::X, 10, 3, None, FalloffPattern::Linear, Max);
+    assert_stream_matches_expected(
+        &table_x_wrap,
+        FalloffAxis::X,
+        10,
+        3,
+        None,
+        FalloffPattern::Linear,
+        Max,
+    );
 }
 
 /// 非可換かつ resolve_many を持つ Policy（Average）でストリーム結果とバッチ結果が一致することを確認する。
@@ -400,7 +447,15 @@ fn falloff_non_commutative_policy() {
     let mut table = SpatialIdMap::new();
     table.insert(SingleId::new(15, 0, 10, 10).unwrap(), 100i32);
     table.insert(SingleId::new(15, 0, 12, 10).unwrap(), 40i32);
-    assert_stream_matches_expected(&table, FalloffAxis::X, 15, 2, None, FalloffPattern::Linear, Average);
+    assert_stream_matches_expected(
+        &table,
+        FalloffAxis::X,
+        15,
+        2,
+        None,
+        FalloffPattern::Linear,
+        Average,
+    );
 }
 
 /// 方向付き（direction: Some）でストリーム結果とバッチ結果が一致することを確認する。

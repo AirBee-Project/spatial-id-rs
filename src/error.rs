@@ -1,5 +1,6 @@
 use alloc::string::String;
 
+use crate::Coordinate;
 use core::{error, fmt};
 
 /// 本クレートで発生し得るエラーを表す最上位の型。
@@ -48,6 +49,9 @@ pub enum GeometryError {
 
     ///半径が負であることを表す
     RadiusNegative { radius: f64 },
+
+    /// 許容誤差が負または非有限数であることを表す。
+    EpsilonOutOfRange { epsilon: f64 },
 
     /// 高度方向インデックス `f` が、指定されたズームレベルに対して有効範囲外であることを示す。
     FractionalFOutOfRange { z: u8, f: f64 },
@@ -155,22 +159,25 @@ impl fmt::Display for GeometryError {
             GeometryError::LatitudeOutOfRange { latitude } => {
                 write!(
                     f,
-                    "Latitude '{}' is out of range (valid: -85.0511..=85.0511)",
-                    latitude
+                    "Latitude '{}' is out of range (valid: -{max}..={max})",
+                    latitude,
+                    max = Coordinate::LAT_ABS_MAX
                 )
             }
             GeometryError::LongitudeOutOfRange { longitude } => {
                 write!(
                     f,
-                    "Longitude '{}' is out of range (valid: -180.0..=180.0)",
-                    longitude
+                    "Longitude '{}' is out of range (valid: -{max}..={max})",
+                    longitude,
+                    max = Coordinate::LON_ABS_MAX
                 )
             }
             GeometryError::AltitudeOutOfRange { altitude } => {
                 write!(
                     f,
-                    "Altitude '{}' is out of range (valid: -33,554,432.0..=33,554,432.0)",
-                    altitude
+                    "Altitude '{}' is out of range (valid: -{max}..={max})",
+                    altitude,
+                    max = Coordinate::ALT_ABS_MAX
                 )
             }
             GeometryError::SolidNotWatertight { open_edge_count } => {
@@ -182,6 +189,13 @@ impl fmt::Display for GeometryError {
             }
             GeometryError::RadiusNegative { radius } => {
                 write!(f, "Radius need to be positive (radius = {}).", radius)
+            }
+            GeometryError::EpsilonOutOfRange { epsilon } => {
+                write!(
+                    f,
+                    "Epsilon must be a non-negative finite number (epsilon = {})",
+                    epsilon
+                )
             }
             GeometryError::FractionalFOutOfRange { z, f: fv } => {
                 write!(

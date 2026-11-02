@@ -38,6 +38,14 @@ impl<V: SafeValue + 'static> Query<V> {
 
     /// F方向へ値を減少させる。
     /// 指定した距離で0になる。
+    ///
+    /// 値 100 の板（左）から、F 方向へ値を減らしながら広げた例（右）。色は値の大きさを表し、赤ほど大きく、青ほど小さい。
+    ///
+    /// ![falloff_f の入力と出力][query_falloff_f]
+    #[cfg_attr(
+        doc,
+        embed_doc_image::embed_doc_image("query_falloff_f", "docs/images/query_falloff_f.jpg")
+    )]
     pub fn falloff_f<Z: Into<u8>, P>(
         self,
         z: Z,
@@ -63,6 +71,14 @@ impl<V: SafeValue + 'static> Query<V> {
 
     /// X方向へ値を減少させる。
     /// 指定した距離で0になる。
+    ///
+    /// 値 100 の板（左）から、X 方向へ値を減らしながら広げた例（右）。色は値の大きさを表し、赤ほど大きく、青ほど小さい。
+    ///
+    /// ![falloff_x の入力と出力][query_falloff_x]
+    #[cfg_attr(
+        doc,
+        embed_doc_image::embed_doc_image("query_falloff_x", "docs/images/query_falloff_x.jpg")
+    )]
     pub fn falloff_x<Z: Into<u8>, P>(
         self,
         z: Z,
@@ -88,6 +104,14 @@ impl<V: SafeValue + 'static> Query<V> {
 
     /// Y方向へ値を減少させる。
     /// 指定した距離で0になる。
+    ///
+    /// 値 100 の板（左）から、Y 方向へ値を減らしながら広げた例（右）。色は値の大きさを表し、赤ほど大きく、青ほど小さい。
+    ///
+    /// ![falloff_y の入力と出力][query_falloff_y]
+    #[cfg_attr(
+        doc,
+        embed_doc_image::embed_doc_image("query_falloff_y", "docs/images/query_falloff_y.jpg")
+    )]
     pub fn falloff_y<Z: Into<u8>, P>(
         self,
         z: Z,

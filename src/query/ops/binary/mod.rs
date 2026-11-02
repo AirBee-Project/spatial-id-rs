@@ -96,7 +96,7 @@ pub(crate) fn run_binary<'a, V: SafeValue + 'static>(
     let mut cur_b = StreamCursor::new(rhs);
     let mut done = false;
 
-    Ok(QueryIter::from_ordered(core::iter::from_fn(move || {
+    Ok(QueryIter::new(core::iter::from_fn(move || {
         if done {
             return None;
         }
@@ -234,7 +234,7 @@ mod test {
                     .get(..)
                     .into_map()
                     .unwrap();
-                assert_eq!(inter.inner, a.inner.intersection(&b.inner));
+                assert_eq!(inter, a.intersection(&b));
 
                 let diff = a
                     .clone()
@@ -243,7 +243,7 @@ mod test {
                     .get(..)
                     .into_map()
                     .unwrap();
-                assert_eq!(diff.inner, a.inner.difference(&b.inner));
+                assert_eq!(diff, a.difference(&b));
 
                 let merged = a
                     .clone()
@@ -254,9 +254,9 @@ mod test {
                     .unwrap();
                 let mut expected_merge = a.clone();
                 for (id, &val) in b.iter() {
-                    expected_merge.inner.insert_with(id, val, |x, y| x + y);
+                    expected_merge.insert_with(id, val, |x, y| x + y);
                 }
-                assert_eq!(merged.inner, expected_merge.inner);
+                assert_eq!(merged, expected_merge);
             }
         }
     }
@@ -271,7 +271,7 @@ mod test {
             _targets: &[RangeId],
             _token: &CancellationToken,
         ) -> Result<QueryIter<'a, i32>, Error> {
-            Ok(QueryIter::from_ordered(core::iter::from_fn(|| {
+            Ok(QueryIter::new(core::iter::from_fn(|| {
                 panic!("短絡評価されるべき右辺がポーリングされた")
             })))
         }

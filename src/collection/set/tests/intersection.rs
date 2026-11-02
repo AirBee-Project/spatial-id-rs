@@ -8,8 +8,8 @@ mod tests {
     fn expected_intersection_single_ids(lhs: &SpatialIdSet, rhs: &SpatialIdSet) -> Vec<SingleId> {
         let common_z = lhs
             .max_zoomlevel()
-            .unwrap_or(0)
-            .max(rhs.max_zoomlevel().unwrap_or(0));
+            .map_or(0, u8::from)
+            .max(rhs.max_zoomlevel().map_or(0, u8::from));
         let lhs_set = decompose_set_to_single_ids_at_zoom(lhs, common_z);
         let rhs_set = decompose_set_to_single_ids_at_zoom(rhs, common_z);
 
@@ -25,9 +25,9 @@ mod tests {
     ) -> Vec<SingleId> {
         let common_z = a
             .max_zoomlevel()
-            .unwrap_or(0)
-            .max(b.max_zoomlevel().unwrap_or(0))
-            .max(c.max_zoomlevel().unwrap_or(0));
+            .map_or(0, u8::from)
+            .max(b.max_zoomlevel().map_or(0, u8::from))
+            .max(c.max_zoomlevel().map_or(0, u8::from));
 
         let a_set = decompose_set_to_single_ids_at_zoom(a, common_z);
         let b_set = decompose_set_to_single_ids_at_zoom(b, common_z);
@@ -60,8 +60,8 @@ mod tests {
 
         let target_z = lhs
             .max_zoomlevel()
-            .unwrap_or(0)
-            .max(rhs.max_zoomlevel().unwrap_or(0));
+            .map_or(0, u8::from)
+            .max(rhs.max_zoomlevel().map_or(0, u8::from));
         assert_eq!(
             sorted_single_ids(&lhs_rhs, target_z),
             sorted_single_ids(&rhs_lhs, target_z)
@@ -90,9 +90,9 @@ mod tests {
 
         let target_z = a
             .max_zoomlevel()
-            .unwrap_or(0)
-            .max(b.max_zoomlevel().unwrap_or(0))
-            .max(c.max_zoomlevel().unwrap_or(0));
+            .map_or(0, u8::from)
+            .max(b.max_zoomlevel().map_or(0, u8::from))
+            .max(c.max_zoomlevel().map_or(0, u8::from));
 
         let expected = vec![SingleId::new(4, 3, 2, 2).unwrap()];
         assert_eq!(sorted_single_ids(&abc, target_z), expected);
@@ -108,7 +108,7 @@ mod tests {
         ) {
             let lhs = lhs_case.build_set();
             let rhs = rhs_case.build_set();
-            let common_z = lhs.max_zoomlevel().unwrap_or(0).max(rhs.max_zoomlevel().unwrap_or(0));
+            let common_z = lhs.max_zoomlevel().map_or(0, u8::from).max(rhs.max_zoomlevel().map_or(0, u8::from));
 
             let actual = &lhs & &rhs;
             let actual_single_ids = sorted_single_ids(&actual, common_z);
@@ -146,9 +146,9 @@ mod tests {
 
             let common_z = a
                 .max_zoomlevel()
-                .unwrap_or(0)
-                .max(b.max_zoomlevel().unwrap_or(0))
-                .max(c.max_zoomlevel().unwrap_or(0));
+                .map_or(0, u8::from)
+                .max(b.max_zoomlevel().map_or(0, u8::from))
+                .max(c.max_zoomlevel().map_or(0, u8::from));
 
             let ab = &a & &b;
             let actual = &ab & &c;

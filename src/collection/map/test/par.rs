@@ -34,13 +34,13 @@ mod par_build {
         // 値クエリも一致する（ランク割り当ては違っても値は同じ）。
         for v in 0..13 {
             let mut a: Vec<FlexId> = seq
-                .filter_range(&v..=&v)
-                .into_iter()
+                .iter()
+                .filter(|(_, val)| **val == v)
                 .map(|(id, _)| id)
                 .collect();
             let mut b: Vec<FlexId> = par
-                .filter_range(&v..=&v)
-                .into_iter()
+                .iter()
+                .filter(|(_, val)| **val == v)
                 .map(|(id, _)| id)
                 .collect();
             a.sort_by_key(FlexId::field_key);

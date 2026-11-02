@@ -1,5 +1,6 @@
 pub mod constructor;
 pub mod convert;
+#[cfg(feature = "unstable")]
 pub mod encode;
 pub mod impls;
 pub mod ops;

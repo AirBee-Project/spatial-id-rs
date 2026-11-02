@@ -328,7 +328,7 @@ fn read_source<'a, V: SafeValue + 'static>(
     let mut counter = 0u32;
     let stream = source.read_flex_ids(bounds, &token)?;
     let common_ancestor = stream.common_ancestor();
-    Ok(QueryIter::from_ordered(stream.map(move |item| {
+    Ok(QueryIter::new(stream.map(move |item| {
         token.check_amortized(&mut counter)?;
         item
     }))
@@ -348,7 +348,7 @@ impl<V: SafeValue + 'static> Query<V> {
             return Err(Error::Query(QueryError::Cancelled));
         }
         if bounds.is_empty() {
-            return Ok(QueryIter::from_ordered(core::iter::empty()));
+            return Ok(QueryIter::new(core::iter::empty()));
         }
 
         match &self.0 {
@@ -364,7 +364,7 @@ impl<V: SafeValue + 'static> Query<V> {
                     next.dedup();
                     req = next;
                     if req.is_empty() {
-                        return Ok(QueryIter::from_ordered(core::iter::empty()));
+                        return Ok(QueryIter::new(core::iter::empty()));
                     }
                 }
                 let input_stream = input.stream_within(req, token)?;

@@ -1,5 +1,5 @@
-use crate::collection::core::{FlexTreeCore, IntoIter, NoSummary};
-use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId};
+use crate::collection::core::{FlexTreeCore, IntoIter};
+use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId, ZoomLevel};
 use core::iter::Map;
 pub(crate) mod convert;
 pub(crate) mod impls;
@@ -20,7 +20,7 @@ mod tests;
 /// - 空間ごとに値を持たせたい場合は [`SpatialIdMap`](crate::SpatialIdMap) を使用する。
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct SpatialIdSet {
-    pub(crate) inner: FlexTreeCore<(), NoSummary>,
+    pub(in crate::collection) inner: FlexTreeCore<()>,
 }
 
 impl SpatialIdSet {
@@ -124,7 +124,7 @@ impl SpatialIdSet {
     /// 内部に空間 ID が存在しない場合は [`None`] を返す。
     ///
     /// キャッシュを持たず、全ての[FlexId]を走査する（O(n)）。
-    pub fn max_zoomlevel(&self) -> Option<u8> {
+    pub fn max_zoomlevel(&self) -> Option<ZoomLevel> {
         self.inner.max_zoomlevel()
     }
 
@@ -190,7 +190,7 @@ impl SpatialIdSet {
 
 impl IntoIterator for SpatialIdSet {
     type Item = FlexId;
-    type IntoIter = Map<IntoIter<(), NoSummary>, fn((FlexId, ())) -> FlexId>;
+    type IntoIter = Map<IntoIter<()>, fn((FlexId, ())) -> FlexId>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter().map(|(flex_id, ())| flex_id)

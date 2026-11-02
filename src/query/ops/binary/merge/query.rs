@@ -6,6 +6,14 @@ use alloc::boxed::Box;
 
 impl<V: SafeValue + 'static> Query<V> {
     /// 重なる部分を `P` で解決し、片側にしかない部分はそのまま残す。
+    ///
+    /// 青の A と橙の B（左）を重ね合わせた例（右）。
+    ///
+    /// ![merge の入力と出力][query_merge]
+    #[cfg_attr(
+        doc,
+        embed_doc_image::embed_doc_image("query_merge", "docs/images/query_merge.jpg")
+    )]
     pub fn merge<P: MergePolicy<V>>(self, other: impl Into<Self>, _policy: P) -> Self {
         self.binary_merge(other.into(), Merge::<V, P>::new(None))
     }

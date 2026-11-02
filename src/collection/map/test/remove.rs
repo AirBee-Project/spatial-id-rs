@@ -24,18 +24,11 @@ mod tests {
         assert_eq!(flex_id.x_index(), 2);
         assert_eq!(flex_id.y_zoomlevel(), 4);
         assert_eq!(flex_id.y_index(), 1);
-        assert!(
-            table
-                .filter_range(&10..=&10)
-                .into_iter()
-                .map(|(id, _)| id)
-                .next()
-                .is_none()
-        );
+        assert!(table.get(first).next().is_none());
         assert_eq!(
             table
-                .filter_range(&20..=&20)
-                .into_iter()
+                .iter()
+                .filter(|(_, v)| **v == 20)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),
             second.into_iter().collect::<Vec<_>>()

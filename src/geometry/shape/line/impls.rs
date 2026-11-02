@@ -11,6 +11,13 @@ impl Shape for Line {
     }
 }
 
+/// 線分（左）を、それが覆う空間ID（右）へ変換する。図はズームレベル 21 の例。
+///
+/// ![線分と、それが覆う空間ID][line_cover]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("line_cover", "docs/images/line_cover.jpg")
+)]
 impl CoverSingleIds for Line {
     type Value<'a> = ();
 
@@ -177,7 +184,7 @@ fn coordinate_to_matrix(p: Coordinate, z: u8) -> [f64; 3] {
     let f = factor * alt;
 
     let n = 2u64.pow(z as u32) as f64;
-    let x = (lon + 180.0) / 360.0 * n;
+    let x = (lon + Coordinate::LON_ABS_MAX) / (2.0 * Coordinate::LON_ABS_MAX) * n;
 
     let lat_rad = lat.to_radians();
     let y = (1.0

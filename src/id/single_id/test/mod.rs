@@ -1,6 +1,7 @@
 pub mod ops;
 
 #[cfg(test)]
+#[cfg(feature = "unstable")]
 mod encode;
 
 #[cfg(test)]

@@ -87,9 +87,11 @@ where
 
     fn run<'a>(&'a self, input: QueryIter<'a, V>) -> Result<QueryIter<'a, V>, Error> {
         let common_ancestor = input.common_ancestor();
-        Ok(QueryIter::from_ordered(input.filter(
-            move |item| !matches!(item, Ok((_, value)) if !self.predicate.matches(value)),
-        ))
+        Ok(QueryIter::new(
+            input.filter(
+                move |item| !matches!(item, Ok((_, value)) if !self.predicate.matches(value)),
+            ),
+        )
         .with_common_ancestor(common_ancestor))
     }
 

@@ -11,6 +11,13 @@ impl Shape for Triangle {
     }
 }
 
+/// 三角形（左）を、それが覆う空間ID（右）へ変換する。図はズームレベル 21 の例。
+///
+/// ![三角形と、それが覆う空間ID][triangle_cover]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("triangle_cover", "docs/images/triangle_cover.jpg")
+)]
 impl CoverSingleIds for Triangle {
     type Value<'a> = ();
 

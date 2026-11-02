@@ -1,14 +1,12 @@
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::collection::core::Summary;
 use crate::{AllowedIntervals, SpatialIdMap};
 
 use super::super::json::{deserialize_with_values, serialize_with_values};
 
-impl<V, S> Serialize for SpatialIdMap<V, S>
+impl<V> Serialize for SpatialIdMap<V>
 where
     V: PartialEq + Clone + Serialize,
-    S: Summary<V>,
 {
     fn serialize<Ser: Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
         serialize_with_values(
@@ -18,10 +16,9 @@ where
     }
 }
 
-impl<'de, V, S> Deserialize<'de> for SpatialIdMap<V, S>
+impl<'de, V> Deserialize<'de> for SpatialIdMap<V>
 where
     V: PartialEq + Clone + Deserialize<'de>,
-    S: Summary<V>,
 {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let mut table = Self::default();

@@ -39,7 +39,7 @@
 
 - **定義**: `FlexId` と値 `V` を対応付けて保持する木構造の型。`SpatialIdSet`・`SpatialIdMap` の内部構造である。
 - **命名規則**: 「木」「ツリー」と訳さず、**`FlexTreeCore`** と書く。
-- **コード例**: `FlexTreeCore<V, S>`
+- **コード例**: `FlexTreeCore<V>`
 
 ## 7. Node
 
@@ -54,29 +54,23 @@
 
 - **定義**: ある `Node` から子を辿って到達できるすべての `Node`。自身は含まない。
 - **命名規則**: 「配下」「部分木」「下位」とは書かず、**子孫** と書く。自身も含めるときは「自身と子孫」と書く。
-- **使用例**: 「子孫の値の `Summary`」「自身と子孫が割っている次元」
+- **使用例**: 「自身と子孫が割っている次元」
 
-## 9. Summary
-
-- **定義**: `Branch` が子孫の値についてキャッシュする情報。`FlexTreeCore` と `SpatialIdMap` の型パラメーター `S` で選ぶ。
-- **命名規則**: 「集計」と訳さず、**`Summary`** と書く。
-- **コード例**: `Summary` トレイト、`MinMax`、`ValueSet`、`NoSummary`
-
-## 10. FlexId の PartialOrd
+## 9. FlexId の PartialOrd
 
 - **定義**: `FlexId` に実装した狭義の半順序（`impl PartialOrd for FlexId`）。位置をルート、続いてズーム 1, 2, … の各深さで F→X→Y→T の順に並べ、2 つの `FlexId` が最初に食い違う位置を見る。そこで両方が割られていれば、下側にある方を前とする。片方だけが割られていなければ比較できない（`None`）。同じ `FlexId` どうしは `Equal` である。
 - **特徴**: Z-order（Morton 順）を、次元ごとに分割の深さが違う場合へ広げたものである。全順序ではないので、`FlexId` は `Ord` を実装しない。包含関係にある組と、互いに素でも最初に食い違う位置で片方だけが割られていない組は比較できない。
 - **命名規則**: 「flex Z-order」「走査順」「カノニカル順」とは書かず、**FlexId の PartialOrd** と書く。比較には `<` や `partial_cmp` を使う。この順序を求める補助の識別子の接頭辞は `zorder_` とする。`z` はズームレベルを指すので、`z_` は使わない。
 - **コード例**: `impl PartialOrd for FlexId`、`FlexId::zorder_key`、`ZOrderRel`
 
-## 11. FlexId の Z-order 列
+## 10. FlexId の Z-order 列
 
 - **定義**: 隣り合う `FlexId` が FlexId の PartialOrd で狭義に増加する `(FlexId, V)` の列。推移律により、どの 2 要素も前の要素が小さく、互いに素である。
 - **特徴**: `QueryIter` が満たす条件である。互いに素であるだけでは満たさない。同じ形状でも列は一意に定まらず、同じ値の隣接する領域がまとめられているとは限らない。
 - **命名規則**: 「Z-ordered sequence」「カノニカル順の列」とは書かず、**FlexId の Z-order 列** と書く。
 - **コード例**: `QueryIter::from_ordered`
 
-## 12. FlexId のカノニカル列
+## 11. FlexId のカノニカル列
 
 - **定義**: FlexId の Z-order 列のうち、`FlexTreeCore` の規則（`Node::join` で、まとめられる左右を1つにし、片側が空なら `Skip` にする）でこれ以上まとめられないもの。`FlexTreeCore` から得られる列がこれにあたる。
 - **特徴**: 形状（領域から値への写像）に対して一意に定まる。区切り方や挿入の順によらず、同じ形状からは同じ列が得られる。まとめられるかは兄弟の子孫どうしを比べて決まるので、隣り合う 2 要素だけでは判定できない。
@@ -84,4 +78,4 @@
 
 ## 共通の規則
 
-型として存在する名前（`FlexId`・`FlexTreeCore`・`Node`・`Leaf`・`Branch`・`Skip`・`Summary` など）は、ドキュメントやコメントでも日本語に訳さず、型名のまま書く。
+型として存在する名前（`FlexId`・`FlexTreeCore`・`Node`・`Leaf`・`Branch`・`Skip` など）は、ドキュメントやコメントでも日本語に訳さず、型名のまま書く。

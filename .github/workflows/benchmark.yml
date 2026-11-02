@@ -39,7 +39,7 @@ jobs:
           mkdir -p bench-binaries
           BENCHES=$(echo '${{ steps.benches.outputs.benches }}' | jq -r '.[]')
           for bench in $BENCHES; do
-            EXEC=$(cargo bench --bench $bench --no-run --profile release --message-format=json | jq -r 'select(.profile.test == true and .executable != null) | .executable')
+            EXEC=$(cargo bench --bench $bench --all-features --no-run --profile release --message-format=json | jq -r 'select(.profile.test == true and .executable != null) | .executable')
             cp "$EXEC" "bench-binaries/$bench"
           done
 

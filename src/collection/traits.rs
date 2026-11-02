@@ -1,4 +1,3 @@
-use crate::collection::core::Summary;
 use crate::query::CancellationToken;
 use crate::query::SafeValue;
 use crate::query::{QueryIter, Source};
@@ -12,7 +11,7 @@ impl Source for SpatialIdSet {
         targets: &[RangeId],
         _token: &CancellationToken,
     ) -> Result<QueryIter<'a, ()>, Error> {
-        Ok(QueryIter::from_ordered(
+        Ok(QueryIter::new(
             self.inner
                 .get_overlapping(targets.iter().cloned())
                 .map(|(id, ())| Ok((id, ()))),
@@ -21,10 +20,9 @@ impl Source for SpatialIdSet {
     }
 }
 
-impl<V, S> Source for SpatialIdMap<V, S>
+impl<V> Source for SpatialIdMap<V>
 where
     V: SafeValue + 'static,
-    S: Summary<V> + Send + Sync + 'static,
 {
     type Value = V;
 
@@ -33,7 +31,7 @@ where
         targets: &[RangeId],
         _token: &CancellationToken,
     ) -> Result<QueryIter<'a, V>, Error> {
-        Ok(QueryIter::from_ordered(
+        Ok(QueryIter::new(
             self.inner
                 .get_overlapping(targets.iter().cloned())
                 .map(|(id, value)| Ok((id, value.clone()))),

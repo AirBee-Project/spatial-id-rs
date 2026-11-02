@@ -23,6 +23,12 @@ use crate::{
 ///     altitude: f64,
 /// }
 /// ```
+///
+/// ![点][point]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("point", "docs/images/point.jpg")
+)]
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 pub struct Coordinate {
     latitude: f64,
@@ -31,6 +37,13 @@ pub struct Coordinate {
 }
 
 impl Coordinate {
+    /// 扱える緯度の上限（絶対値）\[deg\]。
+    pub(crate) const LAT_ABS_MAX: f64 = 85.0511;
+    /// 扱える経度の上限（絶対値）\[deg\]。
+    pub(crate) const LON_ABS_MAX: f64 = 180.0;
+    /// 扱える高度の上限（絶対値）\[m\]。
+    pub(crate) const ALT_ABS_MAX: f64 = 33_554_432.0;
+
     /// 指定された緯度・経度・高度から [Coordinate] を生成する。
     ///
     /// 各引数は、空間 ID 上で扱える座標として有効な範囲に収まっている必要がある。
@@ -55,15 +68,15 @@ impl Coordinate {
     /// assert_eq!(coord.altitude(), 10.0);
     /// ```
     pub fn new(latitude: f64, longitude: f64, altitude: f64) -> Result<Self, Error> {
-        if !(-85.0511..=85.0511).contains(&latitude) {
+        if !(-Self::LAT_ABS_MAX..=Self::LAT_ABS_MAX).contains(&latitude) {
             return Err(GeometryError::LatitudeOutOfRange { latitude }.into());
         }
 
-        if !(-180.0..=180.0).contains(&longitude) {
+        if !(-Self::LON_ABS_MAX..=Self::LON_ABS_MAX).contains(&longitude) {
             return Err(GeometryError::LongitudeOutOfRange { longitude }.into());
         }
 
-        if !(-33_554_432.0..=33_554_432.0).contains(&altitude) {
+        if !(-Self::ALT_ABS_MAX..=Self::ALT_ABS_MAX).contains(&altitude) {
             return Err(GeometryError::AltitudeOutOfRange { altitude }.into());
         }
 
@@ -150,7 +163,7 @@ impl Coordinate {
     /// assert_eq!(coord.latitude(), 43.068564);
     /// ```
     pub fn set_latitude(&mut self, latitude: f64) -> Result<(), Error> {
-        if !(-85.0511..=85.0511).contains(&latitude) {
+        if !(-Self::LAT_ABS_MAX..=Self::LAT_ABS_MAX).contains(&latitude) {
             return Err(GeometryError::LatitudeOutOfRange { latitude }.into());
         }
         self.latitude = latitude;
@@ -170,7 +183,7 @@ impl Coordinate {
     /// assert_eq!(coord.longitude(), 136.7566027);
     /// ```
     pub fn set_longitude(&mut self, longitude: f64) -> Result<(), Error> {
-        if !(-180.0..=180.0).contains(&longitude) {
+        if !(-Self::LON_ABS_MAX..=Self::LON_ABS_MAX).contains(&longitude) {
             return Err(GeometryError::LongitudeOutOfRange { longitude }.into());
         }
         self.longitude = longitude;
@@ -191,7 +204,7 @@ impl Coordinate {
     /// assert_eq!(coord.altitude(), 20.0);
     /// ```
     pub fn set_altitude(&mut self, altitude: f64) -> Result<(), Error> {
-        if !(-33_554_432.0..=33_554_432.0).contains(&altitude) {
+        if !(-Self::ALT_ABS_MAX..=Self::ALT_ABS_MAX).contains(&altitude) {
             return Err(GeometryError::AltitudeOutOfRange { altitude }.into());
         }
         self.altitude = altitude;
@@ -221,13 +234,6 @@ impl Coordinate {
         let e1: Ecef = (*self).into();
         let e2: Ecef = (*other).into();
         e1.distance(&e2)
-    }
-
-    /// [`Coordinate`] が同じ位置にあるかを判定する。
-    /// 2点間の直線距離が epsilon 以内にあるかを判定する。
-    pub fn eq_epsilon(&self, other: &Coordinate, epsilon: f64) -> bool {
-        let distance = self.distance(other);
-        distance <= epsilon
     }
 
     /// 与えられた座標群の重心を計算する。
