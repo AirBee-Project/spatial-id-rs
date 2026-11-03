@@ -69,9 +69,7 @@ impl<V: SafeValue + 'static> UnaryOperator<V> for Shift {
             use rayon::prelude::*;
             // 入力を区切って読むので、一度に持つ入力はこの数までに収まる
             const CHUNK: usize = 1 << 16;
-            let union = |a: SpatialIdMap<V>, b: SpatialIdMap<V>| SpatialIdMap {
-                inner: a.inner.union(&b.inner),
-            };
+            let union = |a: SpatialIdMap<V>, b: SpatialIdMap<V>| a.union(&b);
             let mut input = input.peekable();
             // 塊ごとに蓄積した木へ union すると、木全体の複製が塊の数だけ走るので、最後に二分木状にまとめる
             let mut parts = Vec::new();

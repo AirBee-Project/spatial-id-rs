@@ -91,7 +91,7 @@ impl Point for Coordinate {
         let f = factor * alt;
 
         let n = 2u64.pow(z as u32) as f64;
-        let x = (lon + 180.0) / 360.0 * n;
+        let x = (lon + Coordinate::LON_ABS_MAX) / (2.0 * Coordinate::LON_ABS_MAX) * n;
 
         let lat_rad = lat.to_radians();
         let y = (1.0
@@ -103,6 +103,13 @@ impl Point for Coordinate {
     }
 }
 
+/// 点（左）を、それを含む空間ID（右）へ変換する。図はズームレベル 20 の例。
+///
+/// ![点と、それを含む空間ID][point_cover]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("point_cover", "docs/images/point_cover.jpg")
+)]
 impl CoverSingleIds for Coordinate {
     type Value<'a> = ();
 

@@ -1,4 +1,3 @@
-use crate::collection::core::FlexTreeCore;
 use crate::query::Query;
 use crate::query::SafeValue;
 use crate::query::cancellation::CancellationToken;
@@ -20,7 +19,7 @@ pub struct QueryOutput<'a, V: SafeValue + 'static> {
     whole: bool,
     clip: bool,
     // `targets` の和。要素との共通部分を、互いに素な FlexId の Z-order 列で取り出すのに使う
-    clipper: Option<FlexTreeCore<()>>,
+    clipper: Option<SpatialIdSet>,
     // 切り取った断片を、返す順の逆に積んでおく
     pending: Vec<(FlexId, V)>,
     token: CancellationToken,
@@ -61,11 +60,7 @@ impl<'a, V: SafeValue + 'static> QueryOutput<'a, V> {
     fn start(&mut self) -> Result<QueryIter<'a, V>, Error> {
         self.query.validate()?;
         if self.clip && !self.whole {
-            let mut clipper = FlexTreeCore::default();
-            for target in &self.targets {
-                clipper.insert(*target, ());
-            }
-            self.clipper = Some(clipper);
+            self.clipper = Some(self.targets.iter().copied().collect());
         }
         self.query.stream_within(self.targets.clone(), &self.token)
     }
@@ -108,7 +103,7 @@ impl<V: SafeValue + 'static> Iterator for QueryOutput<'_, V> {
                 Some(clipper) => {
                     let start = self.pending.len();
                     self.pending
-                        .extend(clipper.get([id]).map(|(piece, _)| (piece, value.clone())));
+                        .extend(clipper.get(id).map(|piece| (piece, value.clone())));
                     self.pending[start..].reverse();
                 }
             }

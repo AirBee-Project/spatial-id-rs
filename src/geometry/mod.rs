@@ -13,7 +13,8 @@ pub(crate) mod traits;
 
 pub(crate) mod vec3;
 
-pub mod epsilon;
+pub(crate) mod epsilon;
+
 pub mod format;
 
 pub use crate::error::GeometryError;

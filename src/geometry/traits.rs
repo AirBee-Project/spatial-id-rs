@@ -61,9 +61,7 @@ pub trait CoverSingleIds {
 
     /// 対象の図形が覆う [`SingleId`] を [`SpatialIdSet`] にまとめる。
     fn cover_set(&self, z: impl Into<u8>) -> Result<SpatialIdSet, Error> {
-        Ok(SpatialIdSet {
-            inner: self.cover_map_with(z, |_| ())?.inner,
-        })
+        Ok(self.cover_map_with(z, |_| ())?.into())
     }
 }
 

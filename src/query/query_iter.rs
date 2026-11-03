@@ -9,9 +9,15 @@ pub struct QueryIter<'a, V>(Box<dyn Iterator<Item = Result<(FlexId, V), Error>> 
 
 impl<'a, V> QueryIter<'a, V> {
     /// 制約を満たす `iter` を包む。制約を守るのは呼び出し側の責任。
+    #[cfg(feature = "unstable")]
     pub fn from_ordered(
         iter: impl Iterator<Item = Result<(FlexId, V), Error>> + Send + 'a,
     ) -> Self {
+        Self::new(iter)
+    }
+
+    /// 制約を満たす `iter` を包む。制約を守るのは呼び出し側の責任。
+    pub(crate) fn new(iter: impl Iterator<Item = Result<(FlexId, V), Error>> + Send + 'a) -> Self {
         #[cfg(debug_assertions)]
         let iter = {
             let mut prev: Option<FlexId> = None;
@@ -38,7 +44,7 @@ impl<'a, V> QueryIter<'a, V> {
     where
         V: Send + 'a,
     {
-        QueryIter::from_ordered(self.filter_map(move |item| match item {
+        QueryIter::new(self.filter_map(move |item| match item {
             Ok((id, value)) => f(id, value).map(|value| Ok((id, value))),
             Err(e) => Some(Err(e)),
         }))
@@ -95,7 +101,7 @@ impl<'a, V> QueryIter<'a, V> {
         let mut limit = FIRST_CHUNK;
         let mut seq_left = 0;
 
-        QueryIter::from_ordered(core::iter::from_fn(move || {
+        QueryIter::new(core::iter::from_fn(move || {
             loop {
                 if let Some(item) = ready.next() {
                     return Some(item);
@@ -160,6 +166,6 @@ impl<V> Iterator for QueryIter<'_, V> {
 
 impl<'a, V: SafeValue + 'static> From<SpatialIdMap<V>> for QueryIter<'a, V> {
     fn from(table: SpatialIdMap<V>) -> Self {
-        Self::from_ordered(table.into_iter().map(Ok))
+        Self::new(table.into_iter().map(Ok))
     }
 }

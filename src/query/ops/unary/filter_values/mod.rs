@@ -86,7 +86,7 @@ where
     }
 
     fn run<'a>(&'a self, input: QueryIter<'a, V>) -> Result<QueryIter<'a, V>, Error> {
-        Ok(QueryIter::from_ordered(input.filter(
+        Ok(QueryIter::new(input.filter(
             move |item| !matches!(item, Ok((_, value)) if !self.predicate.matches(value)),
         )))
     }

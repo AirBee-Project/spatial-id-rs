@@ -68,7 +68,7 @@ impl<const LIMIT: u8> Zoom<LIMIT> {
     ///
     /// 自身が有効なので `+1` が [`MAX`](Self::MAX) 以下であることをここで確かめきれる。
     /// 呼び出し側は改めて範囲検証をする必要がない。
-    pub const fn deeper(self) -> Option<Self> {
+    pub(crate) const fn deeper(self) -> Option<Self> {
         if self.0 >= LIMIT {
             None
         } else {
@@ -122,7 +122,7 @@ impl Zoom<30> {
     ///
     /// # バリデーション
     /// - 範囲外の場合は [`SpatialIdError::FOutOfRange`] を返す。
-    pub const fn check_f(self, f: i32) -> Result<(), Error> {
+    pub(crate) const fn check_f(self, f: i32) -> Result<(), Error> {
         if f < self.f_min() || f > self.f_max() {
             return Err(Error::SpatialId(SpatialIdError::FOutOfRange {
                 z: self.0,
@@ -136,7 +136,7 @@ impl Zoom<30> {
     ///
     /// # バリデーション
     /// - 範囲外の場合は [`SpatialIdError::XOutOfRange`] を返す。
-    pub const fn check_x(self, x: u32) -> Result<(), Error> {
+    pub(crate) const fn check_x(self, x: u32) -> Result<(), Error> {
         if x > self.xy_max() {
             return Err(Error::SpatialId(SpatialIdError::XOutOfRange {
                 z: self.0,
@@ -150,7 +150,7 @@ impl Zoom<30> {
     ///
     /// # バリデーション
     /// - 範囲外の場合は [`SpatialIdError::YOutOfRange`] を返す。
-    pub const fn check_y(self, y: u32) -> Result<(), Error> {
+    pub(crate) const fn check_y(self, y: u32) -> Result<(), Error> {
         if y > self.xy_max() {
             return Err(Error::SpatialId(SpatialIdError::YOutOfRange {
                 z: self.0,
@@ -173,7 +173,7 @@ impl Zoom<35> {
     }
 
     /// `index` がこのズームレベルの範囲に収まるか検証する。
-    pub const fn check_index(self, index: u64) -> Result<(), Error> {
+    pub(crate) const fn check_index(self, index: u64) -> Result<(), Error> {
         if index > self.max_index() {
             return Err(Error::SpatialId(SpatialIdError::TOutOfRange {
                 i: self.segment_seconds(),

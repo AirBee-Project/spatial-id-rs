@@ -15,9 +15,11 @@ impl<T: PartialEq + Clone + Send + Sync> SafeValue for T {}
 /// # 実装の仕方
 ///
 /// [`read_flex_ids`](Self::read_flex_ids) は [`QueryIter`] の制約を満たす列を返す。
+/// [`QueryIter`] を作る `QueryIter::from_ordered` は `unstable` feature でだけ公開されるので、
+/// クレートの外で実装するにはこの feature が要る。
 ///
-/// - FlexId の Z-order 列で読み出せるなら、[`QueryIter::from_ordered`] で包んで逐次に流す。
-///   [`FlexId::zorder_key`](crate::FlexId::zorder_key) の昇順で保存したデータベースを、その順に一度だけ走査し、
+/// - FlexId の Z-order 列で読み出せるなら、`QueryIter::from_ordered` で包んで逐次に流す。
+///   `FlexId::zorder_key` の昇順で保存したデータベースを、その順に一度だけ走査し、
 ///   `targets` のどれかと [`intersects_range`](crate::FlexId::intersects_range) する要素を返す場合がこれにあたる。
 ///   `targets` ごとに分けて読むと、複数の `targets` と重なる要素が重複し、順序も崩れうるので、
 ///   全ての `targets` をまとめて一度に読む。

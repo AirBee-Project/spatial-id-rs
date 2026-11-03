@@ -40,6 +40,14 @@ use projected_ring::ProjectedRing;
 /// }).unwrap();
 /// assert!(map.iter().all(|(_, v)| v == "A"));
 /// ```
+///
+/// 点・線・穴あきポリゴンの FeatureCollection（左）と、それが覆う空間ID（右）。図はズームレベル 21 の例。
+///
+/// ![GeoJSON と、それが覆う空間ID][geojson_cover]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("geojson_cover", "docs/images/geojson_cover.jpg")
+)]
 impl CoverSingleIds for GeoJson {
     type Value<'a> = Option<&'a Feature>;
 
@@ -145,9 +153,7 @@ where
     F: FnMut(Option<&'a Feature>) -> V,
 {
     use rayon::prelude::*;
-    let later_wins = |a: SpatialIdMap<V>, b: SpatialIdMap<V>| SpatialIdMap {
-        inner: b.inner.union(&a.inner),
-    };
+    let later_wins = |a: SpatialIdMap<V>, b: SpatialIdMap<V>| b.union(&a);
 
     match geojson {
         GeoJson::Geometry(geometry) => {

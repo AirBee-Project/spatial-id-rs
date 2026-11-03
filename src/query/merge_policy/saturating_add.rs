@@ -1,13 +1,19 @@
+mod sealed {
+    pub trait Sealed {}
+}
+
 /// [`Sum`](super::Sum) と [`Average`](super::Average) が値を足すときに使うTrait。
 ///
 /// 整数型はオーバーフローすると最大値で止まり、浮動小数点数型は通常の足し算を行う。
-pub trait SaturatingAdd: Sized {
+/// 実装はこのクレートの数値型に限り、外部の型には実装できない。
+pub trait SaturatingAdd: Sized + sealed::Sealed {
     fn saturating_add(self, rhs: Self) -> Self;
 }
 
 macro_rules! impl_saturating_add_int {
     ($($t:ty),* $(,)?) => {
         $(
+            impl sealed::Sealed for $t {}
             impl SaturatingAdd for $t {
                 fn saturating_add(self, rhs: Self) -> Self {
                     <$t>::saturating_add(self, rhs)
@@ -23,6 +29,7 @@ impl_saturating_add_int!(
 macro_rules! impl_saturating_add_float {
     ($($t:ty),* $(,)?) => {
         $(
+            impl sealed::Sealed for $t {}
             impl SaturatingAdd for $t {
                 fn saturating_add(self, rhs: Self) -> Self {
                     self + rhs

@@ -11,7 +11,7 @@ impl Source for SpatialIdSet {
         targets: &[RangeId],
         _token: &CancellationToken,
     ) -> Result<QueryIter<'a, ()>, Error> {
-        Ok(QueryIter::from_ordered(
+        Ok(QueryIter::new(
             self.inner
                 .get_overlapping(targets.iter().cloned())
                 .map(|(id, ())| Ok((id, ()))),
@@ -30,7 +30,7 @@ where
         targets: &[RangeId],
         _token: &CancellationToken,
     ) -> Result<QueryIter<'a, V>, Error> {
-        Ok(QueryIter::from_ordered(
+        Ok(QueryIter::new(
             self.inner
                 .get_overlapping(targets.iter().cloned())
                 .map(|(id, value)| Ok((id, value.clone()))),

@@ -14,6 +14,12 @@ mod tests;
 ///
 /// 複数の [Polygon] によって構成される閉じた領域を表現する。
 /// この型は、作成時に必ず閉合性が検証されるため、作成できている場合は「閉じている」ことが保証される。
+///
+/// ![立体][solid]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("solid", "docs/images/solid.jpg")
+)]
 #[derive(Debug, Clone)]
 pub struct Solid {
     /// 立体を構成する面のリスト
@@ -112,7 +118,7 @@ impl Solid {
     }
 
     /// 指定されたズームレベル `z` における、この [Solid] の表面を覆う [SingleId] の集合を返す。
-    pub fn surface_single_ids(
+    pub(crate) fn surface_single_ids(
         &self,
         z: impl Into<u8>,
     ) -> Result<impl Iterator<Item = SingleId>, Error> {

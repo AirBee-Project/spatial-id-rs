@@ -23,12 +23,6 @@ impl From<Ecef> for Coordinate {
     }
 }
 
-/// [`Coordinate`] が扱える緯度の上限（絶対値）\[deg\]。
-const MAX_LATITUDE: f64 = 85.0511;
-
-/// [`Coordinate`] が扱える高度の上限（絶対値）\[m\]。
-const MAX_ALTITUDE: f64 = 33_554_432.0;
-
 /// 往復変換（地理座標 → ECEF → 地理座標）で生じる緯度の浮動小数点誤差の許容幅 \[deg\]。
 ///
 /// 地表付近から高度上限までの実測誤差は 1e-12 度未満であり、十分な余裕を持たせている。
@@ -67,9 +61,13 @@ pub(crate) fn ecef_to_geodetic(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
     }
 
     (
-        snap_to_bound(lat.to_degrees(), MAX_LATITUDE, LATITUDE_TOLERANCE),
+        snap_to_bound(
+            lat.to_degrees(),
+            Coordinate::LAT_ABS_MAX,
+            LATITUDE_TOLERANCE,
+        ),
         lon.to_degrees(),
-        snap_to_bound(h, MAX_ALTITUDE, ALTITUDE_TOLERANCE),
+        snap_to_bound(h, Coordinate::ALT_ABS_MAX, ALTITUDE_TOLERANCE),
     )
 }
 
@@ -90,6 +88,13 @@ impl Point for Ecef {
     }
 }
 
+/// 点（左）を、それを含む空間ID（右）へ変換する。図はズームレベル 20 の例。
+///
+/// ![点と、それを含む空間ID][point_cover]
+#[cfg_attr(
+    doc,
+    embed_doc_image::embed_doc_image("point_cover", "docs/images/point_cover.jpg")
+)]
 impl CoverSingleIds for Ecef {
     type Value<'a> = ();
 

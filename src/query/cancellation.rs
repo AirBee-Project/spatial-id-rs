@@ -48,7 +48,7 @@ impl CancellationToken {
 
     /// タイトループ用。`counter` を進め、一定間隔でだけ実際に [`is_cancelled`](Self::is_cancelled)を確認する。
     #[inline]
-    pub fn check_amortized(&self, counter: &mut u32) -> Result<(), Error> {
+    pub(crate) fn check_amortized(&self, counter: &mut u32) -> Result<(), Error> {
         *counter = counter.wrapping_add(1);
         if *counter & AMORTIZED_CHECK_INTERVAL != 0 {
             return Ok(());
