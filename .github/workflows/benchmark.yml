@@ -17,7 +17,7 @@ jobs:
     outputs:
       benches: ${{ steps.benches.outputs.benches }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -44,7 +44,7 @@ jobs:
           done
 
       - name: Upload benchmark binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bench-binaries
           path: bench-binaries/
@@ -59,7 +59,7 @@ jobs:
         bench_name: ${{ fromJson(needs.build-benchmarks.outputs.benches) }}
     steps:
       - name: Download benchmark binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bench-binaries
           path: bench-binaries
@@ -70,13 +70,13 @@ jobs:
           bench-binaries/${{ matrix.bench_name }} --bench --output-format bencher | tee ${{ matrix.bench_name }}.txt
 
       - name: Upload benchmark result txt
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bench-result-${{ matrix.bench_name }}
           path: ${{ matrix.bench_name }}.txt
 
       - name: Upload Criterion HTML report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: criterion-report-${{ matrix.bench_name }}
@@ -87,10 +87,10 @@ jobs:
     needs: run-benchmarks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download all benchmark results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: bench-result-*
           path: bench-results
@@ -113,7 +113,7 @@ jobs:
           gh-pages-branch: "gh-pages"
 
       - name: Download all Criterion reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: criterion-report-*
           path: criterion-reports
@@ -142,7 +142,7 @@ jobs:
     name: Memory Benchmark
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
