@@ -11,6 +11,7 @@ keywords = ["spatial-id", "geospatial", "gis", "spatiotemporal", "ouranos"]
 categories = ["science::geo", "data-structures", "no-std"]
 exclude = [
     "/sample",
+    "/docs/images",
     "/.github",
     "/.vscode",
     "/deny.toml",
