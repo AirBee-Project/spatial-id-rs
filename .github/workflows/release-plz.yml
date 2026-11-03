@@ -58,4 +58,4 @@ jobs:
           command: release-pr
         env:
           # 既定の GITHUB_TOKEN で開いた PR には CI が走らないため PAT を使う
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SPATIAL_ID_RS_RELEASE_PLZ_TOKEN }}
