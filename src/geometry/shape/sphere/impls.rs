@@ -14,10 +14,7 @@ impl Shape for Sphere {
 /// 球（左）を、それが覆う空間ID（右）へ変換する。図はズームレベル 21 の例。
 ///
 /// ![球と、それが覆う空間ID][sphere_cover]
-#[cfg_attr(
-    doc,
-    embed_doc_image::embed_doc_image("sphere_cover", "docs/images/sphere_cover.jpg")
-)]
+#[doc = doc_image!("sphere_cover", "docs/images/sphere_cover.jpg")]
 impl CoverSingleIds for Sphere {
     type Value<'a> = ();
 

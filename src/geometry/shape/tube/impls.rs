@@ -4,10 +4,7 @@ use hashbrown::HashSet;
 /// パイプ（左）を、それが覆う空間ID（右）へ変換する。図はズームレベル 21 の例。
 ///
 /// ![パイプと、それが覆う空間ID][tube_cover]
-#[cfg_attr(
-    doc,
-    embed_doc_image::embed_doc_image("tube_cover", "docs/images/tube_cover.jpg")
-)]
+#[doc = doc_image!("tube_cover", "docs/images/tube_cover.jpg")]
 impl CoverSingleIds for Tube {
     type Value<'a> = ();
 

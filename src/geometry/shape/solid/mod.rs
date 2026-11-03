@@ -16,10 +16,7 @@ mod tests;
 /// この型は、作成時に必ず閉合性が検証されるため、作成できている場合は「閉じている」ことが保証される。
 ///
 /// ![立体][solid]
-#[cfg_attr(
-    doc,
-    embed_doc_image::embed_doc_image("solid", "docs/images/solid.jpg")
-)]
+#[doc = doc_image!("solid", "docs/images/solid.jpg")]
 #[derive(Debug, Clone)]
 pub struct Solid {
     /// 立体を構成する面のリスト

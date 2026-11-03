@@ -9,6 +9,21 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+// rustdoc 用の画像は crate に同梱せず、同じバージョンのタグを指す GitHub 上の URL を参照する。
+// `![代替テキスト][ラベル]` から参照する、参照リンク定義を生成する。
+macro_rules! doc_image {
+    ($label:literal, $path:literal) => {
+        concat!(
+            "\n\n[",
+            $label,
+            "]: https://raw.githubusercontent.com/AirBee-Project/spatial-id-rs/v",
+            env!("CARGO_PKG_VERSION"),
+            "/",
+            $path
+        )
+    };
+}
+
 /// 発生し得るすべてのエラーを`enum` 型として定義・集約。
 mod error;
 

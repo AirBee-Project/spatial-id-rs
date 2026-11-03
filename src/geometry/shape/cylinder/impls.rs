@@ -14,10 +14,7 @@ impl Shape for Cylinder {
 /// 円柱（左）を、それが覆う空間ID（右）へ変換する。図はズームレベル 21 の例。
 ///
 /// ![円柱と、それが覆う空間ID][cylinder_cover]
-#[cfg_attr(
-    doc,
-    embed_doc_image::embed_doc_image("cylinder_cover", "docs/images/cylinder_cover.jpg")
-)]
+#[doc = doc_image!("cylinder_cover", "docs/images/cylinder_cover.jpg")]
 impl CoverSingleIds for Cylinder {
     type Value<'a> = ();
 
@@ -54,13 +51,7 @@ impl CoverSingleIds for Cylinder {
 /// 円柱（左）を、それが覆う [`RangeId`](crate::RangeId)（右）へ変換する。図はズームレベル 21 の例。
 ///
 /// ![円柱と、それが覆う範囲ID][cylinder_cover_range]
-#[cfg_attr(
-    doc,
-    embed_doc_image::embed_doc_image(
-        "cylinder_cover_range",
-        "docs/images/cylinder_cover_range.jpg"
-    )
-)]
+#[doc = doc_image!("cylinder_cover_range", "docs/images/cylinder_cover_range.jpg")]
 impl CoverRangeIds for Cylinder {
     fn cover_range_ids_with<'a, V, F>(
         &'a self,

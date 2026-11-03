@@ -9,13 +9,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// 青の A と橙の B（左）から、重なる部分だけを残した例（右）。
     ///
     /// ![intersection の入力と出力][query_intersection]
-    #[cfg_attr(
-        doc,
-        embed_doc_image::embed_doc_image(
-            "query_intersection",
-            "docs/images/query_intersection.jpg"
-        )
-    )]
+    #[doc = doc_image!("query_intersection", "docs/images/query_intersection.jpg")]
     pub fn intersection(self, other: impl Into<Self>) -> Self {
         if matches!(self.0, Node::Error(_)) {
             return self;
