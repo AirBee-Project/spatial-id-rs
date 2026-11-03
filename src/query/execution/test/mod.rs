@@ -30,7 +30,8 @@ fn extrude_f_same_xy_diff_f_resolves_via_policy() {
 #[test]
 fn extrude_result_is_deterministic_across_runs() {
     let bldg_risk: SpatialIdMap<u32> =
-        serde_json::from_str(&std::fs::read_to_string("sample/bldg_risk.json").unwrap()).unwrap();
+        serde_json::from_str(&std::fs::read_to_string("sample/riskmap/bldg_risk.json").unwrap())
+            .unwrap();
 
     let mut subset = SpatialIdMap::new();
     for (id, &v) in bldg_risk.iter().take(200) {
