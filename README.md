@@ -7,12 +7,12 @@
 
 ### 空間ID・時空間IDの型定義
 
-| 型 | 表すもの | 例 |
-| :--- | :--- | :--- |
-| `SingleId` | 1つの空間ID | `25/0/29800549/13205107` |
-| `RangeId` | 各次元を範囲で指定した空間IDのまとまり | `24/0:3/14900274:14900277/6602553:6602555` |
-| `SpatialIdSet` | 空間IDの集合 | |
-| `SpatialIdMap<V>` | 空間IDごとに値を持つマップ | |
+| 型                | 表すもの                               | 例                                         |
+| :---------------- | :------------------------------------- | :----------------------------------------- |
+| `SingleId`        | 1つの空間ID                            | `25/0/29800549/13205107`                   |
+| `RangeId`         | 各次元を範囲で指定した空間IDのまとまり | `24/0:3/14900274:14900277/6602553:6602555` |
+| `SpatialIdSet`    | 空間IDの集合                           |                                            |
+| `SpatialIdMap<V>` | 空間IDごとに値を持つマップ             |                                            |
 
 ```rust
 use spatial_id::{RangeId, SingleId};
@@ -43,15 +43,15 @@ let set = sphere.cover_set(25)?;                             // ズームレベ�
 
 ほかの図形も同じように変換できます。
 
-| `Coordinate` | `Line` |
-| :---: | :---: |
-| ![](docs/images/point_cover.jpg) | ![](docs/images/line_cover.jpg) |
-| **`Triangle`** | **`Polygon`** |
-| ![](docs/images/triangle_cover.jpg) | ![](docs/images/polygon_cover.jpg) |
-| **`Solid`** | **`Cylinder`** |
-| ![](docs/images/solid_cover.jpg) | ![](docs/images/cylinder_cover.jpg) |
-| **`Tube`** | **`geojson::GeoJson`** |
-| ![](docs/images/tube_cover.jpg) | ![](docs/images/geojson_cover.jpg) |
+|            `Coordinate`             |               `Line`                |
+| :---------------------------------: | :---------------------------------: |
+|  ![](docs/images/point_cover.jpg)   |   ![](docs/images/line_cover.jpg)   |
+|           **`Triangle`**            |            **`Polygon`**            |
+| ![](docs/images/triangle_cover.jpg) | ![](docs/images/polygon_cover.jpg)  |
+|             **`Solid`**             |           **`Cylinder`**            |
+|  ![](docs/images/solid_cover.jpg)   | ![](docs/images/cylinder_cover.jpg) |
+|             **`Tube`**              |       **`geojson::GeoJson`**        |
+|   ![](docs/images/tube_cover.jpg)   | ![](docs/images/geojson_cover.jpg)  |
 
 ## 時空間データの加工
 
@@ -87,6 +87,7 @@ cargo run --release --example riskmap --features unstable
 ```
 
 ### 結果
+
 ![道路と建物のリスク値から作ったドローンリスクマップ](docs/images/riskmap_result.jpg)
 
 ## インストール
@@ -96,10 +97,10 @@ cargo run --release --example riskmap --features unstable
 spatial-id = "0.1"
 ```
 
-| feature | default | 内容 |
-| :--- | :---: | :--- |
-| `std` | ✓ | 標準ライブラリを使う。GeoJSON からの変換に必要 |
-| `rayon` | ✓ | 並列実行 |
-| `temporal_id` | ✓ | 時空間ID。無効にすると空間IDのみ |
-| `unstable` | | JSON 入出力など、破壊的変更があり得る API |
-| `random` | | ランダムな空間IDの生成 |
+| feature       | default | 内容                                           |
+| :------------ | :-----: | :--------------------------------------------- |
+| `std`         |    ✓    | 標準ライブラリを使う。GeoJSON からの変換に必要 |
+| `rayon`       |    ✓    | 並列実行                                       |
+| `temporal_id` |    ✓    | 時空間ID。無効にすると空間IDのみ               |
+| `unstable`    |         | JSON 入出力など、破壊的変更があり得る API      |
+| `random`      |         | ランダムな空間IDの生成                         |

@@ -1,0 +1,32 @@
+[workspace]
+repo_url = "https://github.com/AirBee-Project/spatial-id-rs"
+semver_check = true
+pr_labels = ["release"]
+
+[[package]]
+name = "spatial-id"
+git_tag_name = "v{{ version }}"
+git_release_name = "v{{ version }}"
+
+[changelog]
+header = """# Changelog
+
+このプロジェクトの重要な変更はすべてこのファイルに記録する。
+
+形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に基づき、
+バージョン番号は [Semantic Versioning](https://semver.org/lang/ja/) に従う。
+
+## [Unreleased]
+"""
+commit_parsers = [
+    { message = "^feat", group = "Added" },
+    { message = "^fix", group = "Fixed" },
+    { message = "^perf", group = "Changed" },
+    { message = "^refactor", group = "Changed" },
+    { message = "^revert", group = "Changed" },
+    { message = "^chore: release", skip = true },
+    { message = "^(docs|test|ci|chore|build|style)", skip = true },
+    { message = "^Merge ", skip = true },
+    { message = ".*", group = "Other" },
+]
+protect_breaking_commits = true

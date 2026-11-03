@@ -2,14 +2,14 @@ use crate::{Coordinate, Line, Polygon, Triangle};
 
 /// 現実空間の図形に共通する性質。
 ///
-/// <https://github.com/AirBee-Project/Kasane-Logic/blob/main/docs/geometry-relation.md>
+/// <https://github.com/AirBee-Project/spatial-id-rs/blob/main/docs/geometry-relation.md>
 pub trait Shape {
     fn center(&self) -> Coordinate;
 }
 
 /// [Coordinate] の集合へ分解可能であることを示す
 ///
-/// <https://github.com/AirBee-Project/Kasane-Logic/blob/main/docs/geometry-relation.md>
+/// <https://github.com/AirBee-Project/spatial-id-rs/blob/main/docs/geometry-relation.md>
 ///
 /// # Examples
 /// ```
@@ -28,7 +28,7 @@ pub trait ExpandCoordinates {
 
 /// [Line] の集合へ分解可能であることを示す
 ///
-/// <https://github.com/AirBee-Project/Kasane-Logic/blob/main/docs/geometry-relation.md>
+/// <https://github.com/AirBee-Project/spatial-id-rs/blob/main/docs/geometry-relation.md>
 ///
 /// # Examples
 /// ```
@@ -48,7 +48,7 @@ pub trait ExpandLines {
 
 /// [Triangle] の集合へ分解可能であることを示す
 ///
-/// <https://github.com/AirBee-Project/Kasane-Logic/blob/main/docs/geometry-relation.md>
+/// <https://github.com/AirBee-Project/spatial-id-rs/blob/main/docs/geometry-relation.md>
 ///
 /// # Examples
 /// ```
@@ -69,7 +69,7 @@ pub trait ExpandTriangles {
 
 /// [Polygon] の集合へ分解可能であることを示す
 ///
-/// <https://github.com/AirBee-Project/Kasane-Logic/blob/main/docs/geometry-relation.md>
+/// <https://github.com/AirBee-Project/spatial-id-rs/blob/main/docs/geometry-relation.md>
 ///
 /// # Examples
 /// ```
