@@ -9,7 +9,7 @@ mod tests;
 /// 直線を表す型。
 ///
 /// ![線分][line]
-#[cfg_attr(doc, embed_doc_image::embed_doc_image("line", "docs/images/line.jpg"))]
+#[doc = doc_image!("line", "docs/images/line.jpg")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Line {
     points: [Coordinate; 2],

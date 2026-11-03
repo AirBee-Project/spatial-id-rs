@@ -16,10 +16,7 @@ use crate::{
 /// 単位はすべてメートル。
 ///
 /// ![点][point]
-#[cfg_attr(
-    doc,
-    embed_doc_image::embed_doc_image("point", "docs/images/point.jpg")
-)]
+#[doc = doc_image!("point", "docs/images/point.jpg")]
 #[derive(Clone, Copy, PartialEq, PartialOrd)]
 pub struct Ecef {
     x: f64,

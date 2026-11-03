@@ -9,7 +9,7 @@ use crate::{Coordinate, Error, GeometryError};
 /// 3次元空間におけるパイプを表す型。
 ///
 /// ![パイプ][tube]
-#[cfg_attr(doc, embed_doc_image::embed_doc_image("tube", "docs/images/tube.jpg"))]
+#[doc = doc_image!("tube", "docs/images/tube.jpg")]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tube {
     points: Vec<Coordinate>,

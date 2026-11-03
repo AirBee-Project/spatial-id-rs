@@ -12,10 +12,7 @@ use crate::{Coordinate, Epsilon, Error, GeometryError, Polygon, Solid, Vec3, Vec
 /// 中心線及び半径によって定義される立体的な領域を表現する。
 ///
 /// ![円柱][cylinder]
-#[cfg_attr(
-    doc,
-    embed_doc_image::embed_doc_image("cylinder", "docs/images/cylinder.jpg")
-)]
+#[doc = doc_image!("cylinder", "docs/images/cylinder.jpg")]
 pub struct Cylinder {
     start: Coordinate,
     end: Coordinate,

@@ -91,10 +91,7 @@ impl Point for Ecef {
 /// 点（左）を、それを含む空間ID（右）へ変換する。図はズームレベル 20 の例。
 ///
 /// ![点と、それを含む空間ID][point_cover]
-#[cfg_attr(
-    doc,
-    embed_doc_image::embed_doc_image("point_cover", "docs/images/point_cover.jpg")
-)]
+#[doc = doc_image!("point_cover", "docs/images/point_cover.jpg")]
 impl CoverSingleIds for Ecef {
     type Value<'a> = ();
 

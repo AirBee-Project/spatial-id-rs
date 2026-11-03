@@ -16,10 +16,7 @@ mod tests;
 /// 生成時に頂点の重複排除などが行われ、幾何計算に適した状態に保たれる。
 ///
 /// ![多角形][polygon]
-#[cfg_attr(
-    doc,
-    embed_doc_image::embed_doc_image("polygon", "docs/images/polygon.jpg")
-)]
+#[doc = doc_image!("polygon", "docs/images/polygon.jpg")]
 pub struct Polygon {
     vertices: Vec<Coordinate>,
 }
