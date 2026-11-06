@@ -260,6 +260,11 @@ impl SpatialId for SingleId {
         (t * unit, (t + 1) * unit)
     }
 
+    fn move_t(&mut self, by: i64) -> Result<(), Error> {
+        let t = self.i().shifted_index(self.t(), by)?;
+        self.set_t(t)
+    }
+
     fn time_clear(&mut self) {
         *self = self.time_with_unchecked(crate::Interval::WHOLE, 0);
     }

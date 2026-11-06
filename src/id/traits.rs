@@ -49,8 +49,43 @@ pub trait SpatialId:
         Ok(())
     }
 
+    /// 時間方向（T）に指定インデックスだけ移動する。
+    ///
+    /// 単位は `{i}`（[`FlexId`] はズームが決める Segment 幅）。時間は循環しないので、
+    /// 範囲外へ出る場合は [`SpatialIdError::TOutOfRange`](crate::SpatialIdError::TOutOfRange) を返し、元の状態を保つ。
+    ///
+    /// ```
+    /// # #[cfg(feature = "temporal_id")]
+    /// # {
+    /// # use spatial_id::{SingleId, SpatialId};
+    /// let mut id = SingleId::new(5, 3, 2, 10).unwrap();
+    /// id.set_time(3600, 5).unwrap();
+    /// id.move_t(-2).unwrap();
+    /// assert_eq!(id.t(), 3);
+    /// assert!(id.move_t(-4).is_err());
+    /// assert_eq!(id.t(), 3);
+    /// # }
+    /// ```
+    fn move_t(&mut self, by: i64) -> Result<(), Error>;
+
     /// F 方向の長さをメートル単位で返す。
     fn length_f_meters(&self) -> f64;
+
+    /// 時間方向の長さを秒単位で返す。時間を指定していないときは全時間の長さになる。
+    ///
+    /// ```
+    /// # #[cfg(feature = "temporal_id")]
+    /// # {
+    /// # use spatial_id::{RangeId, SpatialId};
+    /// let mut id = RangeId::new(5, 3, 2, 10).unwrap();
+    /// id.set_time(1800, [0, 3]).unwrap();
+    /// assert_eq!(id.length_t_seconds(), 7200);
+    /// # }
+    /// ```
+    fn length_t_seconds(&self) -> u64 {
+        let (start, end) = self.time_range();
+        end - start
+    }
 
     /// X 方向の長さをメートル単位で返す。
     fn length_x_meters(&self) -> f64;

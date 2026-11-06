@@ -22,7 +22,7 @@
 
 時空間を扱うメソッド（`contains`, `intersects`, `single_ids`）には付けない。
 
-軸を名前に含むメソッド（`move_f`, `set_f`, `set_t`, `set_time`, `length_x_meters`, `t_index` など）は、扱う軸が名前から分かるので付けない。
+軸を名前に含むメソッド（`move_f`, `set_f`, `set_t`, `set_time`, `move_t`, `length_t_seconds`, `length_x_meters`, `t_index` など）は、扱う軸が名前から分かるので付けない。
 
 | 区分 | 例 |
 | :--- | :--- |

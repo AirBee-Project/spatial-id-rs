@@ -165,6 +165,14 @@ impl SpatialId for FlexId {
         (time_span.start(), time_span.end())
     }
 
+    fn move_t(&mut self, by: i64) -> Result<(), Error> {
+        let zoom = self.t_zoomlevel();
+        let unit = crate::id::zoom_level::TZoomLevel::new(zoom)?.segment_seconds();
+        let index = crate::Interval::new(unit)?.shifted_index(self.t_index(), by)?;
+        *self = self.time_with_segment(zoom, index)?;
+        Ok(())
+    }
+
     fn time_clear(&mut self) {
         *self = unsafe { self.time_with_segment_unchecked(0, 0) };
     }
