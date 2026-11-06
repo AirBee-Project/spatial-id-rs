@@ -48,7 +48,7 @@ rand = { version = "0.10.2", optional = true }
 rayon = { version = "1.10", optional = true }
 # geojson と quick-xml は std に依存するため、std feature のときだけ使う。
 geojson = { version = "1.0.0", default-features = false, optional = true }
-quick-xml = { version = "0.40.1", optional = true }
+quick-xml = { version = "0.42", optional = true }
 
 [features]
 default = ["std", "rayon", "temporal_id"]

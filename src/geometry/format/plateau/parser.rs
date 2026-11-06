@@ -62,7 +62,7 @@ impl<R: BufRead, A: Attribute> Parser<R, A> {
 
     fn start(&mut self, e: &BytesStart) {
         let local_name = e.local_name();
-        let name = local_name.as_ref();
+        let name = local_name.as_ref().as_bytes();
         if A::FEATURES.contains(&name) {
             self.in_feature = true;
             self.part_depth = 0;
@@ -72,7 +72,7 @@ impl<R: BufRead, A: Attribute> Parser<R, A> {
             if let Some(id) = e
                 .attributes()
                 .flatten()
-                .find(|a| a.key.local_name().as_ref() == b"id")
+                .find(|a| a.key.local_name().as_ref() == "id")
                 .and_then(|a| a.normalized_value(XmlVersion::Explicit1_0).ok())
             {
                 self.attribute.set_gml_id(id.into_owned());
@@ -174,12 +174,9 @@ impl<R: BufRead, A: Attribute> Iterator for Parser<R, A> {
             buf.clear();
             match self.reader.read_event_into(&mut buf) {
                 Ok(Event::Start(e)) => self.start(&e),
-                Ok(Event::Text(e)) => match e.decode() {
-                    Ok(text) => self.text(&text),
-                    Err(err) => break Some(Err(Self::invalid_xml(err))),
-                },
+                Ok(Event::Text(e)) => self.text(&e),
                 Ok(Event::End(e)) => {
-                    if let Some(item) = self.end(e.local_name().as_ref()) {
+                    if let Some(item) = self.end(e.local_name().as_ref().as_bytes()) {
                         break Some(Ok(item));
                     }
                 }
