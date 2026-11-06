@@ -383,3 +383,22 @@ fn into_set_yields_validation_error() {
     let query = SpatialIdMap::<u32>::new().query().shift_x(100, 3);
     assert!(query.get(..).into_set().is_err());
 }
+
+#[test]
+fn query_into_map_and_into_set_match_get_whole() {
+    let mut table = SpatialIdMap::<u32>::new();
+    table.insert(FlexId::new(16, 0, 16, 6, 16, 0).unwrap(), 42);
+
+    let query = || table.clone().query().shift_x(16, 1);
+    let expected_map = query().get(..).into_map().unwrap();
+    let expected_set = query().get(..).into_set().unwrap();
+    assert_eq!(query().into_map().unwrap(), expected_map);
+    assert_eq!(query().into_set().unwrap(), expected_set);
+}
+
+#[test]
+fn query_into_map_and_into_set_yield_validation_error() {
+    let query = || SpatialIdMap::<u32>::new().query().shift_x(100, 3);
+    assert!(query().into_map().is_err());
+    assert!(query().into_set().is_err());
+}
