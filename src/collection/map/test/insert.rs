@@ -25,7 +25,7 @@ mod tests {
                 .filter(|(_, val)| **val == 20)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),
-            target.into_iter().collect::<Vec<_>>()
+            target.flex_ids().collect::<Vec<_>>()
         );
     }
 
@@ -46,7 +46,10 @@ mod tests {
                 .filter(|(_, val)| **val == 10)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),
-            first.into_iter().chain(second).collect::<Vec<_>>()
+            first
+                .flex_ids()
+                .chain(second.flex_ids())
+                .collect::<Vec<_>>()
         );
     }
 

@@ -31,7 +31,7 @@ mod tests {
                 .filter(|(_, v)| **v == 20)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),
-            second.into_iter().collect::<Vec<_>>()
+            second.flex_ids().collect::<Vec<_>>()
         );
         assert_eq!(table.count(), table.iter().count());
     }

@@ -46,8 +46,9 @@ impl From<&FlexId> for RangeId {
 // `From<SingleId> for FlexId` は実装しない。[`SingleId`]は仕様通り任意の秒数の時間間隔を
 // 持てる一方、[`FlexId`]はFlexTreeのノードアドレスとして2の冪秒のSegment1個しか持てないため、
 // 両者は1対1に対応しないからである（例: 30分間隔は最大10個の[`FlexId`]へ分解される）。
-// 変換には[`IntoIterator`]を使う（`SingleId::into_iter`が必要な数のSegmentへ分解する）。
+// 変換には`flex_ids`を使う（`SingleId::flex_ids`が必要な数のSegmentへ分解する）。
 
+/// 木の内部 API が [`FlexId`] の列を受け取れるよう、自身だけを返す。
 impl IntoIterator for FlexId {
     type Item = FlexId;
     type IntoIter = core::iter::Once<FlexId>;
@@ -57,6 +58,11 @@ impl IntoIterator for FlexId {
 }
 
 impl FlexId {
+    /// 自身だけを返す。[`SpatialId::flex_ids`](crate::SpatialId::flex_ids) の [`FlexId`] 版。
+    pub fn flex_ids(self) -> core::iter::Once<FlexId> {
+        core::iter::once(self)
+    }
+
     pub fn single_ids(self) -> impl Iterator<Item = SingleId> {
         RangeId::from(self).single_ids()
     }

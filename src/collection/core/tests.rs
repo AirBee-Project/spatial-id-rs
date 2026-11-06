@@ -658,7 +658,7 @@ fn get_overlapping_returns_whole_leaves_once() {
                 .iter()
                 .filter(|(leaf, _)| leaf.intersects_range(&range))
                 .collect();
-            let got: Vec<_> = tree.get_overlapping(range).collect();
+            let got: Vec<_> = tree.get_overlapping([range]).collect();
             assert_eq!(got, expected);
         }
     }
@@ -712,7 +712,7 @@ fn spatial_face_neighbors_returns_face_neighbors_only() {
     let center = at(3, 5, 6);
 
     let mut tree = FlexTreeCore::<u64>::default();
-    tree.insert(center, 0);
+    tree.insert(center.flex_ids(), 0);
     for (value, cell) in [
         (1, at(2, 5, 6)),
         (2, at(4, 5, 6)),
@@ -722,7 +722,7 @@ fn spatial_face_neighbors_returns_face_neighbors_only() {
         (6, at(3, 5, 7)),
         (7, at(3, 6, 7)),
     ] {
-        tree.insert(cell, value);
+        tree.insert(cell.flex_ids(), value);
     }
 
     let mut values: Vec<u64> = tree

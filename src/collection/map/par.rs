@@ -3,7 +3,7 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use crate::{FlexId, SpatialId, SpatialIdMap};
 
 fn expand<I: SpatialId, V: Clone>((id, value): (I, V)) -> impl Iterator<Item = (FlexId, V)> {
-    id.into_iter().map(move |flex_id| (flex_id, value.clone()))
+    id.flex_ids().map(move |flex_id| (flex_id, value.clone()))
 }
 
 /// `(SpatialId, V)` 列から [`SpatialIdMap`] を並列に構築する（`feature = "rayon"`）。

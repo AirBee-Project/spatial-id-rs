@@ -185,7 +185,7 @@ mod tests {
             .time_with(1800, 809712)
             .unwrap();
 
-        let time_segments: Vec<_> = original.into_iter().map(|id| (id, 1u8)).collect();
+        let time_segments: Vec<_> = original.flex_ids().map(|id| (id, 1u8)).collect();
         assert!(
             time_segments.len() > 1,
             "1800秒は複数の2分岐Segmentへ分解されるはず"
@@ -204,8 +204,8 @@ mod tests {
         let b = base.time_with(Interval::HOUR, 1).unwrap();
 
         let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
-        time_segments.extend(a.into_iter().map(|id| (id, 1u8)));
-        time_segments.extend(b.into_iter().map(|id| (id, 2u8)));
+        time_segments.extend(a.flex_ids().map(|id| (id, 1u8)));
+        time_segments.extend(b.flex_ids().map(|id| (id, 2u8)));
 
         let merged = reconstruct_temporal_vec(time_segments, None);
         assert_eq!(merged.len(), 2);
@@ -221,8 +221,8 @@ mod tests {
         let b = base.time_with(Interval::HOUR, 1).unwrap();
 
         let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
-        time_segments.extend(a.into_iter().map(|id| (id, 7u8)));
-        time_segments.extend(b.into_iter().map(|id| (id, 7u8)));
+        time_segments.extend(a.flex_ids().map(|id| (id, 7u8)));
+        time_segments.extend(b.flex_ids().map(|id| (id, 7u8)));
 
         let merged = reconstruct_temporal_vec(time_segments, None);
         assert_eq!(merged.len(), 1);
@@ -239,8 +239,8 @@ mod tests {
         let b = base.time_with(Interval::HOUR, 1).unwrap();
 
         let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
-        time_segments.extend(a.into_iter().map(|id| (id, 7u8)));
-        time_segments.extend(b.into_iter().map(|id| (id, 7u8)));
+        time_segments.extend(a.flex_ids().map(|id| (id, 7u8)));
+        time_segments.extend(b.flex_ids().map(|id| (id, 7u8)));
 
         let merged = reconstruct_temporal_vec(time_segments, Some(AllowedIntervals::calendar()));
         assert_eq!(merged.len(), 1);
@@ -256,7 +256,7 @@ mod tests {
                 .unwrap()
                 .time_with(Interval::HOUR, 0)
                 .unwrap()
-                .into_iter()
+                .flex_ids()
                 .map(|id| (id, 7u8)),
         );
         let merged =
@@ -279,8 +279,8 @@ mod tests {
             .unwrap();
 
         let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
-        time_segments.extend(a.into_iter().map(|id| (id, 7u8)));
-        time_segments.extend(b.into_iter().map(|id| (id, 7u8)));
+        time_segments.extend(a.flex_ids().map(|id| (id, 7u8)));
+        time_segments.extend(b.flex_ids().map(|id| (id, 7u8)));
 
         assert_eq!(reconstruct_temporal_vec(time_segments, None).len(), 2);
     }

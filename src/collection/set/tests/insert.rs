@@ -205,7 +205,7 @@ mod tests {
 
         let answer: Vec<FlexId> = RangeId::new(4, [3, 3], [2, 2], [0, 1])
             .unwrap()
-            .into_iter()
+            .flex_ids()
             .collect();
 
         //含まれるIDは生成したFlexIdと一致するはず

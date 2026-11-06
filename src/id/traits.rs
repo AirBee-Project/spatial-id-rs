@@ -15,16 +15,7 @@ mod private {
 
 /// [SingleId]、[RangeId]、[FlexId] に共通するTrait。
 pub trait SpatialId:
-    private::Sealed
-    + IntoIterator<Item = FlexId>
-    + Into<RangeId>
-    + Debug
-    + Display
-    + Clone
-    + Copy
-    + Eq
-    + Hash
-    + FromStr
+    private::Sealed + Into<RangeId> + Debug + Display + Clone + Copy + Eq + Hash + FromStr
 {
     /// F 方向に指定インデックスだけ移動する。
     fn move_f(&mut self, by: i32) -> Result<(), Error>;
@@ -126,6 +117,11 @@ pub trait SpatialId:
     fn as_flex_id(&self) -> Option<FlexId> {
         None
     }
+
+    /// この空間 ID を、FlexTree のノードアドレスである [`FlexId`] に分解して返す。
+    ///
+    /// 全要素を合わせて元の空間 ID の領域をちょうど覆う。
+    fn flex_ids(self) -> impl Iterator<Item = FlexId>;
 
     /// この空間 ID を構成する [`SingleId`] のイテレータを返す。
     fn single_ids(self) -> impl Iterator<Item = SingleId>;
