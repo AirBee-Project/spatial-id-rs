@@ -1,4 +1,5 @@
 use crate::SpatialId;
+use crate::time::span::TimeSpan;
 use crate::{FlexId, RangeId, SingleId};
 
 impl From<FlexId> for RangeId {
@@ -28,15 +29,17 @@ impl From<&FlexId> for RangeId {
 
         let (start, end) = flex_id.seconds_range();
 
-        RangeId::new(
+        let spatial = RangeId::new(
             max_z,
             [f_range[0] as i32, f_range[1] as i32],
             [x_range[0] as u32, x_range[1] as u32],
             [y_range[0] as u32, y_range[1] as u32],
         )
-        .unwrap()
-        .time_with_span(start, end)
-        .expect("Segmentの秒区間は常に有効")
+        .unwrap();
+        TimeSpan::new(start, end)
+            .expect("Segmentの秒区間は空でない")
+            .apply_to(spatial)
+            .expect("Segmentの秒区間は常に有効")
     }
 }
 

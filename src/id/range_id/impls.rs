@@ -213,10 +213,6 @@ impl SpatialId for RangeId {
         self.time_cleared()
     }
 
-    fn time_with_span(self, start: u64, end: u64) -> Result<Self, Error> {
-        self.time_with_span(start, end)
-    }
-
     fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<Self, Error> {
         self.spatial_parent_at_zoom(target_z)
     }

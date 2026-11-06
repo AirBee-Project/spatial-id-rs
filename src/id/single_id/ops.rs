@@ -98,8 +98,8 @@ impl SingleId {
         // 空間的に `other` と一致（または内包される）ところまで来たので、残るは時間の差分だけ。
         for time_span in TimeSpan::of(&current).difference(&TimeSpan::of(other)) {
             results.push(
-                RangeId::from(&current)
-                    .time_with_span(time_span.start(), time_span.end())
+                time_span
+                    .apply_to(RangeId::from(&current))
                     .expect("差分は元の区間の部分なので常に有効"),
             );
         }
@@ -153,8 +153,8 @@ impl SingleId {
         let time_span = TimeSpan::of(self).intersect(&TimeSpan::of(other))?;
 
         Some(
-            RangeId::from(deep)
-                .time_with_span(time_span.start(), time_span.end())
+            time_span
+                .apply_to(RangeId::from(deep))
                 .expect("交差は両者の部分なので常に有効"),
         )
     }

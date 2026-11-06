@@ -80,9 +80,6 @@ pub trait SpatialId:
     /// 時間の指定を外し、全時間へ戻した自身を返す。
     fn time_cleared(self) -> Self;
 
-    /// 絶対秒区間 `[start, end)` を設定した自身を返す。
-    fn time_with_span(self, start: u64, end: u64) -> Result<Self, Error>;
-
     /// 指定された Unix 時刻（秒）を時間区間に含むかを判定する。
     fn time_contains(&self, unix_seconds: u64) -> bool {
         let (start, end) = self.seconds_range();

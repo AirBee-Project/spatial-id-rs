@@ -38,8 +38,7 @@ assert_eq!(id.seconds_range(), (1_457_481_600, 1_457_483_400));
 | :--- | :--- |
 | `SingleId::new(z, f, x, y)` | 時間を指定しない（全時間） |
 | `id.time_with(i, t)` | 既存の ID に時間を付ける（ビルダー。`FlexId` は `time_with_segment(tz, t)`） |
-| `id.time_with_at(i, unix秒)` | 仕様 1.5.3 (3) の `t = floor(u / i)` を内部で計算（`FlexId` は `time_with_segment_at(tz, unix秒)`） |
-| `range.with_time_seconds(start, end)` | 秒区間から。単位は自動で最も粗いものが選ばれる |
+| `id.time_with_at(i, unix秒)` | 仕様 1.5.3 (3) の `t = floor(u / i)` を内部で計算（`SingleId` のみ） |
 | `id.time_relabel(i)` | 秒区間は変えずに単位だけ変える |
 
 `FlexId` は4軸すべてを「ズーム＋インデックス」で持つので、
@@ -137,7 +136,7 @@ JSON  : { "z":12, "f":[0], "x":[3638], "y":[1614], "i":1800, "t":[809712] }
 
 ### 有効時
 
-- `time_with()` / `time_with_at()` / `with_time_seconds()` で任意の時間区間を扱える。
+- `time_with()` / `time_with_at()` で任意の時間区間を扱える。
 - `intersection` / `difference` が時間も考慮する。
 - `FlexTreeCore` は時間も `Dimension::T` として割る。
 
