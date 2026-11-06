@@ -107,6 +107,44 @@ pub trait SpatialId:
     /// 指定したズームレベルでの空間的な親ID（包含する最小の空間ID）を返す。
     fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<Self, Error>;
 
+    /// 自身が [`SingleId`] なら `Some(自身)`、そうでなければ `None` を返す。
+    ///
+    /// ```
+    /// # use spatial_id::{FlexId, RangeId, SingleId, SpatialId};
+    /// assert!(SingleId::new(4, 0, 1, 1).unwrap().as_single_id().is_some());
+    /// assert!(RangeId::new(4, 0, 1, 1).unwrap().as_single_id().is_none());
+    /// assert!(FlexId::new(4, 0, 4, 1, 4, 1).unwrap().as_single_id().is_none());
+    /// ```
+    fn as_single_id(&self) -> Option<SingleId> {
+        None
+    }
+
+    /// 自身が [`RangeId`] なら `Some(自身)`、そうでなければ `None` を返す。
+    ///
+    /// [`SingleId`] や [`FlexId`] を [`RangeId`] として扱いたい場合は [`Into`] を使う。
+    ///
+    /// ```
+    /// # use spatial_id::{FlexId, RangeId, SingleId, SpatialId};
+    /// assert!(RangeId::new(4, 0, 1, 1).unwrap().as_range_id().is_some());
+    /// assert!(SingleId::new(4, 0, 1, 1).unwrap().as_range_id().is_none());
+    /// assert!(FlexId::new(4, 0, 4, 1, 4, 1).unwrap().as_range_id().is_none());
+    /// ```
+    fn as_range_id(&self) -> Option<RangeId> {
+        None
+    }
+
+    /// 自身が [`FlexId`] なら `Some(自身)`、そうでなければ `None` を返す。
+    ///
+    /// ```
+    /// # use spatial_id::{FlexId, RangeId, SingleId, SpatialId};
+    /// assert!(FlexId::new(4, 0, 4, 1, 4, 1).unwrap().as_flex_id().is_some());
+    /// assert!(SingleId::new(4, 0, 1, 1).unwrap().as_flex_id().is_none());
+    /// assert!(RangeId::new(4, 0, 1, 1).unwrap().as_flex_id().is_none());
+    /// ```
+    fn as_flex_id(&self) -> Option<FlexId> {
+        None
+    }
+
     /// この空間 ID を構成する [`SingleId`] のイテレータを返す。
     fn single_ids(self) -> impl Iterator<Item = SingleId>;
 }

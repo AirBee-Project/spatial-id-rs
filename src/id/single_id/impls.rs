@@ -254,6 +254,10 @@ impl SpatialId for SingleId {
         self.i
     }
 
+    fn as_single_id(&self) -> Option<SingleId> {
+        Some(*self)
+    }
+
     fn seconds_range(&self) -> (u64, u64) {
         let unit = self.i.seconds();
         let t = self.t();
