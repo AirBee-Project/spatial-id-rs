@@ -1,4 +1,4 @@
-# spatial-id
+# spatial-id-rs
 
 時空間IDを扱う Rust ライブラリです。
 仕様は [4次元時空間情報基盤 ガイドライン（IPA）](https://www.ipa.go.jp/digital/architecture/guidelines/4dspatio-temporal-guideline.html)に準拠しています。
