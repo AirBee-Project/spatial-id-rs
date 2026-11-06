@@ -26,7 +26,7 @@ impl FlexId {
         // SAFETY: 祖先に含まれるので、深さは自身のズーム以下、下位ビットは `0..2^深さ` に収まる
         let relative = unsafe {
             FlexId::new_unchecked(fz, f as i32, xz, x as u32, yz, y as u32)
-                .with_time_segment_unchecked(tz, t as u64)
+                .time_with_segment_unchecked(tz, t as u64)
         };
         Ok(RelativeFlexId(relative))
     }
@@ -62,7 +62,7 @@ impl RelativeFlexId {
         // SAFETY: ズームは上限以下。インデックスは祖先の区間を `2^深さ` 等分したうちの1つなので、そのズームの範囲に収まる
         let absolute = unsafe {
             FlexId::new_unchecked(fz, f as i32, xz, x as u32, yz, y as u32)
-                .with_time_segment_unchecked(tz, t as u64)
+                .time_with_segment_unchecked(tz, t as u64)
         };
         Ok(absolute)
     }
@@ -122,7 +122,7 @@ impl ShortPath {
                 ancestor.y_zoomlevel() + zy,
                 y,
             )
-            .with_time_segment_unchecked(ancestor.t_zoomlevel(), ancestor.t_index())
+            .time_with_segment_unchecked(ancestor.t_zoomlevel(), ancestor.t_index())
         }
     }
 }

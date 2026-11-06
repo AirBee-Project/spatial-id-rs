@@ -134,15 +134,15 @@ fn finish<V>(
     allowed_intervals: Option<&AllowedIntervals>,
 ) -> (RangeId, V) {
     let range = RangeId::from(key)
-        .with_time_span(start, end)
+        .time_with_span(start, end)
         .expect("結合した秒区間は元のSegmentの和なので常に有効");
 
     // 候補集合が指定されていれば、その中で最も粗い（＝Segment数が最小の）単位へ表し直す。
-    // `AllowedIntervals` は必ず全区間を表せる候補を含むので、この `relabel_time` は失敗しない。
+    // `AllowedIntervals` は必ず全区間を表せる候補を含むので、この `time_relabel` は失敗しない。
     let range = match allowed_intervals {
         None => range,
         Some(allowed_intervals) => range
-            .relabel_time(allowed_intervals.coarsest_dividing(start, end))
+            .time_relabel(allowed_intervals.coarsest_dividing(start, end))
             .expect("AllowedIntervals が選んだ単位は必ずこの区間を割り切る"),
     };
 
@@ -172,7 +172,7 @@ mod tests {
     /// 時間成分を全時間へ落とした [`FlexId`]。元のテストの `sorted_reference` 用。
     #[allow(dead_code)]
     pub(crate) fn spatial_key(flex_id: &FlexId) -> FlexId {
-        (*flex_id).without_time()
+        (*flex_id).time_cleared()
     }
 
     /// 仕様書 1.5.3 の例（`1800/809712`）が、分解 → 結合を経て元の表記へ戻る。
@@ -180,7 +180,7 @@ mod tests {
     fn round_trips_the_spec_example() {
         let original = SingleId::new(12, 0, 3638, 1614)
             .unwrap()
-            .with_time(1800, 809712)
+            .time_with(1800, 809712)
             .unwrap();
 
         let time_segments: Vec<_> = original.into_iter().map(|id| (id, 1u8)).collect();
@@ -198,8 +198,8 @@ mod tests {
     #[test]
     fn does_not_merge_across_different_values() {
         let base = SingleId::new(12, 0, 3638, 1614).unwrap();
-        let a = base.with_time(Interval::HOUR, 0).unwrap();
-        let b = base.with_time(Interval::HOUR, 1).unwrap();
+        let a = base.time_with(Interval::HOUR, 0).unwrap();
+        let b = base.time_with(Interval::HOUR, 1).unwrap();
 
         let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
         time_segments.extend(a.into_iter().map(|id| (id, 1u8)));
@@ -215,8 +215,8 @@ mod tests {
     #[test]
     fn merges_adjacent_segments_with_the_same_value() {
         let base = SingleId::new(12, 0, 3638, 1614).unwrap();
-        let a = base.with_time(Interval::HOUR, 0).unwrap();
-        let b = base.with_time(Interval::HOUR, 1).unwrap();
+        let a = base.time_with(Interval::HOUR, 0).unwrap();
+        let b = base.time_with(Interval::HOUR, 1).unwrap();
 
         let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
         time_segments.extend(a.into_iter().map(|id| (id, 7u8)));
@@ -236,8 +236,8 @@ mod tests {
     #[test]
     fn candidate_set_picks_the_coarsest_unit() {
         let base = SingleId::new(12, 0, 3638, 1614).unwrap();
-        let a = base.with_time(Interval::HOUR, 0).unwrap();
-        let b = base.with_time(Interval::HOUR, 1).unwrap();
+        let a = base.time_with(Interval::HOUR, 0).unwrap();
+        let b = base.time_with(Interval::HOUR, 1).unwrap();
 
         let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
         time_segments.extend(a.into_iter().map(|id| (id, 7u8)));
@@ -258,7 +258,7 @@ mod tests {
         time_segments.extend(
             SingleId::new(12, 0, 3638, 1614)
                 .unwrap()
-                .with_time(Interval::HOUR, 0)
+                .time_with(Interval::HOUR, 0)
                 .unwrap()
                 .into_iter()
                 .map(|id| (id, 7u8)),
@@ -278,11 +278,11 @@ mod tests {
     fn does_not_merge_across_different_segments() {
         let a = SingleId::new(12, 0, 3638, 1614)
             .unwrap()
-            .with_time(Interval::HOUR, 0)
+            .time_with(Interval::HOUR, 0)
             .unwrap();
         let b = SingleId::new(12, 0, 3639, 1614)
             .unwrap()
-            .with_time(Interval::HOUR, 1)
+            .time_with(Interval::HOUR, 1)
             .unwrap();
 
         let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
@@ -301,6 +301,6 @@ mod tests {
 
         let merged = reconstruct_temporal_vec(time_segments, None);
         assert_eq!(merged.len(), 4);
-        assert!(merged.iter().all(|(id, _)| id.is_whole_time()));
+        assert!(merged.iter().all(|(id, _)| id.time_is_whole()));
     }
 }

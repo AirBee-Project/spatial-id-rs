@@ -128,7 +128,7 @@ fn get_filters_by_time() {
     let time_segment = |t: u64| {
         SingleId::new(10, 0, 5, 5)
             .unwrap()
-            .with_time(Interval::HOUR, t)
+            .time_with(Interval::HOUR, t)
             .unwrap()
     };
 

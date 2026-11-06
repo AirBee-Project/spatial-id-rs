@@ -87,7 +87,7 @@ impl FlexId {
     }
 
     /// F/X/Y のズームレベルのうち、最も高いもの。
-    pub(crate) fn max_spatial_zoomlevel(&self) -> ZoomLevel {
+    pub(crate) fn spatial_max_zoomlevel(&self) -> ZoomLevel {
         self.f_zoomlevel.max(self.x_zoomlevel).max(self.y_zoomlevel)
     }
 
@@ -164,21 +164,21 @@ impl FlexId {
     /// （[`TZoomLevel`] をそのまま渡すこともできる）。1Segmentは `2^(35 - t_zoomlevel)` 秒で、
     /// [`t_zoomlevel`](Self::t_zoomlevel) / [`t_index`](Self::t_index) で読むのと同じ形である。
     ///
-    /// # [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) の [`with_time`](crate::SingleId::with_time) との違い
+    /// # [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) の [`time_with`](crate::SingleId::time_with) との違い
     ///
     /// あちらは仕様の `{i}/{t}`、つまり**秒数**＋インデックスを取る。[`FlexId`] は木の
     /// ノードアドレスであり2分岐Segment1個しか持てないため、**ズーム**で受ける。
     ///
     /// ```text
     /// # use spatial_id::SpatialId;
-    /// single.with_time(1800, 809712)  // 1800 「秒」単位の 809712 番目
-    /// flex  .with_time_segment(25, 7) // 「ズーム」25（=1024秒幅）の 7 番目
+    /// single.time_with(1800, 809712)  // 1800 「秒」単位の 809712 番目
+    /// flex  .time_with_segment(25, 7) // 「ズーム」25（=1024秒幅）の 7 番目
     /// ```
     ///
     /// 秒数のつもりで渡した値は、`1800` や `3600` なら `u8` に収まらずコンパイルエラー、
     /// `60` や `86400` ならズーム範囲外（最大35）で [`SpatialIdError::ZOutOfRange`] になる。
     /// ただし `0..=35` の値は**どちらとも解釈できてしまう**ので、秒で考えたいときは
-    /// [`with_time_span`](Self::with_time_span) / [`with_time_segment_at`](Self::with_time_segment_at)
+    /// [`time_with_span`](Self::time_with_span) / [`time_with_segment_at`](Self::time_with_segment_at)
     /// を使うこと。
     ///
     /// 任意秒数の間隔（`1800` など）を [`FlexId`] の集合として扱いたい場合は
@@ -196,22 +196,22 @@ impl FlexId {
     /// # {
     /// # use spatial_id::{FlexId, time::TZoomLevel};
     /// // ズーム25のSegmentは 2^(35-25) = 1024 秒幅。
-    /// let id = FlexId::new(5, 3, 2, 3, 10, 1).unwrap().with_time_segment(25, 7).unwrap();
+    /// let id = FlexId::new(5, 3, 2, 3, 10, 1).unwrap().time_with_segment(25, 7).unwrap();
     /// assert_eq!((id.t_zoomlevel(), id.t_index()), (25, 7));
     /// assert_eq!(id.time_interval().seconds(), 1024);
     ///
     /// // `TZoomLevel` をそのまま渡してもよい。
     /// let same = FlexId::new(5, 3, 2, 3, 10, 1)
     ///     .unwrap()
-    ///     .with_time_segment(TZoomLevel::new(25).unwrap(), 7)
+    ///     .time_with_segment(TZoomLevel::new(25).unwrap(), 7)
     ///     .unwrap();
     /// assert_eq!(same, id);
     ///
     /// // 秒数のつもりの値はズーム範囲外で弾かれる。
-    /// assert!(FlexId::new(5, 3, 2, 3, 10, 1).unwrap().with_time_segment(60, 0).is_err());
+    /// assert!(FlexId::new(5, 3, 2, 3, 10, 1).unwrap().time_with_segment(60, 0).is_err());
     /// # }
     /// ```
-    pub fn with_time_segment(
+    pub fn time_with_segment(
         self,
         t_zoomlevel: impl Into<u8>,
         t_index: u64,
@@ -229,12 +229,12 @@ impl FlexId {
             .into());
         }
 
-        Ok(unsafe { self.with_time_segment_unchecked(tz.get(), t_index) })
+        Ok(unsafe { self.time_with_segment_unchecked(tz.get(), t_index) })
     }
 
     /// Unix 時刻（秒）が属する時間Segmentを設定した自身を返す。
     ///
-    /// 粒度は [`with_time_segment`](Self::with_time_segment) と同じく**ズームレベル**で指定する
+    /// 粒度は [`time_with_segment`](Self::time_with_segment) と同じく**ズームレベル**で指定する
     /// （1Segmentは `2^(35 - t_zoomlevel)` 秒）。仕様 1.5.3 (3) の `t = floor(u / i)` に相当する
     /// 割り算はこちらで行うので、呼び出し側でインデックスを求める必要がない。
     ///
@@ -246,18 +246,18 @@ impl FlexId {
     /// // 最深ズーム（35）は1秒幅。
     /// let id = FlexId::new(5, 3, 2, 3, 10, 1)
     ///     .unwrap()
-    ///     .with_time_segment_at(TZoomLevel::MAX, 1_770_000_000)
+    ///     .time_with_segment_at(TZoomLevel::MAX, 1_770_000_000)
     ///     .unwrap();
     /// assert_eq!(id.seconds_range(), (1_770_000_000, 1_770_000_001));
     /// # }
     /// ```
-    pub fn with_time_segment_at(
+    pub fn time_with_segment_at(
         self,
         t_zoomlevel: impl Into<u8>,
         unix_seconds: u64,
     ) -> Result<Self, Error> {
         let tz = TZoomLevel::new(t_zoomlevel.into())?;
-        self.with_time_segment(tz, unix_seconds / tz.segment_seconds())
+        self.time_with_segment(tz, unix_seconds / tz.segment_seconds())
     }
 
     /// 絶対秒区間 `[start, end)` を設定した自身を返す。
@@ -272,14 +272,14 @@ impl FlexId {
     /// # {
     /// # use spatial_id::FlexId;
     /// // [1024, 2048) はズーム25のSegment1個ちょうど。
-    /// let id = FlexId::new(5, 3, 2, 3, 10, 1).unwrap().with_time_span(1024, 2048).unwrap();
+    /// let id = FlexId::new(5, 3, 2, 3, 10, 1).unwrap().time_with_span(1024, 2048).unwrap();
     /// assert_eq!((id.t_zoomlevel(), id.t_index()), (25, 1));
     ///
     /// // 整列していない区間は1Segmentにならない。
-    /// assert!(FlexId::new(5, 3, 2, 3, 10, 1).unwrap().with_time_span(1, 1025).is_err());
+    /// assert!(FlexId::new(5, 3, 2, 3, 10, 1).unwrap().time_with_span(1, 1025).is_err());
     /// # }
     /// ```
-    pub fn with_time_span(self, start: u64, end: u64) -> Result<Self, Error> {
+    pub fn time_with_span(self, start: u64, end: u64) -> Result<Self, Error> {
         let time_span =
             span::TimeSpan::new(start, end).ok_or(SpatialIdError::TOutOfRange { i: 1, t: end })?;
         let (interval, t_min, t_max) = time_span.to_interval_range()?;
@@ -291,7 +291,7 @@ impl FlexId {
         }
         let time_segment = interval.as_segment(t_min)?;
         let (zoom, index) = (time_segment.zoom().get(), time_segment.index());
-        self.with_time_segment(zoom, index)
+        self.time_with_segment(zoom, index)
     }
 
     /// 時間の指定を外し、全時間へ戻した自身を返す。
@@ -303,13 +303,13 @@ impl FlexId {
     /// # use spatial_id::{FlexId, SpatialId, time::TZoomLevel};
     /// let id = FlexId::new(5, 3, 2, 3, 10, 1)
     ///     .unwrap()
-    ///     .with_time_segment(TZoomLevel::new(25).unwrap(), 7)
+    ///     .time_with_segment(TZoomLevel::new(25).unwrap(), 7)
     ///     .unwrap();
-    /// assert!(id.without_time().is_whole_time());
+    /// assert!(id.time_cleared().time_is_whole());
     /// # }
     /// ```
-    pub fn without_time(self) -> Self {
-        unsafe { self.with_time_segment_unchecked(0, 0) }
+    pub fn time_cleared(self) -> Self {
+        unsafe { self.time_with_segment_unchecked(0, 0) }
     }
 
     /// 検証を行わずに時間Segment（4軸目）を設定した自身を返す。
@@ -319,7 +319,7 @@ impl FlexId {
     /// - `zoom` は [`TZoomLevel::MAX`]（35）以下でなければならない。
     /// - `index` は `2^zoom - 1` 以下でなければならない。
     /// - `temporal_id` feature が無効な場合、`zoom == 0 && index == 0` でなければならない。
-    pub(crate) unsafe fn with_time_segment_unchecked(
+    pub(crate) unsafe fn time_with_segment_unchecked(
         #[cfg_attr(not(feature = "temporal_id"), allow(unused_mut))] mut self,
         zoom: u8,
         index: u64,
@@ -367,7 +367,7 @@ impl FlexId {
             y_zoomlevel,
             y_index,
         )
-        .map(|id| unsafe { id.with_time_segment_unchecked(self.t_zoomlevel(), self.t_index()) })
+        .map(|id| unsafe { id.time_with_segment_unchecked(self.t_zoomlevel(), self.t_index()) })
     }
 
     /// F方向で二つに切り分ける。[`ZoomLevel::MAX`] なら [`None`]。
@@ -682,11 +682,11 @@ impl FlexId {
     /// let a = FlexId::new(4, 5, 4, 5, 4, 5).unwrap();
     /// let east = FlexId::new(4, 5, 4, 6, 4, 5).unwrap(); // X+1（面で接する）
     /// let diag = FlexId::new(4, 5, 4, 6, 4, 6).unwrap(); // X+1,Y+1（辺で接する）
-    /// assert!(a.is_spatial_face_neighbor(&east));
-    /// assert!(!a.is_spatial_face_neighbor(&diag));
-    /// assert!(!a.is_spatial_face_neighbor(&a)); // 重なり（自身）は面共有ではない
+    /// assert!(a.spatial_is_face_neighbor(&east));
+    /// assert!(!a.spatial_is_face_neighbor(&diag));
+    /// assert!(!a.spatial_is_face_neighbor(&a)); // 重なり（自身）は面共有ではない
     /// ```
-    pub fn is_spatial_face_neighbor(&self, other: &FlexId) -> bool {
+    pub fn spatial_is_face_neighbor(&self, other: &FlexId) -> bool {
         #[derive(PartialEq)]
         enum Rel {
             Overlap,

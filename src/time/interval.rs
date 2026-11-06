@@ -293,21 +293,21 @@ mod tests {
 mod api_symmetry {
     use crate::{FlexId, Interval, RangeId, SingleId, SpatialId};
 
-    /// `with_time` は3型とも同じ名前・同じ [`Result`] で、`{i}/{t}` を受ける。
+    /// `time_with` は3型とも同じ名前・同じ [`Result`] で、`{i}/{t}` を受ける。
     #[test]
     fn with_time_is_available_on_every_type() {
         let single = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(1024, 7)
+            .time_with(1024, 7)
             .unwrap();
         let range = RangeId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(1024, 7)
+            .time_with(1024, 7)
             .unwrap();
         // FlexId だけは母語（ズーム）で指定する。ズーム25 = 2^(35-25) = 1024 秒幅。
         let flex = FlexId::new(4, 0, 4, 1, 4, 1)
             .unwrap()
-            .with_time_segment(25, 7)
+            .time_with_segment(25, 7)
             .unwrap();
 
         // 同じ `{i}/{t}` を指定したので、占める秒区間も一致する。
@@ -322,15 +322,15 @@ mod api_symmetry {
     fn interval_argument_accepts_every_spelling() {
         let by_const = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(Interval::HOUR, 3)
+            .time_with(Interval::HOUR, 3)
             .unwrap();
         let by_literal = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(3600, 3)
+            .time_with(3600, 3)
             .unwrap();
         let by_u64 = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(3600u64, 3)
+            .time_with(3600u64, 3)
             .unwrap();
 
         assert_eq!(by_const, by_literal);
@@ -338,21 +338,21 @@ mod api_symmetry {
     }
 
     /// Unix 時刻から時間を決める入口は3型ともある。[`FlexId`] だけはズームで粒度を指定するので
-    /// `with_time_segment_at` という別名になっている。
+    /// `time_with_segment_at` という別名になっている。
     #[test]
     fn with_time_at_is_available_on_every_type() {
         const UNIX: u64 = 1_770_000_000;
         let single = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time_at(1024, UNIX)
+            .time_with_at(1024, UNIX)
             .unwrap();
         let range = RangeId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time_at(1024, UNIX)
+            .time_with_at(1024, UNIX)
             .unwrap();
         let flex = FlexId::new(4, 0, 4, 1, 4, 1)
             .unwrap()
-            .with_time_segment_at(25, UNIX)
+            .time_with_segment_at(25, UNIX)
             .unwrap();
 
         assert_eq!(single.seconds_range(), range.seconds_range());
@@ -360,22 +360,22 @@ mod api_symmetry {
         assert!(single.seconds_range().0 <= UNIX && UNIX < single.seconds_range().1);
     }
 
-    /// `with_time_span` は3型とも同じ名前で、表せない区間は [`Err`]。
+    /// `time_with_span` は3型とも同じ名前で、表せない区間は [`Err`]。
     #[test]
     fn with_time_span_is_available_on_every_type() {
         // [1024, 2048) は3型とも表せる（2の冪・整列）。
         for got in [
             SingleId::new(4, 0, 1, 1)
                 .unwrap()
-                .with_time_span(1024, 2048)
+                .time_with_span(1024, 2048)
                 .map(|v| v.seconds_range()),
             RangeId::new(4, 0, 1, 1)
                 .unwrap()
-                .with_time_span(1024, 2048)
+                .time_with_span(1024, 2048)
                 .map(|v| v.seconds_range()),
             FlexId::new(4, 0, 4, 1, 4, 1)
                 .unwrap()
-                .with_time_span(1024, 2048)
+                .time_with_span(1024, 2048)
                 .map(|v| v.seconds_range()),
         ] {
             assert_eq!(got.unwrap(), (1024, 2048));
@@ -385,41 +385,41 @@ mod api_symmetry {
         assert!(
             SingleId::new(4, 0, 1, 1)
                 .unwrap()
-                .with_time_span(1800, 7200)
+                .time_with_span(1800, 7200)
                 .is_err()
         );
         assert!(
             FlexId::new(4, 0, 4, 1, 4, 1)
                 .unwrap()
-                .with_time_span(1800, 7200)
+                .time_with_span(1800, 7200)
                 .is_err()
         );
         let range = RangeId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time_span(1800, 7200)
+            .time_with_span(1800, 7200)
             .unwrap();
         assert_eq!(range.seconds_range(), (1800, 7200));
         assert_eq!((range.time_interval().seconds(), range.t()), (1800, [1, 3]));
     }
 
-    /// `relabel_time` は3型とも [`Result`]（[`Option`] との混在を許さない）。
+    /// `time_relabel` は3型とも [`Result`]（[`Option`] との混在を許さない）。
     #[test]
     fn relabel_time_returns_result_on_every_type() {
         let single = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(3600, 5)
+            .time_with(3600, 5)
             .unwrap();
-        assert_eq!(single.relabel_time(Interval::HOUR).unwrap(), single);
-        assert!(single.relabel_time(1800).is_err());
+        assert_eq!(single.time_relabel(Interval::HOUR).unwrap(), single);
+        assert!(single.time_relabel(1800).is_err());
 
         let range = RangeId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(3600, [0, 1])
+            .time_with(3600, [0, 1])
             .unwrap();
-        assert_eq!(range.relabel_time(1800).unwrap().t(), [0, 3]);
-        assert!(range.relabel_time(Interval::DAY).is_err());
+        assert_eq!(range.time_relabel(1800).unwrap().t(), [0, 3]);
+        assert!(range.time_relabel(Interval::DAY).is_err());
 
-        // `FlexId` には `relabel_time` を持たせない。Segmentが秒区間を一意に決めるので、
+        // `FlexId` には `time_relabel` を持たせない。Segmentが秒区間を一意に決めるので、
         // 「同じ区間を別の単位で」は定義上ありえず、成功しても必ず元と同じ値になる
         // （常に no-op か Err にしかならないAPIは、対称性のためだけに置く価値がない）。
     }

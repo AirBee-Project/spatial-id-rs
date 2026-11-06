@@ -70,7 +70,7 @@ pub trait SpatialId:
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::{SingleId, SpatialId, time::Interval};
-    /// let id = SingleId::new(12, 0, 3638, 1614).unwrap().with_time(1800, 809712).unwrap();
+    /// let id = SingleId::new(12, 0, 3638, 1614).unwrap().time_with(1800, 809712).unwrap();
     /// assert_eq!(id.time_interval().seconds(), 1800);
     ///
     /// let plain = SingleId::new(12, 0, 3638, 1614).unwrap();
@@ -86,20 +86,20 @@ pub trait SpatialId:
     ///
     /// ```
     /// # use spatial_id::{SingleId, SpatialId};
-    /// assert!(SingleId::new(12, 0, 3638, 1614).unwrap().is_whole_time());
+    /// assert!(SingleId::new(12, 0, 3638, 1614).unwrap().time_is_whole());
     /// ```
-    fn is_whole_time(&self) -> bool {
+    fn time_is_whole(&self) -> bool {
         self.seconds_range() == (0, Interval::MAX_SECONDS)
     }
 
     /// 時間の指定を外し、全時間へ戻した自身を返す。
-    fn without_time(self) -> Self;
+    fn time_cleared(self) -> Self;
 
     /// 絶対秒区間 `[start, end)` を設定した自身を返す。
-    fn with_time_span(self, start: u64, end: u64) -> Result<Self, Error>;
+    fn time_with_span(self, start: u64, end: u64) -> Result<Self, Error>;
 
     /// 指定された Unix 時刻（秒）を時間区間に含むかを判定する。
-    fn contains_time(&self, unix_seconds: u64) -> bool {
+    fn time_contains(&self, unix_seconds: u64) -> bool {
         let (start, end) = self.seconds_range();
         (start..end).contains(&unix_seconds)
     }

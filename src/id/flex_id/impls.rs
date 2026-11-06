@@ -35,7 +35,7 @@ impl fmt::Display for FlexId {
         )?;
 
         // 時間軸も他の軸と同じ「ズーム/インデックス」の形で、同じ区切りで続ける。
-        if !self.is_whole_time() {
+        if !self.time_is_whole() {
             write!(f, "|{}/{}", self.t_zoomlevel(), self.t_index())?;
         }
         Ok(())
@@ -170,12 +170,12 @@ impl SpatialId for FlexId {
         (time_span.start(), time_span.end())
     }
 
-    fn without_time(self) -> Self {
-        self.without_time()
+    fn time_cleared(self) -> Self {
+        self.time_cleared()
     }
 
-    fn with_time_span(self, start: u64, end: u64) -> Result<Self, Error> {
-        self.with_time_span(start, end)
+    fn time_with_span(self, start: u64, end: u64) -> Result<Self, Error> {
+        self.time_with_span(start, end)
     }
 
     fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<Self, Error> {
@@ -250,7 +250,7 @@ impl FromStr for FlexId {
                     y_zoomlevel,
                     y_index,
                 )?
-                .with_time_segment(t_zoomlevel, t_index)
+                .time_with_segment(t_zoomlevel, t_index)
             }
         }
     }

@@ -44,7 +44,7 @@ impl fmt::Display for RangeId {
 
         //時間の情報があれば書き込み
 
-        if !self.is_whole_time() {
+        if !self.time_is_whole() {
             write!(f, "_{}/{}", self.i, format_dimension(self.t()))?;
         };
         Ok(())
@@ -213,12 +213,12 @@ impl SpatialId for RangeId {
         (t[0] * unit, (t[1] + 1) * unit)
     }
 
-    fn without_time(self) -> Self {
-        self.without_time()
+    fn time_cleared(self) -> Self {
+        self.time_cleared()
     }
 
-    fn with_time_span(self, start: u64, end: u64) -> Result<Self, Error> {
-        self.with_time_span(start, end)
+    fn time_with_span(self, start: u64, end: u64) -> Result<Self, Error> {
+        self.time_with_span(start, end)
     }
 
     fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<Self, Error> {
@@ -283,7 +283,7 @@ impl FromStr for RangeId {
                     ],
                     None => [t_text.parse::<u64>().map_err(|_| parse_error(s))?; 2],
                 };
-                id.with_time(i, t)
+                id.time_with(i, t)
             }
         }
     }

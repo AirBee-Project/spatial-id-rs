@@ -85,7 +85,7 @@ mod tests {
         assert!(
             FlexId::new(3, 1, 3, 1, 3, 1)
                 .unwrap()
-                .with_time_segment(0u8, 0)
+                .time_with_segment(0u8, 0)
                 .is_ok()
         );
     }
@@ -100,13 +100,13 @@ mod tests {
         assert!(
             FlexId::new(3, 1, 3, 1, 3, 1)
                 .unwrap()
-                .with_time_segment(2u8, 0)
+                .time_with_segment(2u8, 0)
                 .is_err()
         );
         assert!(
             FlexId::new(3, 1, 3, 1, 3, 1)
                 .unwrap()
-                .with_time_segment(2u8, 1)
+                .time_with_segment(2u8, 1)
                 .is_err()
         );
         // FromStr も同じ経路を通るので一緒に塞がる。
@@ -119,7 +119,7 @@ mod tests {
     fn temporal_segment_is_accepted_with_the_feature() {
         let id = FlexId::new(3, 1, 3, 1, 3, 1)
             .unwrap()
-            .with_time_segment(2u8, 1)
+            .time_with_segment(2u8, 1)
             .unwrap();
         assert_eq!(id.t_zoomlevel(), 2);
         assert_eq!(id.t_index(), 1);

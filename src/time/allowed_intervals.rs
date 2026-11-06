@@ -264,8 +264,8 @@ mod collection_api {
     fn two_hours() -> [SingleId; 2] {
         let base = SingleId::new(12, 0, 3638, 1614).unwrap();
         [
-            base.with_time(Interval::HOUR, 0).unwrap(),
-            base.with_time(Interval::HOUR, 1).unwrap(),
+            base.time_with(Interval::HOUR, 0).unwrap(),
+            base.time_with(Interval::HOUR, 1).unwrap(),
         ]
     }
 
@@ -407,7 +407,7 @@ mod collection_api {
     fn spec_example_under_each_policy() {
         let original = SingleId::new(12, 0, 3638, 1614)
             .unwrap()
-            .with_time(1800, 809712)
+            .time_with(1800, 809712)
             .unwrap();
         let mut set = SpatialIdSet::new();
         set.insert(original);

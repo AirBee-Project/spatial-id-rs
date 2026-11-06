@@ -76,7 +76,7 @@ impl FlexId {
     /// - 復元した `f_index` / `x_index` / `y_index` が各ズームレベルの範囲外の場合は
     ///   各種範囲外エラーを返す。
     /// - `temporal_id` feature 有効時は、`t_zoomlevel` / `t_index` も
-    ///   [`with_time_segment`](Self::with_time_segment) と同じ検証を通す。
+    ///   [`time_with_segment`](Self::time_with_segment) と同じ検証を通す。
     ///
     /// # 動作例
     ///
@@ -118,7 +118,7 @@ impl FlexId {
         {
             let t_zoomlevel = bytes[14];
             let t_index = u64::from_be_bytes(bytes[15..23].try_into().unwrap());
-            id.with_time_segment(t_zoomlevel, t_index)
+            id.time_with_segment(t_zoomlevel, t_index)
         }
 
         #[cfg(not(feature = "temporal_id"))]
@@ -144,8 +144,8 @@ mod tests {
     #[test]
     fn distinguishes_same_space_different_time() {
         let base = FlexId::new(10, 3, 12, 909, 12, 403).unwrap();
-        let a = base.with_time_segment(20u8, 5).unwrap();
-        let b = base.with_time_segment(20u8, 6).unwrap();
+        let a = base.time_with_segment(20u8, 5).unwrap();
+        let b = base.time_with_segment(20u8, 6).unwrap();
 
         assert_ne!(a.encode(), b.encode());
     }
@@ -159,7 +159,7 @@ mod tests {
         for (t_zoomlevel, t_index) in cases {
             let id = FlexId::new(18, -5, 18, 232848, 18, 103242)
                 .unwrap()
-                .with_time_segment(t_zoomlevel, t_index)
+                .time_with_segment(t_zoomlevel, t_index)
                 .unwrap();
             let bytes = id.encode();
             assert_eq!(bytes.len(), FlexId::ENCODED_LEN);
