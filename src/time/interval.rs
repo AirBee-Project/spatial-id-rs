@@ -1,7 +1,6 @@
 //! 時間間隔 `{i}`を表す型に関する実装
 
-use super::{segment::TimeSegment, span::TimeSpan};
-use crate::id::zoom_level::TZoomLevel;
+use super::span::TimeSpan;
 use crate::{SpatialIdError, error::Error};
 
 /// 時間 ID の時間間隔 `{i}`（秒数）を表現する型。
@@ -159,26 +158,6 @@ impl Interval {
         TimeSpan::new(t_min * unit, end)
             .ok_or_else(|| SpatialIdError::TOutOfRange { i: unit, t: t_max }.into())
     }
-
-    /// `{i}` と `{t}` を、[`FlexId`](crate::FlexId) が保持できる2分岐Segmentへ直す。
-    ///
-    /// [`FlexId`](crate::FlexId) は木のノードアドレスなので `2^(35 - zoom)` 秒のSegment1個しか
-    /// 持てない。`{i}` が2の冪でなければ1個のSegmentにならないため
-    /// [`SpatialIdError::TIntervalError`] を返す（複数Segmentへ分けたい場合は
-    /// [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) に付けてから
-    /// [`IntoIterator`] で展開する）。
-    pub(crate) fn as_segment(&self, t: u64) -> Result<TimeSegment, Error> {
-        let seconds = self.seconds();
-        if !seconds.is_power_of_two() {
-            return Err(SpatialIdError::TIntervalError { i: seconds }.into());
-        }
-
-        // 幅 `2^k` 秒のSegmentはズーム `MAX - k`。`seconds <= 2^MAX` なので `k <= MAX`。
-        let zoom = TZoomLevel::MAX.get() - seconds.trailing_zeros() as u8;
-        let t_zoom = TZoomLevel::new(zoom)?;
-        t_zoom.check_index(t)?;
-        Ok(TimeSegment::new(t_zoom, t))
-    }
 }
 
 impl Default for Interval {
@@ -323,69 +302,16 @@ mod api_symmetry {
         assert_eq!(by_const, by_u64);
     }
 
-    /// Unix 時刻から時間を決める入口は3型ともある。[`FlexId`] だけはズームで粒度を指定するので
-    /// `time_with_segment_at` という別名になっている。
+    /// Unix 時刻から時間を決める入口。
     #[test]
-    fn with_time_at_is_available_on_every_type() {
+    fn time_with_at_contains_the_given_instant() {
         const UNIX: u64 = 1_770_000_000;
         let single = SingleId::new(4, 0, 1, 1)
             .unwrap()
             .time_with_at(1024, UNIX)
             .unwrap();
-        let range = RangeId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with_at(1024, UNIX)
-            .unwrap();
-        let flex = FlexId::new(4, 0, 4, 1, 4, 1)
-            .unwrap()
-            .time_with_segment_at(25, UNIX)
-            .unwrap();
 
-        assert_eq!(single.seconds_range(), range.seconds_range());
-        assert_eq!(single.seconds_range(), flex.seconds_range());
         assert!(single.seconds_range().0 <= UNIX && UNIX < single.seconds_range().1);
-    }
-
-    /// `time_with_span` は3型とも同じ名前で、表せない区間は [`Err`]。
-    #[test]
-    fn with_time_span_is_available_on_every_type() {
-        // [1024, 2048) は3型とも表せる（2の冪・整列）。
-        for got in [
-            SingleId::new(4, 0, 1, 1)
-                .unwrap()
-                .time_with_span(1024, 2048)
-                .map(|v| v.seconds_range()),
-            RangeId::new(4, 0, 1, 1)
-                .unwrap()
-                .time_with_span(1024, 2048)
-                .map(|v| v.seconds_range()),
-            FlexId::new(4, 0, 4, 1, 4, 1)
-                .unwrap()
-                .time_with_span(1024, 2048)
-                .map(|v| v.seconds_range()),
-        ] {
-            assert_eq!(got.unwrap(), (1024, 2048));
-        }
-
-        // [1800, 7200) は 1800 秒 × 3 Segmentなので、範囲でしか表せない。
-        assert!(
-            SingleId::new(4, 0, 1, 1)
-                .unwrap()
-                .time_with_span(1800, 7200)
-                .is_err()
-        );
-        assert!(
-            FlexId::new(4, 0, 4, 1, 4, 1)
-                .unwrap()
-                .time_with_span(1800, 7200)
-                .is_err()
-        );
-        let range = RangeId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with_span(1800, 7200)
-            .unwrap();
-        assert_eq!(range.seconds_range(), (1800, 7200));
-        assert_eq!((range.i().seconds(), range.t()), (1800, [1, 3]));
     }
 
     /// `time_relabel` は3型とも [`Result`]（[`Option`] との混在を許さない）。

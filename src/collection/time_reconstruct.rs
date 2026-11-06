@@ -1,4 +1,5 @@
 use crate::SpatialId;
+use crate::time::span::TimeSpan;
 use crate::{AllowedIntervals, FlexId, RangeId};
 use alloc::vec::Vec;
 
@@ -133,8 +134,9 @@ fn finish<V>(
     value: V,
     allowed_intervals: Option<&AllowedIntervals>,
 ) -> (RangeId, V) {
-    let range = RangeId::from(key)
-        .time_with_span(start, end)
+    let range = TimeSpan::new(start, end)
+        .expect("結合した秒区間は空でない")
+        .apply_to(RangeId::from(key))
         .expect("結合した秒区間は元のSegmentの和なので常に有効");
 
     // 候補集合が指定されていれば、その中で最も粗い（＝Segment数が最小の）単位へ表し直す。

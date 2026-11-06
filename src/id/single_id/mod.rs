@@ -203,53 +203,6 @@ impl SingleId {
         self.time_with::<Interval>(interval, interval.index_of(unix_seconds))
     }
 
-    /// 絶対秒区間 `[start, end)` を設定した自身を返す（1970-01-01 00:00 UTC 起点）。
-    ///
-    /// 単位は「その区間をちょうど表せる最も粗い秒数」が自動で選ばれる
-    /// （`start` と区間幅の最大公約数）。[`SingleId`] は時間も1Segmentなので、
-    /// **その単位でちょうど1Segmentにならない区間は受け付けない**。
-    /// 複数Segmentにまたがる区間は [`RangeId::time_with_span`](crate::RangeId::time_with_span) を使う。
-    ///
-    /// ## 動作コスト
-    ///
-    /// 木構造（[`SpatialIdSet`](crate::collection::SpatialIdSet) など）へ挿入する際、区間幅が2の冪秒であれば必ず1つの時間Segment
-    /// （[`FlexId`](crate::FlexId)）に収まる。しかし非2冪の幅（例: 1800秒）が選ばれた場合、
-    /// 内部で最大十数個のSegmentに分解されるため、**挿入コストと木の葉の数が比例して増大**する。
-    /// パフォーマンスが重視される用途では、区間幅が1800秒や3600秒になる代わりに、**1024秒**や**4096秒**
-    /// などの2の冪秒になるように指定することを強く推奨する（挿入処理が約10倍高速化される）。
-    ///
-    /// # バリデーション
-    /// - `start >= end`、または `end` が [`Interval::MAX_SECONDS`] を超える場合は
-    ///   [`SpatialIdError::TOutOfRange`] を返す。
-    /// - 区間が単一Segmentにならない場合は [`SpatialIdError::TIntervalError`] を返す。
-    ///
-    /// ```
-    /// # use spatial_id::SpatialId;
-    /// # #[cfg(feature = "temporal_id")]
-    /// # {
-    /// # use spatial_id::SingleId;
-    /// let id = SingleId::new(4, 0, 0, 0).unwrap()
-    ///     .time_with_span(1_457_481_600, 1_457_483_400).unwrap();
-    /// assert_eq!(id.i().seconds(), 1800);
-    /// assert_eq!(id.t(), 809712);
-    ///
-    /// // 1Segmentに収まらない区間（1800秒 × 3Segment）は拒否する。
-    /// assert!(SingleId::new(4, 0, 0, 0).unwrap().time_with_span(1800, 7200).is_err());
-    /// # }
-    /// ```
-    pub fn time_with_span(self, start: u64, end: u64) -> Result<Self, Error> {
-        let time_span =
-            span::TimeSpan::new(start, end).ok_or(SpatialIdError::TOutOfRange { i: 1, t: end })?;
-        let (interval, t_min, t_max) = time_span.to_interval_range()?;
-        if t_min != t_max {
-            return Err(SpatialIdError::TIntervalError {
-                i: interval.seconds(),
-            }
-            .into());
-        }
-        Ok(self.time_with_unchecked(interval, t_min))
-    }
-
     /// 同じ絶対秒区間を、別の単位で表し直した自身を返す。
     ///
     /// 単位が変わっても指す時刻は変わらない。その単位で単一Segmentにならない場合は

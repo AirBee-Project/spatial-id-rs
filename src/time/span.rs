@@ -89,6 +89,12 @@ impl TimeSpan {
         Ok((interval, self.start / unit, self.end / unit - 1))
     }
 
+    /// この区間を `id` の時間として設定した [`RangeId`](crate::RangeId) を返す。単位は区間をちょうど表せる最も粗いもの。
+    pub(crate) fn apply_to(self, id: crate::RangeId) -> Result<crate::RangeId, Error> {
+        let (interval, t_min, t_max) = self.to_interval_range()?;
+        id.time_with(interval, [t_min, t_max])
+    }
+
     /// 区間木的に高々 `O(log 幅)` 個の2分岐 TimeSegment へ分解する。
     pub fn into_segments(self) -> TimeSegments {
         let l = self.start;
