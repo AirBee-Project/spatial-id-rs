@@ -6,7 +6,7 @@ where
 {
     /// 値を捨て、占有空間だけを [`SpatialIdSet`] へ写し取る。元のテーブルは消費しない。
     fn from(table: &SpatialIdMap<V>) -> Self {
-        table.iter().map(|(flex_id, _)| flex_id).collect()
+        table.iter_flex_ids().map(|(flex_id, _)| flex_id).collect()
     }
 }
 

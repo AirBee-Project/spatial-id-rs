@@ -1,5 +1,6 @@
 #![cfg_attr(test, allow(dead_code))]
 
+pub(crate) mod flex;
 pub(crate) mod insert;
 pub(crate) mod par;
 pub(crate) mod query;

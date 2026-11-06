@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 pub(crate) mod corner_cases;
 pub(crate) mod difference;
 pub(crate) mod equal;
+pub(crate) mod flex;
 pub(crate) mod insert;
 pub(crate) mod intersection;
 pub(crate) mod merge_probe;
@@ -227,7 +228,7 @@ pub(crate) fn decompose_set_to_single_ids_at_zoom(
 ) -> HashSet<SingleId> {
     let mut normalized = HashSet::new();
 
-    for flex_id in set.iter() {
+    for flex_id in set.iter_flex_ids() {
         let range = RangeId::from(&flex_id);
         let expanded = if range.z() == target_z {
             range

@@ -167,7 +167,7 @@ fn resolve_overlapping<V: SafeValue + 'static, P: MergePolicy<V>>(
         // resolve_many が読み残した同じ親の値を、次の親として扱わない
         while drained.next_if(|(next, _)| *next == id).is_some() {}
     }
-    ready.extend(tree);
+    ready.extend(tree.into_iter_flex_ids());
     ready.reverse();
     ready.pop()
 }

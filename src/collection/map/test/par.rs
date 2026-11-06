@@ -17,7 +17,7 @@ mod par_build {
     }
 
     fn sorted(table: &SpatialIdMap<i32>) -> Vec<(FlexId, i32)> {
-        let mut v: Vec<_> = table.iter().map(|(f, val)| (f, *val)).collect();
+        let mut v: Vec<_> = table.iter_flex_ids().map(|(f, val)| (f, *val)).collect();
         v.sort_by_key(|(id, _)| id.field_key());
         v
     }
@@ -34,12 +34,12 @@ mod par_build {
         // 値クエリも一致する（ランク割り当ては違っても値は同じ）。
         for v in 0..13 {
             let mut a: Vec<FlexId> = seq
-                .iter()
+                .iter_flex_ids()
                 .filter(|(_, val)| **val == v)
                 .map(|(id, _)| id)
                 .collect();
             let mut b: Vec<FlexId> = par
-                .iter()
+                .iter_flex_ids()
                 .filter(|(_, val)| **val == v)
                 .map(|(id, _)| id)
                 .collect();
