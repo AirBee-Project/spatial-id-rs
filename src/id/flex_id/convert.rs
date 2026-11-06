@@ -38,7 +38,7 @@ impl From<&FlexId> for RangeId {
         .unwrap();
         TimeSpan::new(start, end)
             .expect("Segmentの秒区間は空でない")
-            .apply_to(spatial)
+            .apply_to(spatial, None)
             .expect("Segmentの秒区間は常に有効")
     }
 }

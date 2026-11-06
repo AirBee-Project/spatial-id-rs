@@ -134,19 +134,15 @@ fn finish<V>(
     value: V,
     allowed_intervals: Option<&AllowedIntervals>,
 ) -> (RangeId, V) {
+    // 候補集合が指定されていれば、その中で最も粗い（＝Segment数が最小の）単位を使う。
+    // `AllowedIntervals` は必ず全区間を表せる候補を含むので、この変換は失敗しない。
     let range = TimeSpan::new(start, end)
         .expect("結合した秒区間は空でない")
-        .apply_to(RangeId::from(key))
+        .apply_to(
+            RangeId::from(key),
+            allowed_intervals.map(|allowed| allowed.coarsest_dividing(start, end)),
+        )
         .expect("結合した秒区間は元のSegmentの和なので常に有効");
-
-    // 候補集合が指定されていれば、その中で最も粗い（＝Segment数が最小の）単位へ表し直す。
-    // `AllowedIntervals` は必ず全区間を表せる候補を含むので、この `time_relabel` は失敗しない。
-    let range = match allowed_intervals {
-        None => range,
-        Some(allowed_intervals) => range
-            .time_relabel(allowed_intervals.coarsest_dividing(start, end))
-            .expect("AllowedIntervals が選んだ単位は必ずこの区間を割り切る"),
-    };
 
     (range, value)
 }

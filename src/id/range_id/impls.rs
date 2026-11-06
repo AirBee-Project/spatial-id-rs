@@ -260,7 +260,7 @@ impl FromStr for RangeId {
         let x = parse_u32_dimension(x_text, s)?;
         let y = parse_u32_dimension(y_text, s)?;
 
-        let id = RangeId::new(z, f, x, y)?;
+        let mut id = RangeId::new(z, f, x, y)?;
 
         // 時間部分は `{i}/{t}` または `{i}/{t_min}:{t_max}`。
         match temporal_text {
@@ -275,7 +275,8 @@ impl FromStr for RangeId {
                     ],
                     None => [t_text.parse::<u64>().map_err(|_| parse_error(s))?; 2],
                 };
-                id.time_with(i, t)
+                id.set_time(i, t)?;
+                Ok(id)
             }
         }
     }

@@ -309,7 +309,7 @@ impl FromStr for SingleId {
         let x = x_text.parse::<u32>().map_err(|_| parse_error(s))?;
         let y = y_text.parse::<u32>().map_err(|_| parse_error(s))?;
 
-        let id = SingleId::new(z, f, x, y)?;
+        let mut id = SingleId::new(z, f, x, y)?;
 
         // 時間部分は仕様の `{i}/{t}`。`{t}` は単数なので `:` を含む範囲表記は受け付けない。
         match temporal_text {
@@ -321,7 +321,8 @@ impl FromStr for SingleId {
                 }
                 let i = i_text.parse::<i64>().map_err(|_| parse_error(s))?;
                 let t = t_text.parse::<u64>().map_err(|_| parse_error(s))?;
-                id.time_with(i, t)
+                id.set_time(i, t)?;
+                Ok(id)
             }
         }
     }

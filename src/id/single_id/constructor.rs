@@ -43,12 +43,13 @@ impl SingleId {
     /// assert_eq!(id, Err(SpatialIdError::ZOutOfRange { z:68 }.into()));
     /// ```
     ///
-    /// 時間を付与したい場合は [`SingleId::time_with`] を組み合わせる:
+    /// 時間を付与したい場合は [`SingleId::set_time`] を組み合わせる:
     /// ```
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::{SingleId, time::Interval};
-    /// let id = SingleId::new(5, 3, 2, 10).unwrap().time_with(Interval::MINUTE, 3).unwrap();
+    /// let mut id = SingleId::new(5, 3, 2, 10).unwrap();
+    /// id.set_time(Interval::MINUTE, 3).unwrap();
     /// assert_eq!(id.to_string(), "5/3/2/10_60/3".to_string());
     /// # }
     /// ```

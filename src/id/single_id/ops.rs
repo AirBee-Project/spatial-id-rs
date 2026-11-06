@@ -99,7 +99,7 @@ impl SingleId {
         for time_span in TimeSpan::of(&current).difference(&TimeSpan::of(other)) {
             results.push(
                 time_span
-                    .apply_to(RangeId::from(&current))
+                    .apply_to(RangeId::from(&current), None)
                     .expect("差分は元の区間の部分なので常に有効"),
             );
         }
@@ -154,7 +154,7 @@ impl SingleId {
 
         Some(
             time_span
-                .apply_to(RangeId::from(deep))
+                .apply_to(RangeId::from(deep), None)
                 .expect("交差は両者の部分なので常に有効"),
         )
     }

@@ -16,14 +16,15 @@
 
 | | 空間 | 時間 |
 | :--- | :--- | :--- |
-| `SingleId` | `z` + `f, x, y`（単一） | `interval()` + `t() -> u64`（単一） |
-| `RangeId` | `z` + `f, x, y`（範囲） | `interval()` + `t() -> [u64; 2]`（範囲） |
+| `SingleId` | `z` + `f, x, y`（単一） | `i()` + `t() -> u64`（単一） |
+| `RangeId` | `z` + `f, x, y`（範囲） | `i()` + `t() -> [u64; 2]`（範囲） |
 | `FlexId` | 軸ごとの `zoom` + `index` | `t_zoomlevel()` + `t_index()`（4軸目） |
 
 ```rust
-let id = SingleId::new(12, 0, 3638, 1614)?.time_with(1800, 809712)?;
+let mut id = SingleId::new(12, 0, 3638, 1614)?;
+id.set_time(1800, 809712)?;
 assert_eq!(id.to_string(), "12/0/3638/1614_1800/809712");
-assert_eq!(id.interval().seconds(), 1800);
+assert_eq!(id.i().seconds(), 1800);
 assert_eq!(id.t(), 809712);
 assert_eq!(id.seconds_range(), (1_457_481_600, 1_457_483_400));
 ```
@@ -37,9 +38,8 @@ assert_eq!(id.seconds_range(), (1_457_481_600, 1_457_483_400));
 | 方法 | 用途 |
 | :--- | :--- |
 | `SingleId::new(z, f, x, y)` | 時間を指定しない（全時間） |
-| `id.time_with(i, t)` | 既存の ID に時間を付ける（ビルダー。`FlexId` は `time_with_segment(tz, t)`） |
-| `id.time_with_at(i, unix秒)` | 仕様 1.5.3 (3) の `t = floor(u / i)` を内部で計算（`SingleId` のみ） |
-| `id.time_relabel(i)` | 秒区間は変えずに単位だけ変える |
+| `id.set_time(i, t)` | 既存の ID の時間 `{i}/{t}` を設定する（`FlexId` は `time_with_segment(tz, t)`） |
+| `id.set_t(t)` | `{i}` を保ったまま `{t}` だけを設定する |
 
 `FlexId` は4軸すべてを「ズーム＋インデックス」で持つので、
 `FlexId::new_with_time(fz, f, xz, x, yz, y, tz, t)` のように時間軸も同じ形で指定する。
@@ -75,8 +75,10 @@ assert_eq!(id.seconds_range(), (1_457_481_600, 1_457_483_400));
 したがって次の2つは、同じ絶対秒区間を指していても等しくない。
 
 ```rust
-RangeId::new(4, 0, 0, 0)?.time_with(Interval::HOUR,   [0, 0])?   // [0, 3600)
-RangeId::new(4, 0, 0, 0)?.time_with(Interval::MINUTE, [0, 59])?  // [0, 3600)
+let mut hour = RangeId::new(4, 0, 0, 0)?;
+hour.set_time(Interval::HOUR, [0, 0])?;      // [0, 3600)
+let mut minutes = RangeId::new(4, 0, 0, 0)?;
+minutes.set_time(Interval::MINUTE, [0, 59])?; // [0, 3600)
 ```
 
 これは空間側で
@@ -132,11 +134,11 @@ JSON  : { "z":12, "f":[0], "x":[3638], "y":[1614], "i":1800, "t":[809712] }
 
 - `Interval` はサイズ0のスタブになり、全時間以外を構築できない。
 - 全Segmentが全時間なので、`FlexTreeCore` は F/X/Y の3次元でしか割らない。
-- `time_with()` は全時間以外を受け付けない。
+- `set_time()` は全時間以外を受け付けない。
 
 ### 有効時
 
-- `time_with()` / `time_with_at()` で任意の時間区間を扱える。
+- `set_time()` で任意の時間区間を扱える。
 - `intersection` / `difference` が時間も考慮する。
 - `FlexTreeCore` は時間も `Dimension::T` として割る。
 

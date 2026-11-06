@@ -258,17 +258,13 @@ mod tests {
 mod api_symmetry {
     use crate::{FlexId, Interval, RangeId, SingleId, SpatialId};
 
-    /// `time_with` は3型とも同じ名前・同じ [`Result`] で、`{i}/{t}` を受ける。
+    /// `set_time` は `SingleId` / `RangeId` で同じ名前・同じ [`Result`] で、`{i}/{t}` を受ける。
     #[test]
-    fn with_time_is_available_on_every_type() {
-        let single = SingleId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with(1024, 7)
-            .unwrap();
-        let range = RangeId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with(1024, 7)
-            .unwrap();
+    fn set_time_is_available_on_single_and_range() {
+        let mut single = SingleId::new(4, 0, 1, 1).unwrap();
+        single.set_time(1024, 7).unwrap();
+        let mut range = RangeId::new(4, 0, 1, 1).unwrap();
+        range.set_time(1024, 7).unwrap();
         // FlexId だけは母語（ズーム）で指定する。ズーム25 = 2^(35-25) = 1024 秒幅。
         let flex = FlexId::new(4, 0, 4, 1, 4, 1)
             .unwrap()
@@ -285,54 +281,33 @@ mod api_symmetry {
     /// `interval` 引数は [`Interval`] でも整数リテラルでも `u64` でも通る。
     #[test]
     fn interval_argument_accepts_every_spelling() {
-        let by_const = SingleId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with(Interval::HOUR, 3)
-            .unwrap();
-        let by_literal = SingleId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with(3600, 3)
-            .unwrap();
-        let by_u64 = SingleId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with(3600u64, 3)
-            .unwrap();
+        let base = SingleId::new(4, 0, 1, 1).unwrap();
+        let (mut by_const, mut by_literal, mut by_u64) = (base, base, base);
+        by_const.set_time(Interval::HOUR, 3).unwrap();
+        by_literal.set_time(3600, 3).unwrap();
+        by_u64.set_time(3600u64, 3).unwrap();
 
         assert_eq!(by_const, by_literal);
         assert_eq!(by_const, by_u64);
     }
 
-    /// Unix 時刻から時間を決める入口。
+    /// `set_t` は `{i}` を保ったまま `{t}` だけを置き換え、失敗したときは元の値を保つ。
     #[test]
-    fn time_with_at_contains_the_given_instant() {
-        const UNIX: u64 = 1_770_000_000;
-        let single = SingleId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with_at(1024, UNIX)
-            .unwrap();
+    fn set_t_keeps_interval_and_is_atomic() {
+        let mut single = SingleId::new(4, 0, 1, 1).unwrap();
+        single.set_time(3600, 5).unwrap();
+        single.set_t(6).unwrap();
+        assert_eq!((single.i(), single.t()), (Interval::HOUR, 6));
+        let before = single;
+        assert!(single.set_t(u64::MAX).is_err());
+        assert_eq!(single, before);
 
-        assert!(single.seconds_range().0 <= UNIX && UNIX < single.seconds_range().1);
-    }
-
-    /// `time_relabel` は3型とも [`Result`]（[`Option`] との混在を許さない）。
-    #[test]
-    fn relabel_time_returns_result_on_every_type() {
-        let single = SingleId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with(3600, 5)
-            .unwrap();
-        assert_eq!(single.time_relabel(Interval::HOUR).unwrap(), single);
-        assert!(single.time_relabel(1800).is_err());
-
-        let range = RangeId::new(4, 0, 1, 1)
-            .unwrap()
-            .time_with(3600, [0, 1])
-            .unwrap();
-        assert_eq!(range.time_relabel(1800).unwrap().t(), [0, 3]);
-        assert!(range.time_relabel(Interval::DAY).is_err());
-
-        // `FlexId` には `time_relabel` を持たせない。Segmentが秒区間を一意に決めるので、
-        // 「同じ区間を別の単位で」は定義上ありえず、成功しても必ず元と同じ値になる
-        // （常に no-op か Err にしかならないAPIは、対称性のためだけに置く価値がない）。
+        let mut range = RangeId::new(4, 0, 1, 1).unwrap();
+        range.set_time(3600, [0, 1]).unwrap();
+        range.set_t([2, 5]).unwrap();
+        assert_eq!((range.i(), range.t()), (Interval::HOUR, [2, 5]));
+        let before = range;
+        assert!(range.set_t([0, u64::MAX]).is_err());
+        assert_eq!(range, before);
     }
 }

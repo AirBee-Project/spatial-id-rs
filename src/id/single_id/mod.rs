@@ -118,7 +118,7 @@ impl SingleId {
         }
     }
 
-    /// 時間を設定した自身を返す（ビルダー形式）。
+    /// 時間 `{i}/{t}` を設定する。失敗したときは元の値を保つ。
     ///
     /// [Ouranos 4D 時空間ID仕様](https://www.ipa.go.jp/)の `{i}/{t}` に対応する。`interval` は
     /// [`Interval`]、または秒数を表す整数（無注釈のリテラルを含む）のどちらでも渡せる。
@@ -134,7 +134,7 @@ impl SingleId {
     /// 仕様どおり任意の秒数を単位にできる。
     ///
     /// [`SingleId`] は空間が1Segmentなのと揃えて**時間も1Segment**しか持たない。時間の範囲を扱いたい
-    /// 場合は [`RangeId::time_with`](crate::RangeId::time_with) を使う。
+    /// 場合は [`RangeId::set_time`](crate::RangeId::set_time) を使う。
     ///
     /// FlexTreeが内部で必要とする2の冪秒のSegmentへの分解は、木へ挿入する段階
     /// （[`IntoIterator`]による[`FlexId`](crate::FlexId)への展開）で自動的に行われる。
@@ -151,86 +151,48 @@ impl SingleId {
     /// # {
     /// # use spatial_id::{SingleId, time::Interval};
     /// // 仕様書の例: 12/0/3638/1614_1800/809712（30分単位）
-    /// let id = SingleId::new(12, 0, 3638, 1614).unwrap().time_with(1800, 809712).unwrap();
+    /// let mut id = SingleId::new(12, 0, 3638, 1614).unwrap();
+    /// id.set_time(1800, 809712).unwrap();
     /// assert_eq!(id.to_string(), "12/0/3638/1614_1800/809712");
     ///
     /// // 定数でも、秒数の `u64` でも指定できる。
-    /// let id = SingleId::new(5, 3, 2, 10).unwrap().time_with(Interval::MINUTE, 3).unwrap();
+    /// let mut id = SingleId::new(5, 3, 2, 10).unwrap();
+    /// id.set_time(Interval::MINUTE, 3).unwrap();
     /// assert_eq!(id.to_string(), "5/3/2/10_60/3");
-    /// let same = SingleId::new(5, 3, 2, 10).unwrap().time_with(60u64, 3).unwrap();
+    /// let mut same = SingleId::new(5, 3, 2, 10).unwrap();
+    /// same.set_time(60u64, 3).unwrap();
     /// assert_eq!(same, id);
     /// # }
     /// ```
-    pub fn time_with<I>(self, interval: I, t: u64) -> Result<Self, Error>
+    pub fn set_time<I>(&mut self, interval: I, t: u64) -> Result<(), Error>
     where
         I: TryInto<Interval>,
         Error: From<I::Error>,
     {
         let interval: Interval = interval.try_into()?;
         interval.validated_span(t, t)?;
-        Ok(self.time_with_unchecked(interval, t))
+        *self = self.time_with_unchecked(interval, t);
+        Ok(())
     }
 
-    /// Unix 時刻（秒）が属する時間Segmentを設定した自身を返す。
+    /// 時間間隔 `{i}` を保ったまま、時間インデックス `{t}` を設定する。失敗したときは元の値を保つ。
     ///
-    /// 仕様書 1.5.3 (3) の `t = floor(u / i)` をこちらで計算するので、呼び出し側で
-    /// インデックスを求める必要がない。
-    ///
-    /// ## 動作コスト
-    ///
-    /// 木構造（[`SpatialIdSet`](crate::collection::SpatialIdSet) など）へ挿入する際、時間間隔が2の冪秒であれば必ず1つの時間Segment
-    /// （[`FlexId`](crate::FlexId)）に収まる。しかし非2冪の秒数（例: 1800秒）を指定した場合、
-    /// 内部で最大十数個のSegmentに分解されるため、**挿入コストと木の葉の数が比例して増大**する。
-    /// パフォーマンスが重視される用途では、1800秒や3600秒の代わりに、**1024秒**や**4096秒**
-    /// などの2の冪秒を利用することを強く推奨する（挿入処理が約10倍高速化される）。
+    /// # バリデーション
+    /// - `(t + 1) * {i}` が [`Interval::MAX_SECONDS`] を超える場合は
+    ///   [`SpatialIdError::TOutOfRange`] を返す。
     ///
     /// ```
-    /// # use spatial_id::SpatialId;
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::SingleId;
-    /// // 1457482000 秒は 30 分単位で 809712 番目のSegmentに入る。
-    /// let id = SingleId::new(12, 0, 3638, 1614).unwrap().time_with_at(1800, 1_457_482_000).unwrap();
+    /// let mut id = SingleId::new(12, 0, 3638, 1614).unwrap();
+    /// id.set_time(1800, 0).unwrap();
+    /// id.set_t(809712).unwrap();
     /// assert_eq!(id.to_string(), "12/0/3638/1614_1800/809712");
     /// # }
     /// ```
-    pub fn time_with_at<I>(self, interval: I, unix_seconds: u64) -> Result<Self, Error>
-    where
-        I: TryInto<Interval>,
-        Error: From<I::Error>,
-    {
-        let interval: Interval = interval.try_into()?;
-        self.time_with::<Interval>(interval, interval.index_of(unix_seconds))
-    }
-
-    /// 同じ絶対秒区間を、別の単位で表し直した自身を返す。
-    ///
-    /// 単位が変わっても指す時刻は変わらない。その単位で単一Segmentにならない場合は
-    /// [`SpatialIdError::TIntervalError`] を返す。
-    ///
-    /// ```
-    /// # use spatial_id::SpatialId;
-    /// # #[cfg(feature = "temporal_id")]
-    /// # {
-    /// # use spatial_id::{SingleId, time::Interval};
-    /// let id = SingleId::new(5, 3, 2, 10).unwrap().time_with(3600, 5).unwrap();
-    /// // 1時間ぶんは 1800 秒単位では 2 Segmentになるので単一にできない。
-    /// assert!(id.time_relabel(1800).is_err());
-    /// assert_eq!(id.time_relabel(Interval::HOUR).unwrap().t(), 5);
-    /// # }
-    /// ```
-    pub fn time_relabel<I>(self, interval: I) -> Result<Self, Error>
-    where
-        I: TryInto<Interval>,
-        Error: From<I::Error>,
-    {
-        let interval: Interval = interval.try_into()?;
-        let (start, end) = self.seconds_range();
-        let unit = interval.seconds();
-        if end - start != unit || !start.is_multiple_of(unit) {
-            return Err(SpatialIdError::TIntervalError { i: unit }.into());
-        }
-        Ok(self.time_with_unchecked(interval, start / unit))
+    pub fn set_t(&mut self, t: u64) -> Result<(), Error> {
+        self.set_time(self.i, t)
     }
 
     /// 時間の指定を外し、全時間へ戻した自身を返す。
@@ -240,7 +202,8 @@ impl SingleId {
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::{SingleId, SpatialId};
-    /// let id = SingleId::new(5, 3, 2, 10).unwrap().time_with(3600, 5).unwrap();
+    /// let mut id = SingleId::new(5, 3, 2, 10).unwrap();
+    /// id.set_time(3600, 5).unwrap();
     /// assert!(id.time_cleared().time_is_whole());
     /// # }
     /// ```

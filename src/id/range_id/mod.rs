@@ -5,7 +5,6 @@ pub mod random;
 #[cfg(test)]
 mod test;
 
-use crate::SpatialId;
 use crate::{
     Interval, SpatialIdError,
     error::Error,
@@ -125,9 +124,9 @@ impl RangeId {
         }
     }
 
-    /// 時間を設定した自身を返す（ビルダー形式）。
+    /// 時間 `{i}/{t}` を設定する。失敗したときは元の値を保つ。
     ///
-    /// [`SingleId::time_with`](crate::SingleId::time_with)が単一Segmentしか受け取らないのに対し、
+    /// [`SingleId::set_time`](crate::SingleId::set_time)が単一Segmentしか受け取らないのに対し、
     /// こちらは空間と同じく**範囲**を受け取る。`t` は `[min, max]` の `[u64; 2]`、または
     /// 両端が等しい単一の `u64` のどちらでも渡せる（f/x/y 引数と同じ考え方）。
     ///
@@ -148,17 +147,17 @@ impl RangeId {
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::{RangeId, time::Interval};
-    /// let id = RangeId::new(4, [-3, 6], [8, 9], [5, 10]).unwrap()
-    ///     .time_with(Interval::HOUR, [5, 8]).unwrap();
+    /// let mut id = RangeId::new(4, [-3, 6], [8, 9], [5, 10]).unwrap();
+    /// id.set_time(Interval::HOUR, [5, 8]).unwrap();
     /// assert_eq!(id.to_string(), "4/-3:6/8:9/5:10_3600/5:8");
     ///
     /// // 単一の時刻も渡せる。
-    /// let single = RangeId::new(4, [-3, 6], [8, 9], [5, 10]).unwrap()
-    ///     .time_with(Interval::HOUR, 5).unwrap();
+    /// let mut single = RangeId::new(4, [-3, 6], [8, 9], [5, 10]).unwrap();
+    /// single.set_time(Interval::HOUR, 5).unwrap();
     /// assert_eq!(single.to_string(), "4/-3:6/8:9/5:10_3600/5");
     /// # }
     /// ```
-    pub fn time_with<I, T>(self, interval: I, t: T) -> Result<Self, Error>
+    pub fn set_time<I, T>(&mut self, interval: I, t: T) -> Result<(), Error>
     where
         I: TryInto<Interval>,
         Error: From<I::Error>,
@@ -171,37 +170,29 @@ impl RangeId {
         }
 
         interval.validated_span(t[0], t[1])?;
-        Ok(self.time_with_unchecked(interval, t))
+        *self = self.time_with_unchecked(interval, t);
+        Ok(())
     }
 
-    /// 同じ絶対秒区間を、別の単位で表し直した自身を返す。
+    /// 時間間隔 `{i}` を保ったまま、時間インデックス `{t}` を設定する。失敗したときは元の値を保つ。
     ///
-    /// 単位が変わっても指す区間は変わらない。その単位で割り切れない場合は
-    /// [`SpatialIdError::TIntervalError`] を返す。
+    /// `t` は `[min, max]` の `[u64; 2]`、または両端が等しい単一の `u64` のどちらでも渡せる。
     ///
     /// ```
-    /// # use spatial_id::SpatialId;
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::{RangeId, time::Interval};
-    /// let id = RangeId::new(4, 0, 0, 0).unwrap().time_with(Interval::HOUR, [0, 1]).unwrap();
-    /// assert_eq!(id.time_relabel(1800).unwrap().t(), [0, 3]);
-    /// // 2時間ぶんは1日単位では表せない。
-    /// assert!(id.time_relabel(Interval::DAY).is_err());
+    /// let mut id = RangeId::new(4, 0, 0, 0).unwrap();
+    /// id.set_time(Interval::HOUR, 0).unwrap();
+    /// id.set_t([2, 5]).unwrap();
+    /// assert_eq!(id.t(), [2, 5]);
     /// # }
     /// ```
-    pub fn time_relabel<I>(self, interval: I) -> Result<Self, Error>
+    pub fn set_t<T>(&mut self, t: T) -> Result<(), Error>
     where
-        I: TryInto<Interval>,
-        Error: From<I::Error>,
+        T: helpers::IntoRange<u64>,
     {
-        let interval: Interval = interval.try_into()?;
-        let (start, end) = self.seconds_range();
-        let unit = interval.seconds();
-        if !start.is_multiple_of(unit) || !end.is_multiple_of(unit) {
-            return Err(SpatialIdError::TIntervalError { i: unit }.into());
-        }
-        Ok(self.time_with_unchecked(interval, [start / unit, end / unit - 1]))
+        self.set_time(self.i, t)
     }
 
     /// 時間の指定を外し、全時間へ戻した自身を返す。
@@ -211,7 +202,8 @@ impl RangeId {
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::{RangeId, SpatialId, time::Interval};
-    /// let id = RangeId::new(4, 0, 0, 0).unwrap().time_with(Interval::HOUR, [0, 1]).unwrap();
+    /// let mut id = RangeId::new(4, 0, 0, 0).unwrap();
+    /// id.set_time(Interval::HOUR, [0, 1]).unwrap();
     /// assert!(id.time_cleared().time_is_whole());
     /// # }
     /// ```

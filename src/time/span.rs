@@ -82,17 +82,25 @@ impl TimeSpan {
         a
     }
 
-    /// この区間を、それをちょうど表せる最も粗い単位と `{t}` の範囲へ直す。
-    pub fn to_interval_range(self) -> Result<(Interval, u64, u64), Error> {
-        let unit = self.coarsest_unit();
-        let interval = Interval::new(unit)?;
-        Ok((interval, self.start / unit, self.end / unit - 1))
-    }
-
-    /// この区間を `id` の時間として設定した [`RangeId`](crate::RangeId) を返す。単位は区間をちょうど表せる最も粗いもの。
-    pub(crate) fn apply_to(self, id: crate::RangeId) -> Result<crate::RangeId, Error> {
-        let (interval, t_min, t_max) = self.to_interval_range()?;
-        id.time_with(interval, [t_min, t_max])
+    /// この区間を `id` の時間として設定した [`RangeId`](crate::RangeId) を返す。
+    ///
+    /// `interval` が `None` のときは、区間をちょうど表せる最も粗い単位を使う。
+    /// 指定した単位で区間が割り切れない場合は [`SpatialIdError::TIntervalError`](crate::SpatialIdError::TIntervalError) を返す。
+    pub(crate) fn apply_to(
+        self,
+        mut id: crate::RangeId,
+        interval: Option<Interval>,
+    ) -> Result<crate::RangeId, Error> {
+        let interval = match interval {
+            Some(interval) => interval,
+            None => Interval::new(self.coarsest_unit())?,
+        };
+        let unit = interval.seconds();
+        if !self.start.is_multiple_of(unit) || !self.end.is_multiple_of(unit) {
+            return Err(crate::SpatialIdError::TIntervalError { i: unit }.into());
+        }
+        id.set_time(interval, [self.start / unit, self.end / unit - 1])?;
+        Ok(id)
     }
 
     /// 区間木的に高々 `O(log 幅)` 個の2分岐 TimeSegment へ分解する。

@@ -60,11 +60,11 @@ fn build_range_id(
     y: [u32; 2],
     temporal_pair: Option<(u64, [u64; 2])>,
 ) -> Result<RangeId, crate::Error> {
-    let id = RangeId::new(z, f, x, y)?;
-    match temporal_pair {
-        Some((i, t)) => id.time_with(i, t),
-        None => Ok(id),
+    let mut id = RangeId::new(z, f, x, y)?;
+    if let Some((i, t)) = temporal_pair {
+        id.set_time(i, t)?;
     }
+    Ok(id)
 }
 
 impl Serialize for IdEntry {
