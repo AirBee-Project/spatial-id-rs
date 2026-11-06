@@ -139,7 +139,7 @@ impl<V> FlexTreeCore<V> {
             shifted.push(x.into());
         }
 
-        let own: Vec<FlexId> = target.into_iter().collect();
+        let own: Vec<FlexId> = target.flex_ids().collect();
         self.get_overlapping(shifted).filter(move |(leaf, _)| {
             own.iter().all(|o| !leaf.intersects(o))
                 && own.iter().any(|o| o.spatial_is_face_neighbor(leaf))

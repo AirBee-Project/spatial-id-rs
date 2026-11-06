@@ -47,7 +47,7 @@ where
         Self {
             inner: par_iter
                 .into_par_iter()
-                .flat_map_iter(|id| id.into_iter().map(|flex_id| (flex_id, ())))
+                .flat_map_iter(|id| id.flex_ids().map(|flex_id| (flex_id, ())))
                 .collect(),
         }
     }
@@ -67,7 +67,7 @@ where
         self.inner.par_extend(
             par_iter
                 .into_par_iter()
-                .flat_map_iter(|id| id.into_iter().map(|flex_id| (flex_id, ()))),
+                .flat_map_iter(|id| id.flex_ids().map(|flex_id| (flex_id, ()))),
         );
     }
 }

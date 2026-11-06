@@ -10,7 +10,7 @@ mod par_build {
             .flat_map(|i| {
                 SingleId::new(20, 0, (i * 2) as u32, (i % 11) as u32)
                     .unwrap()
-                    .into_iter()
+                    .flex_ids()
                     .map(move |f| (f, i % 13)) // 値は 0..13 を循環＝同値が多数
             })
             .collect()

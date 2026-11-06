@@ -137,7 +137,7 @@ impl SingleId {
     /// 場合は [`RangeId::time_with`](crate::RangeId::time_with) を使う。
     ///
     /// FlexTreeが内部で必要とする2の冪秒のSegmentへの分解は、木へ挿入する段階
-    /// （[`IntoIterator`]による[`FlexId`](crate::FlexId)への展開）で自動的に行われる。
+    /// （[`flex_ids`](crate::SpatialId::flex_ids)による[`FlexId`](crate::FlexId)への展開）で自動的に行われる。
     ///
     /// # バリデーション
     /// - `interval` が負、`0`、または [`Interval::MAX_SECONDS`] を超える場合は

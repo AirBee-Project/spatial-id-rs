@@ -331,7 +331,7 @@ fn get_clips_and_get_overlapping_does_not() {
     table.insert(coarse, 7);
     let query = table.query();
     let target = crate::SingleId::new(20, 1, 101, 2).unwrap();
-    let target_id = target.into_iter().next().unwrap();
+    let target_id = target.flex_ids().next().unwrap();
 
     let clipped: Vec<_> = query
         .get(target)

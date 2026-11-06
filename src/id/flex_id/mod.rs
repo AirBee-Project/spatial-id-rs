@@ -180,7 +180,7 @@ impl FlexId {
     ///
     /// 任意秒数の間隔（`1800` など）を [`FlexId`] の集合として扱いたい場合は
     /// [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) に付けてから
-    /// [`IntoIterator`] で展開する（必要な数のSegmentへ自動的に分解される）。
+    /// [`SingleId::flex_ids`](crate::SingleId::flex_ids) などで展開する（必要な数のSegmentへ自動的に分解される）。
     ///
     /// # バリデーション
     /// - `t_zoomlevel` が `35` を超える場合は [`crate::SpatialIdError::ZOutOfRange`] を返す。

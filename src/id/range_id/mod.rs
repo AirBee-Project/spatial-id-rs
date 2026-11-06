@@ -132,7 +132,7 @@ impl RangeId {
     /// 両端が等しい単一の `u64` のどちらでも渡せる（f/x/y 引数と同じ考え方）。
     ///
     /// FlexTreeが必要とする2の冪秒のSegmentへの分解は、木へ挿入する段階
-    /// （[`IntoIterator`]による[`FlexId`](crate::FlexId)への展開）で自動的に行われる。
+    /// （[`flex_ids`](crate::SpatialId::flex_ids)による[`FlexId`](crate::FlexId)への展開）で自動的に行われる。
     ///
     ///
     /// ## 動作コスト

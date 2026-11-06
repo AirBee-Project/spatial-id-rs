@@ -135,12 +135,9 @@ impl Iterator for RangeIdFlexIds {
     }
 }
 
-/// この [`RangeId`] を [FlexId]に分解する。
-impl IntoIterator for RangeId {
-    type Item = FlexId;
-    type IntoIter = RangeIdFlexIds;
-
-    fn into_iter(self) -> Self::IntoIter {
+impl RangeId {
+    /// この [`RangeId`] を [FlexId]に分解する。
+    pub fn flex_ids(self) -> RangeIdFlexIds {
         let z = self.z.get();
         // X は最大値を越えて 0 へ回り込む範囲を取れるので、回り込む前と後の2つに分ける
         let x_start = if self.x[0] <= self.x[1] {
@@ -315,7 +312,7 @@ mod tests {
                     }
                 }
             }
-            assert_eq!(id.into_iter().collect::<Vec<_>>(), expected, "{id}");
+            assert_eq!(id.flex_ids().collect::<Vec<_>>(), expected, "{id}");
         }
     }
 
@@ -327,6 +324,6 @@ mod tests {
         let xy_max = ZoomLevel::MAX.xy_max();
 
         let id = SingleId::new(z, f_max, xy_max, xy_max).unwrap();
-        assert_eq!(id.into_iter().count(), 1);
+        assert_eq!(id.flex_ids().count(), 1);
     }
 }

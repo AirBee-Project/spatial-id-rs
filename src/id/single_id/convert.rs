@@ -31,11 +31,8 @@ impl Iterator for SingleIdFlexIds {
 /// 空間部分は常にちょうど1Segmentだが、時間部分は仕様通り任意の秒数の間隔を取れるため、2の冪秒の
 /// Segmentへ分解すると複数個になりうる（例: 30分間隔なら最大10個）。そのため戻り値はイテレータで、
 /// 全要素を合わせて元の [`SingleId`] の時空間領域をちょうど覆う。
-impl IntoIterator for SingleId {
-    type Item = FlexId;
-    type IntoIter = SingleIdFlexIds;
-
-    fn into_iter(self) -> Self::IntoIter {
+impl SingleId {
+    pub fn flex_ids(self) -> SingleIdFlexIds {
         SingleIdFlexIds {
             // `SingleId` は3軸とも同じズームで、各インデックスは構築時に検証済み。
             base: unsafe {

@@ -268,6 +268,10 @@ impl SpatialId for SingleId {
         self.spatial_parent_at_zoom(target_z)
     }
 
+    fn flex_ids(self) -> impl Iterator<Item = crate::FlexId> {
+        self.flex_ids()
+    }
+
     fn single_ids(self) -> impl Iterator<Item = SingleId> {
         self.single_ids()
     }

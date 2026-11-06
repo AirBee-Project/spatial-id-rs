@@ -62,23 +62,22 @@ impl SpatialIdSet {
     /// set.insert(flex);
     /// ```
     pub fn insert<S: SpatialId>(&mut self, target: S) {
-        self.inner.insert(target, ());
+        self.inner.insert(target.flex_ids(), ());
     }
 
     /// 集合から指定した空間IDと重なる空間IDを切り出して返す。
-    pub fn get<'a, S: SpatialId<IntoIter: 'a>>(
-        &'a self,
-        target: S,
-    ) -> impl Iterator<Item = RangeId> + 'a {
+    pub fn get<'a, S: SpatialId + 'a>(&'a self, target: S) -> impl Iterator<Item = RangeId> + 'a {
         self.get_flex_ids(target).map(RangeId::from)
     }
 
     /// [`get`](Self::get) と同じだが、結果を [`FlexId`] で返す。
-    pub fn get_flex_ids<'a, S: SpatialId<IntoIter: 'a>>(
+    pub fn get_flex_ids<'a, S: SpatialId + 'a>(
         &'a self,
         target: S,
     ) -> impl Iterator<Item = FlexId> + 'a {
-        self.inner.get(target).map(|(flex_id, _)| flex_id)
+        self.inner
+            .get(target.flex_ids())
+            .map(|(flex_id, _)| flex_id)
     }
 
     /// 集合から指定した空間IDと重なる空間IDを切り出して削除する。削除した部分の空間IDを返す。
@@ -94,7 +93,7 @@ impl SpatialIdSet {
         target: S,
     ) -> impl Iterator<Item = FlexId> + use<S> {
         self.inner
-            .remove(target)
+            .remove(target.flex_ids())
             .into_iter()
             .map(|(flex_id, _)| flex_id)
     }
@@ -132,7 +131,7 @@ impl SpatialIdSet {
         target: S,
     ) -> impl Iterator<Item = FlexId> + use<S> {
         self.inner
-            .remove_overlapping(target)
+            .remove_overlapping(target.flex_ids())
             .into_iter()
             .map(|(flex_id, _)| flex_id)
     }
