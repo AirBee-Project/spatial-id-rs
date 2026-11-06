@@ -218,9 +218,41 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # Ok::<(), spatial_id::Error>(())
     /// ```
     ///
+    /// 全体を評価して [`SpatialIdMap`](crate::SpatialIdMap) や [`SpatialIdSet`](crate::SpatialIdSet) で受け取るだけなら、[`Query::into_map`] と [`Query::into_set`] で `get(..)` を省ける。
+    ///
     /// 評価を途中で打ち切りたいときは [`get_cancellable`](Self::get_cancellable) を使う。
     pub fn get(&self, targets: impl IntoTargets) -> QueryOutput<'_, V> {
         self.get_cancellable(targets, &CancellationToken::never())
+    }
+
+    /// Query を全体で評価し、結果を [`SpatialIdMap`](crate::SpatialIdMap) にして返す。
+    ///
+    /// `self.get(..).into_map()` と同じ。範囲を指定するときや、結果を順に読むときは [`get`](Self::get) を使う。
+    ///
+    /// ```
+    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::query::Source;
+    /// # let table = SpatialIdMap::<u32>::new();
+    /// let map = table.query().filter_in(10..20).into_map()?;
+    /// # Ok::<(), spatial_id::Error>(())
+    /// ```
+    pub fn into_map(self) -> Result<crate::SpatialIdMap<V>, Error> {
+        self.get(..).into_map()
+    }
+
+    /// Query を全体で評価し、結果を [`SpatialIdSet`](crate::SpatialIdSet) にして返す。
+    ///
+    /// `self.get(..).into_set()` と同じ。
+    ///
+    /// ```
+    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::query::Source;
+    /// # let table = SpatialIdMap::<u32>::new();
+    /// let set = table.query().filter_in(10..20).into_set()?;
+    /// # Ok::<(), spatial_id::Error>(())
+    /// ```
+    pub fn into_set(self) -> Result<crate::SpatialIdSet, Error> {
+        self.get(..).into_set()
     }
 
     /// [`get`](Self::get) と同じく評価する。`token` がキャンセルされると、評価の途中で気づき次第 [`QueryError::Cancelled`] を返す。
