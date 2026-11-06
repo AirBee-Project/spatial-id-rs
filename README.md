@@ -43,15 +43,15 @@ let set = sphere.cover_set(25)?;                             // ズームレベ�
 
 ほかの図形も同じように変換できます。
 
-|            `Coordinate`             |               `Line`                |
-| :---------------------------------: | :---------------------------------: |
-|  ![](docs/images/point_cover.jpg)   |   ![](docs/images/line_cover.jpg)   |
-|           **`Triangle`**            |            **`Polygon`**            |
-| ![](docs/images/triangle_cover.jpg) | ![](docs/images/polygon_cover.jpg)  |
-|             **`Solid`**             |           **`Cylinder`**            |
-|  ![](docs/images/solid_cover.jpg)   | ![](docs/images/cylinder_cover.jpg) |
-|             **`Tube`**              |       **`geojson::GeoJson`**        |
-|   ![](docs/images/tube_cover.jpg)   | ![](docs/images/geojson_cover.jpg)  |
+|                      `Coordinate`                      |                         `Line`                         |
+| :----------------------------------------------------: | :----------------------------------------------------: |
+|  <img src="docs/images/point_cover.jpg" width="360">   |   <img src="docs/images/line_cover.jpg" width="360">   |
+|                     **`Triangle`**                     |                     **`Polygon`**                      |
+| <img src="docs/images/triangle_cover.jpg" width="360"> | <img src="docs/images/polygon_cover.jpg" width="360">  |
+|                      **`Solid`**                       |                     **`Cylinder`**                     |
+|  <img src="docs/images/solid_cover.jpg" width="360">   | <img src="docs/images/cylinder_cover.jpg" width="360"> |
+|                       **`Tube`**                       |                 **`geojson::GeoJson`**                 |
+|   <img src="docs/images/tube_cover.jpg" width="360">   | <img src="docs/images/geojson_cover.jpg" width="360">  |
 
 ## 時空間データの加工
 
