@@ -54,7 +54,7 @@ mod tests {
         assert_eq!(via_wrapped_count, via_full_count);
     }
 
-    /// value_range() / value_set() / filter_values() が値に基づいて動くことを検証する。
+    /// value_range() / filter_values() が値に基づいて動くことを検証する。
     #[test]
     fn value_queries_return_expected() {
         let table = build_table(&[
@@ -64,9 +64,10 @@ mod tests {
         ]);
 
         assert_eq!(table.value_range(), Some((&10, &30)));
-        assert_eq!(table.value_set(), [10, 20, 30].into());
         let picked = table.filter_values(&[10, 30].into());
-        assert_eq!(picked.value_set(), [10, 30].into());
+        let mut values: Vec<_> = picked.iter().map(|(_, value)| *value).collect();
+        values.sort_unstable();
+        assert_eq!(values, [10, 30]);
     }
 
     /// filter_range() が値の範囲条件に一致する組だけを返すことを検証する。

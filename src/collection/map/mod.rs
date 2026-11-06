@@ -283,11 +283,6 @@ impl<V: Ord + Clone> SpatialIdMap<V> {
         }
     }
 
-    /// テーブル全体に現れる値の集合。
-    pub fn value_set(&self) -> BTreeSet<V> {
-        self.inner.value_set()
-    }
-
     /// 値が `values` に含まれる領域だけを残したテーブルを作る。
     pub fn filter_values(&self, values: &BTreeSet<V>) -> Self {
         Self {
