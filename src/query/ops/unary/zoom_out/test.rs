@@ -86,7 +86,7 @@ fn zoom_out_multiple_parents_commutative_and_non_commutative() {
         .get(..)
         .into_map()
         .unwrap()
-        .iter()
+        .iter_flex_ids()
         .map(|(id, v)| (id, *v))
         .collect();
 
@@ -96,7 +96,7 @@ fn zoom_out_multiple_parents_commutative_and_non_commutative() {
         .get(..)
         .into_map()
         .unwrap()
-        .iter()
+        .iter_flex_ids()
         .map(|(id, v)| (id, *v))
         .collect();
 
@@ -279,7 +279,7 @@ fn zoom_out_sum_matches_inserting_each_parent() {
             .unwrap();
 
         let mut expected = SpatialIdMap::<i32>::new();
-        for (id, &v) in table.iter() {
+        for (id, &v) in table.iter_flex_ids() {
             let parent = id.spatial_parent_at_zoom(target_z).unwrap();
             expected.insert_with(parent, v, |a, b| a + b);
         }

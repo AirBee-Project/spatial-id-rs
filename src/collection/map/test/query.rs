@@ -15,7 +15,7 @@ mod tests {
         ]);
 
         let actual: Vec<_> = table
-            .get(first)
+            .get_flex_ids(first)
             .map(|(flex_id, value)| (flex_id, *value))
             .collect();
         assert_eq!(actual.len(), 1);

@@ -103,7 +103,7 @@ impl<V: SafeValue + 'static> Iterator for QueryOutput<'_, V> {
                 Some(clipper) => {
                     let start = self.pending.len();
                     self.pending
-                        .extend(clipper.get(id).map(|piece| (piece, value.clone())));
+                        .extend(clipper.get_flex_ids(id).map(|piece| (piece, value.clone())));
                     self.pending[start..].reverse();
                 }
             }

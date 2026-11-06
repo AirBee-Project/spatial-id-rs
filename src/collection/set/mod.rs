@@ -69,6 +69,14 @@ impl SpatialIdSet {
     pub fn get<'a, S: SpatialId<IntoIter: 'a>>(
         &'a self,
         target: S,
+    ) -> impl Iterator<Item = RangeId> + 'a {
+        self.get_flex_ids(target).map(RangeId::from)
+    }
+
+    /// [`get`](Self::get) と同じだが、結果を [`FlexId`] で返す。
+    pub fn get_flex_ids<'a, S: SpatialId<IntoIter: 'a>>(
+        &'a self,
+        target: S,
     ) -> impl Iterator<Item = FlexId> + 'a {
         self.inner.get(target).map(|(flex_id, _)| flex_id)
     }
@@ -76,7 +84,15 @@ impl SpatialIdSet {
     /// 集合から指定した空間IDと重なる空間IDを切り出して削除する。削除した部分の空間IDを返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターは集合を借用しない。
-    pub fn remove<S: SpatialId>(&mut self, target: S) -> impl Iterator<Item = FlexId> + use<S> {
+    pub fn remove<S: SpatialId>(&mut self, target: S) -> impl Iterator<Item = RangeId> + use<S> {
+        self.remove_flex_ids(target).map(RangeId::from)
+    }
+
+    /// [`remove`](Self::remove) と同じだが、削除した部分を [`FlexId`] で返す。
+    pub fn remove_flex_ids<S: SpatialId>(
+        &mut self,
+        target: S,
+    ) -> impl Iterator<Item = FlexId> + use<S> {
         self.inner
             .remove(target)
             .into_iter()
@@ -84,18 +100,34 @@ impl SpatialIdSet {
     }
 
     /// 指定した空間IDと接触していたすべての空間IDを返す。
-    /// [`get`](Self::get) と異なり切り取りを行わず、target と重なった [`FlexId`] をそのままの返す。
-    pub fn get_overlapping<S: SpatialId>(&self, target: S) -> impl Iterator<Item = FlexId> + '_ {
+    /// [`get`](Self::get) と異なり切り取りを行わず、target と重なった空間IDをそのまま返す。
+    pub fn get_overlapping<S: SpatialId>(&self, target: S) -> impl Iterator<Item = RangeId> + '_ {
+        self.get_overlapping_flex_ids(target).map(RangeId::from)
+    }
+
+    /// [`get_overlapping`](Self::get_overlapping) と同じだが、結果を [`FlexId`] で返す。
+    pub fn get_overlapping_flex_ids<S: SpatialId>(
+        &self,
+        target: S,
+    ) -> impl Iterator<Item = FlexId> + '_ {
         self.inner
             .get_overlapping([target])
             .map(|(flex_id, _)| flex_id)
     }
 
     /// 指定した空間IDと接触していたすべての空間IDを削除する。削除した空間IDを返す。
-    /// [`remove`](Self::remove) と異なり切り取りを行わず、target と重なった [`FlexId`] をそのまま返す。
+    /// [`remove`](Self::remove) と異なり切り取りを行わず、target と重なった空間IDをそのまま返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターは集合を借用しない。
     pub fn remove_overlapping<S: SpatialId>(
+        &mut self,
+        target: S,
+    ) -> impl Iterator<Item = RangeId> + use<S> {
+        self.remove_overlapping_flex_ids(target).map(RangeId::from)
+    }
+
+    /// [`remove_overlapping`](Self::remove_overlapping) と同じだが、削除した空間IDを [`FlexId`] で返す。
+    pub fn remove_overlapping_flex_ids<S: SpatialId>(
         &mut self,
         target: S,
     ) -> impl Iterator<Item = FlexId> + use<S> {
@@ -105,8 +137,17 @@ impl SpatialIdSet {
             .map(|(flex_id, _)| flex_id)
     }
 
-    /// 指定した単体の空間 IDと面で接している[`FlexId`] を重複なく返す。入力された空間ID自身と重なる空間IDは除外する。
+    /// 指定した単体の空間 IDと面で接している空間IDを重複なく返す。入力された空間ID自身と重なる空間IDは除外する。
     pub fn spatial_face_neighbors<S: SpatialId>(
+        &self,
+        target: S,
+    ) -> impl Iterator<Item = RangeId> + '_ {
+        self.spatial_face_neighbors_flex_ids(target)
+            .map(RangeId::from)
+    }
+
+    /// [`spatial_face_neighbors`](Self::spatial_face_neighbors) と同じだが、結果を [`FlexId`] で返す。
+    pub fn spatial_face_neighbors_flex_ids<S: SpatialId>(
         &self,
         target: S,
     ) -> impl Iterator<Item = FlexId> + '_ {
@@ -183,16 +224,29 @@ impl SpatialIdSet {
         self.inner.is_empty()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = FlexId> + Clone + '_ {
+    /// 集合が保持するすべての空間IDを返す。
+    pub fn iter(&self) -> impl Iterator<Item = RangeId> + Clone + '_ {
+        self.iter_flex_ids().map(RangeId::from)
+    }
+
+    /// [`iter`](Self::iter) と同じだが、木が保持する [`FlexId`] をそのまま返す。
+    pub fn iter_flex_ids(&self) -> impl Iterator<Item = FlexId> + Clone + '_ {
         self.inner.iter().map(|(flex_id, _)| flex_id)
+    }
+
+    /// [`into_iter`](IntoIterator::into_iter) と同じだが、木が保持する [`FlexId`] をそのまま返す。
+    pub fn into_iter_flex_ids(self) -> impl Iterator<Item = FlexId> {
+        self.inner.into_iter().map(|(flex_id, ())| flex_id)
     }
 }
 
 impl IntoIterator for SpatialIdSet {
-    type Item = FlexId;
-    type IntoIter = Map<IntoIter<()>, fn((FlexId, ())) -> FlexId>;
+    type Item = RangeId;
+    type IntoIter = Map<IntoIter<()>, fn((FlexId, ())) -> RangeId>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.inner.into_iter().map(|(flex_id, ())| flex_id)
+        self.inner
+            .into_iter()
+            .map(|(flex_id, ())| RangeId::from(flex_id))
     }
 }
