@@ -10,6 +10,8 @@ use alloc::vec::Vec;
 /// 検証や評価の開始に失敗すると、最初の要素として [`Err`] を返して終わる。
 /// 読み出しや演算に失敗すると、その位置で [`Err`] を返す。
 ///
+/// 要素は [`RangeId`] で返す。木が保持する [`FlexId`] のまま受け取るには [`QueryOutput::into_flex_ids`] を使う。
+///
 /// 返す要素は互いに素である。全体を評価したときと [`Query::get_overlapping`] の結果は FlexId の Z-order 列になるが、
 /// [`Query::get`] で `targets` に切り取った結果は、`targets` の形によって順序が前後することがある。
 pub struct QueryOutput<'a, V: SafeValue + 'static> {
@@ -49,12 +51,22 @@ impl<'a, V: SafeValue + 'static> QueryOutput<'a, V> {
 
     /// 結果を [`SpatialIdMap`] にして返す。
     pub fn into_map(self) -> Result<SpatialIdMap<V>, Error> {
-        self.collect()
+        self.into_flex_ids().collect()
     }
 
     /// 結果を [`SpatialIdSet`] にして返す。
     pub fn into_set(self) -> Result<SpatialIdSet, Error> {
-        self.map(|res| res.map(|(id, _)| id)).collect()
+        self.into_flex_ids()
+            .map(|res| res.map(|(id, _)| id))
+            .collect()
+    }
+
+    /// 結果を [`FlexId`] で順に返すイテレーターにする。
+    ///
+    /// 要素の順序や評価の進み方、エラーの返し方は、この [`QueryOutput`] 自身を読む場合と同じ。
+    /// [`QueryOutput`] 自身は同じ領域を [`RangeId`] で返す。
+    pub fn into_flex_ids(mut self) -> impl Iterator<Item = Result<(FlexId, V), Error>> + 'a {
+        core::iter::from_fn(move || self.next_flex())
     }
 
     fn start(&mut self) -> Result<QueryIter<'a, V>, Error> {
@@ -67,9 +79,18 @@ impl<'a, V: SafeValue + 'static> QueryOutput<'a, V> {
 }
 
 impl<V: SafeValue + 'static> Iterator for QueryOutput<'_, V> {
-    type Item = Result<(FlexId, V), Error>;
+    type Item = Result<(RangeId, V), Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        Some(
+            self.next_flex()?
+                .map(|(id, value)| (RangeId::from(id), value)),
+        )
+    }
+}
+
+impl<V: SafeValue + 'static> QueryOutput<'_, V> {
+    fn next_flex(&mut self) -> Option<Result<(FlexId, V), Error>> {
         if self.stream.is_none() {
             if self.finished {
                 return None;
