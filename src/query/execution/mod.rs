@@ -42,8 +42,9 @@ impl<V: SafeValue + 'static> Query<V> {
 impl<V: SafeValue + 'static> Query<V> {
     /// Query を評価し、`targets` の中にある部分を返す。
     ///
-    /// 戻り値の [`QueryOutput`] は `Result<(FlexId, V), Error>` を返すイテレーターで、
+    /// 戻り値の [`QueryOutput`] は `Result<(RangeId, V), Error>` を返すイテレーターで、
     /// 評価は最初の要素を読むときに始まり、読んだ分だけ進む。
+    /// 木が保持する [`FlexId`](crate::FlexId) のまま受け取るには [`QueryOutput::into_flex_ids`] を使う。
     /// まとめて [`SpatialIdMap`](crate::SpatialIdMap) で受け取るには [`QueryOutput::into_map`] を、[`SpatialIdSet`](crate::SpatialIdSet) で受け取るには [`QueryOutput::into_set`] を使う。
     ///
     /// # 評価する範囲の指定
@@ -153,7 +154,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// ```
     ///
     /// 返す要素は `targets` で切り取る。`targets` が互いに重なっていても、同じ場所を2回返すことはない。
-    /// 切り取った要素は互いに素だが、FlexId の Z-order 列になるとは限らない。
+    /// 切り取った要素は互いに素だが、FlexId の Z-order 列になるとは限らない（並びは [`RangeId`] にしても変わらない）。
     /// 切り取らずに、`targets` と交差する要素をそのまま受け取るには [`get_overlapping`](Self::get_overlapping) を使う。
     ///
     /// # 結果の受け取り方

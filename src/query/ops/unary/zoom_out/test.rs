@@ -189,7 +189,7 @@ fn zoom_out_merges_same_parent_split_by_finer_t() {
         table.clone().query().zoom_out(5, Sum).get(..),
         table.clone().query().zoom_out(5, Average).get(..),
     ] {
-        let out: Vec<_> = out.collect::<Result<_, _>>().unwrap();
+        let out: Vec<_> = out.into_flex_ids().collect::<Result<_, _>>().unwrap();
         let parent = FlexId::new(5, 0, 5, 0, 5, 0).unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].0, parent.time_with_segment(6, 0).unwrap());
