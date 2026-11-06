@@ -60,7 +60,7 @@ impl<V> FlexTreeCore<V> {
     ///
     /// キャッシュを持たず、値を持つ全ての[FlexId]を走査する（O(n)）。
     pub fn max_zoomlevel(&self) -> Option<ZoomLevel> {
-        self.iter().map(|(id, _)| id.max_spatial_zoomlevel()).max()
+        self.iter().map(|(id, _)| id.spatial_max_zoomlevel()).max()
     }
 
     /// 全ての値を消す。
@@ -142,7 +142,7 @@ impl<V> FlexTreeCore<V> {
         let own: Vec<FlexId> = target.into_iter().collect();
         self.get_overlapping(shifted).filter(move |(leaf, _)| {
             own.iter().all(|o| !leaf.intersects(o))
-                && own.iter().any(|o| o.is_spatial_face_neighbor(leaf))
+                && own.iter().any(|o| o.spatial_is_face_neighbor(leaf))
         })
     }
 

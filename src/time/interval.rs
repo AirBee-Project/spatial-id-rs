@@ -1,7 +1,6 @@
 //! 時間間隔 `{i}`を表す型に関する実装
 
-use super::{segment::TimeSegment, span::TimeSpan};
-use crate::id::zoom_level::TZoomLevel;
+use super::span::TimeSpan;
 use crate::{SpatialIdError, error::Error};
 
 /// 時間 ID の時間間隔 `{i}`（秒数）を表現する型。
@@ -159,40 +158,6 @@ impl Interval {
         TimeSpan::new(t_min * unit, end)
             .ok_or_else(|| SpatialIdError::TOutOfRange { i: unit, t: t_max }.into())
     }
-
-    /// `{i}` と `{t}` を、[`FlexId`](crate::FlexId) が保持できる2分岐Segmentへ直す。
-    ///
-    /// [`FlexId`](crate::FlexId) は木のノードアドレスなので `2^(35 - zoom)` 秒のSegment1個しか
-    /// 持てない。`{i}` が2の冪でなければ1個のSegmentにならないため
-    /// [`SpatialIdError::TIntervalError`] を返す（複数Segmentへ分けたい場合は
-    /// [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) に付けてから
-    /// [`IntoIterator`] で展開する）。
-    pub(crate) fn as_segment(&self, t: u64) -> Result<TimeSegment, Error> {
-        let seconds = self.seconds();
-        if !seconds.is_power_of_two() {
-            return Err(SpatialIdError::TIntervalError { i: seconds }.into());
-        }
-
-        // 幅 `2^k` 秒のSegmentはズーム `MAX - k`。`seconds <= 2^MAX` なので `k <= MAX`。
-        let zoom = TZoomLevel::MAX.get() - seconds.trailing_zeros() as u8;
-        let t_zoom = TZoomLevel::new(zoom)?;
-        t_zoom.check_index(t)?;
-        Ok(TimeSegment::new(t_zoom, t))
-    }
-
-    /// 検証済みの秒数から直接構築する。
-    pub(crate) const fn from_seconds_unchecked(seconds: u64) -> Interval {
-        #[cfg(feature = "temporal_id")]
-        {
-            Interval(seconds)
-        }
-
-        #[cfg(not(feature = "temporal_id"))]
-        {
-            debug_assert!(seconds == Self::MAX_SECONDS);
-            Interval
-        }
-    }
 }
 
 impl Default for Interval {
@@ -293,21 +258,21 @@ mod tests {
 mod api_symmetry {
     use crate::{FlexId, Interval, RangeId, SingleId, SpatialId};
 
-    /// `with_time` は3型とも同じ名前・同じ [`Result`] で、`{i}/{t}` を受ける。
+    /// `time_with` は3型とも同じ名前・同じ [`Result`] で、`{i}/{t}` を受ける。
     #[test]
     fn with_time_is_available_on_every_type() {
         let single = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(1024, 7)
+            .time_with(1024, 7)
             .unwrap();
         let range = RangeId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(1024, 7)
+            .time_with(1024, 7)
             .unwrap();
         // FlexId だけは母語（ズーム）で指定する。ズーム25 = 2^(35-25) = 1024 秒幅。
         let flex = FlexId::new(4, 0, 4, 1, 4, 1)
             .unwrap()
-            .with_time_segment(25, 7)
+            .time_with_segment(25, 7)
             .unwrap();
 
         // 同じ `{i}/{t}` を指定したので、占める秒区間も一致する。
@@ -322,104 +287,51 @@ mod api_symmetry {
     fn interval_argument_accepts_every_spelling() {
         let by_const = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(Interval::HOUR, 3)
+            .time_with(Interval::HOUR, 3)
             .unwrap();
         let by_literal = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(3600, 3)
+            .time_with(3600, 3)
             .unwrap();
         let by_u64 = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(3600u64, 3)
+            .time_with(3600u64, 3)
             .unwrap();
 
         assert_eq!(by_const, by_literal);
         assert_eq!(by_const, by_u64);
     }
 
-    /// Unix 時刻から時間を決める入口は3型ともある。[`FlexId`] だけはズームで粒度を指定するので
-    /// `with_time_segment_at` という別名になっている。
+    /// Unix 時刻から時間を決める入口。
     #[test]
-    fn with_time_at_is_available_on_every_type() {
+    fn time_with_at_contains_the_given_instant() {
         const UNIX: u64 = 1_770_000_000;
         let single = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time_at(1024, UNIX)
-            .unwrap();
-        let range = RangeId::new(4, 0, 1, 1)
-            .unwrap()
-            .with_time_at(1024, UNIX)
-            .unwrap();
-        let flex = FlexId::new(4, 0, 4, 1, 4, 1)
-            .unwrap()
-            .with_time_segment_at(25, UNIX)
+            .time_with_at(1024, UNIX)
             .unwrap();
 
-        assert_eq!(single.seconds_range(), range.seconds_range());
-        assert_eq!(single.seconds_range(), flex.seconds_range());
         assert!(single.seconds_range().0 <= UNIX && UNIX < single.seconds_range().1);
     }
 
-    /// `with_time_span` は3型とも同じ名前で、表せない区間は [`Err`]。
-    #[test]
-    fn with_time_span_is_available_on_every_type() {
-        // [1024, 2048) は3型とも表せる（2の冪・整列）。
-        for got in [
-            SingleId::new(4, 0, 1, 1)
-                .unwrap()
-                .with_time_span(1024, 2048)
-                .map(|v| v.seconds_range()),
-            RangeId::new(4, 0, 1, 1)
-                .unwrap()
-                .with_time_span(1024, 2048)
-                .map(|v| v.seconds_range()),
-            FlexId::new(4, 0, 4, 1, 4, 1)
-                .unwrap()
-                .with_time_span(1024, 2048)
-                .map(|v| v.seconds_range()),
-        ] {
-            assert_eq!(got.unwrap(), (1024, 2048));
-        }
-
-        // [1800, 7200) は 1800 秒 × 3 Segmentなので、範囲でしか表せない。
-        assert!(
-            SingleId::new(4, 0, 1, 1)
-                .unwrap()
-                .with_time_span(1800, 7200)
-                .is_err()
-        );
-        assert!(
-            FlexId::new(4, 0, 4, 1, 4, 1)
-                .unwrap()
-                .with_time_span(1800, 7200)
-                .is_err()
-        );
-        let range = RangeId::new(4, 0, 1, 1)
-            .unwrap()
-            .with_time_span(1800, 7200)
-            .unwrap();
-        assert_eq!(range.seconds_range(), (1800, 7200));
-        assert_eq!((range.time_interval().seconds(), range.t()), (1800, [1, 3]));
-    }
-
-    /// `relabel_time` は3型とも [`Result`]（[`Option`] との混在を許さない）。
+    /// `time_relabel` は3型とも [`Result`]（[`Option`] との混在を許さない）。
     #[test]
     fn relabel_time_returns_result_on_every_type() {
         let single = SingleId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(3600, 5)
+            .time_with(3600, 5)
             .unwrap();
-        assert_eq!(single.relabel_time(Interval::HOUR).unwrap(), single);
-        assert!(single.relabel_time(1800).is_err());
+        assert_eq!(single.time_relabel(Interval::HOUR).unwrap(), single);
+        assert!(single.time_relabel(1800).is_err());
 
         let range = RangeId::new(4, 0, 1, 1)
             .unwrap()
-            .with_time(3600, [0, 1])
+            .time_with(3600, [0, 1])
             .unwrap();
-        assert_eq!(range.relabel_time(1800).unwrap().t(), [0, 3]);
-        assert!(range.relabel_time(Interval::DAY).is_err());
+        assert_eq!(range.time_relabel(1800).unwrap().t(), [0, 3]);
+        assert!(range.time_relabel(Interval::DAY).is_err());
 
-        // `FlexId` には `relabel_time` を持たせない。Segmentが秒区間を一意に決めるので、
+        // `FlexId` には `time_relabel` を持たせない。Segmentが秒区間を一意に決めるので、
         // 「同じ区間を別の単位で」は定義上ありえず、成功しても必ず元と同じ値になる
         // （常に no-op か Err にしかならないAPIは、対称性のためだけに置く価値がない）。
     }

@@ -170,7 +170,7 @@ fn random_id(next: &mut impl FnMut(u64) -> u64, max_zoom: u64) -> FlexId {
     let t = next(1 << tz);
     FlexId::new(fz, f, xz, x, yz, y)
         .unwrap()
-        .with_time_segment(tz, t)
+        .time_with_segment(tz, t)
         .unwrap()
 }
 
@@ -195,7 +195,7 @@ fn random_point_in(next: &mut impl FnMut(u64) -> u64, region: &FlexId) -> FlexId
         POINT_ZOOM, f as i32, POINT_ZOOM, x as u32, POINT_ZOOM, y as u32,
     )
     .unwrap()
-    .with_time_segment(tz, t as u64)
+    .time_with_segment(tz, t as u64)
     .unwrap()
 }
 

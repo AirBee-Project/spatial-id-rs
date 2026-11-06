@@ -143,8 +143,8 @@ impl SpatialIdSet {
     /// # use spatial_id::collection::SpatialIdSet;
     /// # use spatial_id::{SingleId, time::{AllowedIntervals, Interval}};
     /// let mut set = SpatialIdSet::new();
-    /// set.insert(SingleId::new(12, 0, 3638, 1614).unwrap().with_time(Interval::HOUR, 0).unwrap());
-    /// set.insert(SingleId::new(12, 0, 3638, 1614).unwrap().with_time(Interval::HOUR, 1).unwrap());
+    /// set.insert(SingleId::new(12, 0, 3638, 1614).unwrap().time_with(Interval::HOUR, 0).unwrap());
+    /// set.insert(SingleId::new(12, 0, 3638, 1614).unwrap().time_with(Interval::HOUR, 1).unwrap());
     ///
     /// // 既定（gcd）では 2 時間ぶんが「7200 秒 × 1 TimeSegment」になる。
     /// assert_eq!(set.reconstructed_time_ranges(None).next().unwrap().to_string(), "12/0/3638/1614_7200/0");

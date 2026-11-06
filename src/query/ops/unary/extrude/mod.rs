@@ -93,7 +93,7 @@ where
             // SAFETY: 射影した軸は 0/0、その他の軸および時間成分は元の有効な FlexId を保持
             let proj = unsafe {
                 FlexId::new_unchecked(fz, fi, xz, xi, yz, yi)
-                    .with_time_segment_unchecked(id.t_zoomlevel(), id.t_index())
+                    .time_with_segment_unchecked(id.t_zoomlevel(), id.t_index())
             };
             projected.push((proj, v));
         }

@@ -24,7 +24,7 @@ let id = SingleId::new(25, 0, 29800549, 13205107)?;
 let range = RangeId::new(24, [0, 3], [14900274, 14900277], [6602553, 6602555])?;
 
 // 12/0/3638/1614_1800/809712
-let id = SingleId::new(12, 0, 3638, 1614)?.with_time(1800, 809712)?;
+let id = SingleId::new(12, 0, 3638, 1614)?.time_with(1800, 809712)?;
 ```
 
 時間を扱うかどうかは `temporal_id` feature で切り替えます（[詳細](docs/temporal-id-feature.md)）。

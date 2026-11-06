@@ -1,4 +1,3 @@
-use crate::SpatialId;
 use core::iter::Chain;
 
 use crate::time::span::TimeSegments;
@@ -38,7 +37,7 @@ impl From<&SingleId> for RangeId {
             y: [id.y(), id.y()],
 
             // 単一Segmentは範囲の退化した形なので常に変換できる。
-            i: id.time_interval(),
+            i: id.i(),
             #[cfg(feature = "temporal_id")]
             t: [id.t(), id.t()],
         }
@@ -68,7 +67,7 @@ impl RangeId {
                 let y_range = y_range.clone();
                 y_range.flat_map(move |y: u32| {
                     let base = SingleId::new(z, f, x, y).unwrap();
-                    (t_min..=t_max).map(move |t| base.with_time_unchecked(interval, t))
+                    (t_min..=t_max).map(move |t| base.time_with_unchecked(interval, t))
                 })
             })
         })
@@ -104,7 +103,7 @@ impl Iterator for RangeIdFlexIds {
             if let Some(spatial) = self.spatial {
                 if let Some(time_segment) = self.t.next() {
                     return Some(unsafe {
-                        spatial.with_time_segment_unchecked(
+                        spatial.time_with_segment_unchecked(
                             time_segment.zoom().get(),
                             time_segment.index(),
                         )
@@ -310,7 +309,7 @@ mod tests {
                         for t in id.time_segments() {
                             expected.push(unsafe {
                                 FlexId::new_unchecked(f_z, f_i, x_z, x_i, y_z, y_i)
-                                    .with_time_segment_unchecked(t.zoom().get(), t.index())
+                                    .time_with_segment_unchecked(t.zoom().get(), t.index())
                             });
                         }
                     }

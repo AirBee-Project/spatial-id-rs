@@ -57,7 +57,7 @@ impl FlexId {
                 let id = FlexId::new(seg_z, seg_index, x_zoomlevel, x_index, y_zoomlevel, y_index)
                     .unwrap();
                 // SAFETY: t_zoomlevel と t_index は元の有効な FlexId から取得した値
-                unsafe { id.with_time_segment_unchecked(t_zoomlevel, t_index) }
+                unsafe { id.time_with_segment_unchecked(t_zoomlevel, t_index) }
             }),
         )
     }
@@ -121,7 +121,7 @@ impl FlexId {
                         y_zoomlevel,
                         y_index,
                     )
-                    .with_time_segment_unchecked(t_zoomlevel, t_index)
+                    .time_with_segment_unchecked(t_zoomlevel, t_index)
                 }
             }))
     }
@@ -181,7 +181,7 @@ impl FlexId {
                         seg_z,
                         seg_index,
                     )
-                    .with_time_segment_unchecked(t_zoomlevel, t_index)
+                    .time_with_segment_unchecked(t_zoomlevel, t_index)
                 }
             }),
         )

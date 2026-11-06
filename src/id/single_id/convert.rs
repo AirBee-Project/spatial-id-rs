@@ -21,7 +21,7 @@ impl Iterator for SingleIdFlexIds {
         let time_segment = self.time_segments.next()?;
         Some(unsafe {
             self.base
-                .with_time_segment_unchecked(time_segment.zoom().get(), time_segment.index())
+                .time_with_segment_unchecked(time_segment.zoom().get(), time_segment.index())
         })
     }
 }
