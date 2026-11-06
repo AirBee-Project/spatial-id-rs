@@ -160,6 +160,10 @@ impl SpatialId for FlexId {
         crate::Interval::from_seconds_unchecked(end - start)
     }
 
+    fn as_flex_id(&self) -> Option<FlexId> {
+        Some(*self)
+    }
+
     fn seconds_range(&self) -> (u64, u64) {
         let zoom = crate::id::zoom_level::TZoomLevel::new(self.t_zoomlevel()).unwrap();
         let time_span = crate::time::segment::TimeSegment::new(zoom, self.t_index()).time_span();

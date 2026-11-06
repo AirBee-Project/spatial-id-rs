@@ -203,6 +203,10 @@ impl SpatialId for RangeId {
         self.i
     }
 
+    fn as_range_id(&self) -> Option<RangeId> {
+        Some(*self)
+    }
+
     fn seconds_range(&self) -> (u64, u64) {
         let unit = self.i.seconds();
         let t = self.t();
