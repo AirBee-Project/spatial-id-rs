@@ -46,12 +46,13 @@ serde_json = { version = "1", default-features = false, features = ["alloc"], op
 # featuresで切り替え可能なもの
 rand = { version = "0.10.2", optional = true }
 rayon = { version = "1.10", optional = true }
-# geojson クレートは std に依存するため、std feature のときだけ使う。
+# geojson と quick-xml は std に依存するため、std feature のときだけ使う。
 geojson = { version = "1.0.0", default-features = false, optional = true }
+quick-xml = { version = "0.40.1", optional = true }
 
 [features]
 default = ["std", "rayon", "temporal_id"]
-std = ["dep:geojson"]
+std = ["dep:geojson", "dep:quick-xml"]
 rayon = ["dep:rayon", "std"]
 random = ["dep:rand"]
 temporal_id = []
@@ -62,7 +63,7 @@ unstable = ["dep:serde", "dep:serde_json"]
 rand = "0.10.1"
 proptest = "1.11.0"
 rand_chacha = "0.10.0"
-insta = "1"
+insta = { version = "1", features = ["glob"] }
 criterion = { version = "0.8.2", features = ["html_reports"] }
 
 [profile.dev]
