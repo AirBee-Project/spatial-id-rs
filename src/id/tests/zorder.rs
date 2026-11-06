@@ -21,7 +21,7 @@ fn random_id(state: &mut u64) -> FlexId {
     let id = FlexId::new(fz, f, xz, x, yz, y).unwrap();
     if cfg!(feature = "temporal_id") && next(state).is_multiple_of(2) {
         let tz = (next(state) % 4) as u8;
-        id.with_time_segment(tz, next(state) % (1 << tz)).unwrap()
+        id.time_with_segment(tz, next(state) % (1 << tz)).unwrap()
     } else {
         id
     }

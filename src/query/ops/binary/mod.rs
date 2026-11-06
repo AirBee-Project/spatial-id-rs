@@ -211,7 +211,7 @@ mod test {
         let t = next(1 << tz);
         FlexId::new(fz, f, xz, x, yz, y)
             .unwrap()
-            .with_time_segment(tz, t)
+            .time_with_segment(tz, t)
             .unwrap()
     }
 

@@ -62,14 +62,14 @@ fn build_range_id(
 ) -> Result<RangeId, crate::Error> {
     let id = RangeId::new(z, f, x, y)?;
     match temporal_pair {
-        Some((i, t)) => id.with_time(i, t),
+        Some((i, t)) => id.time_with(i, t),
         None => Ok(id),
     }
 }
 
 impl Serialize for IdEntry {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let whole_time = self.range_id.is_whole_time();
+        let whole_time = self.range_id.time_is_whole();
 
         let mut len = 4;
         if !whole_time {
@@ -85,7 +85,7 @@ impl Serialize for IdEntry {
         serialize_pair(&mut map, "x", self.range_id.x())?;
         serialize_pair(&mut map, "y", self.range_id.y())?;
         if !whole_time {
-            map.serialize_entry("i", &self.range_id.time_interval().seconds())?;
+            map.serialize_entry("i", &self.range_id.i().seconds())?;
             serialize_pair(&mut map, "t", self.range_id.t())?;
         }
         if let Some(r) = self.r#ref {
@@ -372,7 +372,7 @@ mod tests {
 
         let range_id = RangeId::new(20, [0, 0], [0, 0], [0, 0])
             .unwrap()
-            .with_time(Interval::HOUR, [5, 5])
+            .time_with(Interval::HOUR, [5, 5])
             .unwrap();
         let entry = IdEntry {
             range_id,
@@ -403,7 +403,7 @@ mod tests {
 
         let original = SingleId::new(12, 0, 3638, 1614)
             .unwrap()
-            .with_time(1800, 809712)
+            .time_with(1800, 809712)
             .unwrap();
 
         let mut table: SpatialIdMap<i32> = SpatialIdMap::new();
@@ -436,8 +436,8 @@ mod tests {
 
         let base = SingleId::new(12, 0, 3638, 1614).unwrap();
         let mut set = SpatialIdSet::new();
-        set.insert(base.with_time(Interval::HOUR, 0).unwrap());
-        set.insert(base.with_time(Interval::HOUR, 1).unwrap());
+        set.insert(base.time_with(Interval::HOUR, 0).unwrap());
+        set.insert(base.time_with(Interval::HOUR, 1).unwrap());
 
         let json = serde_json::to_string(&set).unwrap();
         assert!(
@@ -465,7 +465,7 @@ mod tests {
 
         let original = SingleId::new(12, 0, 3638, 1614)
             .unwrap()
-            .with_time(1800, 809712)
+            .time_with(1800, 809712)
             .unwrap();
 
         let mut set = SpatialIdSet::new();

@@ -19,7 +19,7 @@ impl fmt::Display for SingleId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}/{}/{}", self.z.get(), self.f, self.x, self.y)?;
         //時間の情報があれば書き込み
-        if !self.is_whole_time() {
+        if !self.time_is_whole() {
             write!(f, "_{}/{}", self.i, self.t())?;
         }
         Ok(())
@@ -250,10 +250,6 @@ impl SpatialId for SingleId {
         r * 2.0 * core::f64::consts::PI / ((1_u64 << self.z()) as f64)
     }
 
-    fn time_interval(&self) -> crate::Interval {
-        self.i
-    }
-
     fn as_single_id(&self) -> Option<SingleId> {
         Some(*self)
     }
@@ -264,12 +260,8 @@ impl SpatialId for SingleId {
         (t * unit, (t + 1) * unit)
     }
 
-    fn without_time(self) -> Self {
-        self.without_time()
-    }
-
-    fn with_time_span(self, start: u64, end: u64) -> Result<Self, Error> {
-        self.with_time_span(start, end)
+    fn time_cleared(self) -> Self {
+        self.time_cleared()
     }
 
     fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<Self, Error> {
@@ -329,7 +321,7 @@ impl FromStr for SingleId {
                 }
                 let i = i_text.parse::<i64>().map_err(|_| parse_error(s))?;
                 let t = t_text.parse::<u64>().map_err(|_| parse_error(s))?;
-                id.with_time(i, t)
+                id.time_with(i, t)
             }
         }
     }

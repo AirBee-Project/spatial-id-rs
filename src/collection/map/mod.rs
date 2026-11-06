@@ -59,7 +59,7 @@ where
             + u32::from(region.x_zoomlevel())
             + u32::from(region.y_zoomlevel());
         let split: fn(&FlexId, crate::Side) -> Option<FlexId> =
-            if self.iter().all(|(id, _)| id.is_whole_time()) {
+            if self.iter().all(|(id, _)| id.time_is_whole()) {
                 match spatial % 3 {
                     0 => FlexId::split_f,
                     1 => FlexId::split_x,
