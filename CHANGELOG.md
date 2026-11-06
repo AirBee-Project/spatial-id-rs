@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/AirBee-Project/spatial-id-rs/compare/v0.1.0...v0.1.1) - 2026-11-06
+
+### Added
+
+- SpatialId に型判定メソッドを追加
+
 ## [0.1.0] - 2026-11-04
 
 ### Added
