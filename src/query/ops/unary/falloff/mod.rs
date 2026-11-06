@@ -4,16 +4,16 @@ pub(crate) mod query;
 #[cfg(test)]
 mod test;
 
-use crate::id::helpers::Side;
 use crate::query::{
     SafeValue, merge_policy::MergePolicy, query_iter::QueryIter, traits::UnaryOperator,
 };
 use crate::{Error, FlexId, QueryError, RangeId, SpatialIdMap, ZoomLevel};
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 use core::convert::TryFrom;
 use core::marker::PhantomData;
-use core::ops::{Add, Div, Mul, Rem, Sub};
+use core::ops::{Add, Div, Mul, RangeInclusive, Rem, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FalloffAxis {
@@ -120,12 +120,13 @@ where
 
 /// 値を軸方向へ広げながら減衰させる演算子。
 ///
+/// 負の側は `-range[0]`、正の側は `range[1]` を半径として減衰させる。
 /// 半径は、線形の減衰では半径の2乗、2次の減衰では半径の4乗が `V` と u64 に収まる範囲で指定する。
 pub struct Falloff<P> {
     pub axis: FalloffAxis,
     pub z: ZoomLevel,
-    pub radius: u32,
-    pub direction: Option<Side>,
+    /// 広げる距離の範囲 `[start, end]`。`start <= 0 <= end` を満たす。
+    pub range: [i32; 2],
     pub pattern: FalloffPattern,
     _marker: PhantomData<fn() -> P>,
 }
@@ -134,19 +135,43 @@ impl<P> Falloff<P> {
     pub fn new<T: Into<u8>>(
         axis: FalloffAxis,
         z: T,
-        radius: u32,
-        direction: Option<Side>,
+        range: RangeInclusive<i32>,
         pattern: FalloffPattern,
     ) -> Result<Self, Error> {
         let z = ZoomLevel::new(z.into())?;
+        let range = [*range.start(), *range.end()];
+        if !(range[0] <= 0 && 0 <= range[1]) {
+            return Err(QueryError::InvalidParameter("falloff の範囲が0を含んでいない").into());
+        }
         Ok(Self {
             axis,
             z,
-            radius,
-            direction,
+            range,
             pattern,
             _marker: PhantomData,
         })
+    }
+
+    /// 負の側と正の側の半径。
+    fn radii(&self) -> [u32; 2] {
+        self.range.map(i32::unsigned_abs)
+    }
+
+    fn attenuators<V>(&self) -> Result<[Attenuator<V>; 2], Error>
+    where
+        V: Add<Output = V>
+            + Sub<Output = V>
+            + Mul<Output = V>
+            + Div<Output = V>
+            + Rem<Output = V>
+            + TryFrom<u64>
+            + Clone,
+    {
+        let [lower, upper] = self.radii();
+        Ok([
+            Attenuator::new(lower, self.pattern)?,
+            Attenuator::new(upper, self.pattern)?,
+        ])
     }
 }
 
@@ -156,7 +181,7 @@ impl<P> Falloff<P> {
     fn spread<V, A>(
         &self,
         input: QueryIter<'_, V>,
-        attenuator: &Attenuator<V>,
+        [lower, upper]: &[Attenuator<V>; 2],
         wrap: impl Fn(V) -> A + Send + Sync,
         resolve: impl Fn(&A, &A) -> A + Send + Sync,
     ) -> Result<SpatialIdMap<A>, Error>
@@ -170,21 +195,18 @@ impl<P> Falloff<P> {
             + TryFrom<u64>,
         A: SafeValue,
     {
-        let spread_into = |mut tree: SpatialIdMap<A>,
-                           moved: &mut Vec<FlexId>,
-                           (id, value): &(FlexId, V)| {
-            id.falloff_each(
-                self.axis,
-                self.z,
-                self.radius,
-                self.direction,
-                attenuator,
-                value,
-                moved,
-                |ids, value| tree.insert_with_flex_ids(ids.iter().copied(), wrap(value), &resolve),
-            );
-            tree
-        };
+        let spread_into =
+            |mut tree: SpatialIdMap<A>, moved: &mut Vec<FlexId>, (id, value): &(FlexId, V)| {
+                id.falloff_each(self.axis, self.z, self.range, moved, |ids, d| {
+                    let attenuated = match d.cmp(&0) {
+                        Ordering::Less => lower.attenuate(value, d.unsigned_abs()),
+                        Ordering::Equal => value.clone(),
+                        Ordering::Greater => upper.attenuate(value, d.unsigned_abs()),
+                    };
+                    tree.insert_with_flex_ids(ids.iter().copied(), wrap(attenuated), &resolve)
+                });
+                tree
+            };
 
         #[cfg(not(feature = "rayon"))]
         {
@@ -239,15 +261,15 @@ where
     P: MergePolicy<V>,
 {
     fn run<'a>(&'a self, input: QueryIter<'a, V>) -> Result<QueryIter<'a, V>, Error> {
-        if self.radius == 0 {
+        if self.range == [0, 0] {
             return Ok(input);
         }
-        let attenuator = Attenuator::new(self.radius, self.pattern)?;
+        let attenuators = self.attenuators()?;
 
         if P::IS_COMMUTATIVE {
             let resolve = |a: &V, b: &V| P::resolve(a.clone(), b.clone());
             return Ok(self
-                .spread(input, &attenuator, |value| value, resolve)?
+                .spread(input, &attenuators, |value| value, resolve)?
                 .into());
         }
 
@@ -255,7 +277,7 @@ where
         // 重なった値を入力の順に集めてから resolve_many で1回だけ合成する
         let gathered = self.spread(
             input,
-            &attenuator,
+            &attenuators,
             |value| vec![value],
             |a, b| [a.as_slice(), b].concat(),
         )?;
@@ -268,13 +290,8 @@ where
     }
 
     fn reverse_target(&self, bounds: RangeId, out: &mut Vec<RangeId>) {
-        let r = self.radius as i64;
-        // 順方向が Upper (+方向) へ広がるなら、出力へ届きうる入力は Lower (-方向) にある
-        let d = match self.direction {
-            Some(Side::Upper) => [-r, 0],
-            Some(Side::Lower) => [0, r],
-            None => [-r, r],
-        };
+        // 入力は range の距離だけ移って出力へ届くので、出力へ届きうる入力は range を反転した範囲にある
+        let d = [-i64::from(self.range[1]), -i64::from(self.range[0])];
         let (f, x, y) = match self.axis {
             FalloffAxis::F => (d, [0, 0], [0, 0]),
             FalloffAxis::X => ([0, 0], d, [0, 0]),
@@ -284,7 +301,8 @@ where
     }
 
     fn validate(&self) -> Result<(), Error> {
-        self.axis.check_radius(self.z, self.radius)?;
-        Attenuator::<V>::new(self.radius, self.pattern).map(drop)
+        let [lower, upper] = self.radii();
+        self.axis.check_radius(self.z, lower.max(upper))?;
+        self.attenuators::<V>().map(drop)
     }
 }

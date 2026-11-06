@@ -28,7 +28,7 @@ fn falloff_x_single_segment() {
 
     let out = table
         .query()
-        .falloff_x(20, 2, None, FalloffPattern::Linear, Sum)
+        .falloff_x(20, -2..=2, FalloffPattern::Linear, Sum)
         .get(..)
         .into_map()
         .unwrap();
@@ -51,7 +51,7 @@ fn falloff_x_overlap_sum() {
 
     let out = table
         .query()
-        .falloff_x(20, 2, None, FalloffPattern::Linear, Sum)
+        .falloff_x(20, -2..=2, FalloffPattern::Linear, Sum)
         .get(..)
         .into_map()
         .unwrap();
@@ -78,7 +78,7 @@ fn falloff_x_overlap_max() {
 
     let out = table
         .query()
-        .falloff_x(20, 2, None, FalloffPattern::Linear, Max)
+        .falloff_x(20, -2..=2, FalloffPattern::Linear, Max)
         .get(..)
         .into_map()
         .unwrap();
@@ -92,7 +92,7 @@ fn falloff_x_overlap_max() {
 
 #[test]
 fn falloff_x_reverse_target_wrapped_covers_needed_range() {
-    let op = Falloff::<Sum>::new(FalloffAxis::X, 2, 1, None, FalloffPattern::Linear).unwrap();
+    let op = Falloff::<Sum>::new(FalloffAxis::X, 2, -1..=1, FalloffPattern::Linear).unwrap();
 
     let bounds = crate::RangeId::new(1, [-2, 1], 0, [0, 1]).unwrap();
     let mut out = alloc::vec::Vec::new();
@@ -114,7 +114,7 @@ fn falloff_x_overlap_average() {
 
     let out = table
         .query()
-        .falloff_x(20, 2, None, FalloffPattern::Linear, Average)
+        .falloff_x(20, -2..=2, FalloffPattern::Linear, Average)
         .get(..)
         .into_map()
         .unwrap();
@@ -126,22 +126,32 @@ fn falloff_x_overlap_average() {
 
 #[test]
 fn falloff_validate_rejects_radius_out_of_range() {
-    let op = Falloff::<Sum>::new(FalloffAxis::F, 2, 4, None, FalloffPattern::Linear).unwrap();
+    let op = Falloff::<Sum>::new(FalloffAxis::F, 2, -4..=4, FalloffPattern::Linear).unwrap();
     assert!(<Falloff<Sum> as UnaryOperator<i32>>::validate(&op).is_err());
 
     // 15^2 は u8 に収まるが、15^4 は収まらない
-    let op = Falloff::<Sum>::new(FalloffAxis::X, 20, 15, None, FalloffPattern::Linear).unwrap();
+    let op = Falloff::<Sum>::new(FalloffAxis::X, 20, -15..=15, FalloffPattern::Linear).unwrap();
     assert!(<Falloff<Sum> as UnaryOperator<u8>>::validate(&op).is_ok());
     let op =
-        Falloff::<Sum>::new(FalloffAxis::X, 20, 15, None, FalloffPattern::QuadraticIn).unwrap();
+        Falloff::<Sum>::new(FalloffAxis::X, 20, -15..=15, FalloffPattern::QuadraticIn).unwrap();
     assert!(<Falloff<Sum> as UnaryOperator<u8>>::validate(&op).is_err());
 
     // 55108^4 は i64 に収まるが、55109^4 は収まらない
-    let op =
-        Falloff::<Sum>::new(FalloffAxis::X, 20, 55108, None, FalloffPattern::QuadraticIn).unwrap();
+    let op = Falloff::<Sum>::new(
+        FalloffAxis::X,
+        20,
+        -55108..=55108,
+        FalloffPattern::QuadraticIn,
+    )
+    .unwrap();
     assert!(<Falloff<Sum> as UnaryOperator<i64>>::validate(&op).is_ok());
-    let op =
-        Falloff::<Sum>::new(FalloffAxis::X, 20, 55109, None, FalloffPattern::QuadraticIn).unwrap();
+    let op = Falloff::<Sum>::new(
+        FalloffAxis::X,
+        20,
+        -55109..=55109,
+        FalloffPattern::QuadraticIn,
+    )
+    .unwrap();
     assert!(<Falloff<Sum> as UnaryOperator<i64>>::validate(&op).is_err());
 }
 
@@ -153,7 +163,7 @@ fn falloff_x_radius_zero_is_noop() {
 
     let out = table
         .query()
-        .falloff_x(20, 0, None, FalloffPattern::Linear, Sum)
+        .falloff_x(20, 0..=0, FalloffPattern::Linear, Sum)
         .get(..)
         .into_map()
         .unwrap();
@@ -161,6 +171,39 @@ fn falloff_x_radius_zero_is_noop() {
 
     assert_eq!(r.len(), 1);
     assert_eq!(r.get(&100), Some(&7));
+}
+
+/// 範囲の両側は、それぞれの側の距離を半径として減衰する。
+#[test]
+fn falloff_x_asymmetric_range() {
+    let mut table = SpatialIdMap::new();
+    table.insert(time_segment(100, 12).0, 12);
+
+    let out = table
+        .query()
+        .falloff_x(20, -2..=4, FalloffPattern::Linear, Sum)
+        .get(..)
+        .into_map()
+        .unwrap();
+    let r = row(&out);
+
+    // 負の側は半径2: x98:0 x99:6、正の側は半径4: x101:9 x102:6 x103:3 x104:0
+    let expected = [
+        (98, 0),
+        (99, 6),
+        (100, 12),
+        (101, 9),
+        (102, 6),
+        (103, 3),
+        (104, 0),
+    ];
+    assert_eq!(r, expected.into_iter().collect());
+}
+
+#[test]
+fn falloff_rejects_range_without_zero() {
+    assert!(Falloff::<Sum>::new(FalloffAxis::X, 20, 1..=3, FalloffPattern::Linear).is_err());
+    assert!(Falloff::<Sum>::new(FalloffAxis::X, 20, -3..=-1, FalloffPattern::Linear).is_err());
 }
 
 /// 途中の積が `V` を超える値でも、あふれずに正しく減衰する。
@@ -172,7 +215,7 @@ fn falloff_x_large_value_does_not_overflow() {
     // 100_000 * 200^2 は i32 を超える
     let out = table
         .query()
-        .falloff_x(20, 200, None, FalloffPattern::QuadraticIn, Sum)
+        .falloff_x(20, -200..=200, FalloffPattern::QuadraticIn, Sum)
         .get(..)
         .into_map()
         .unwrap();

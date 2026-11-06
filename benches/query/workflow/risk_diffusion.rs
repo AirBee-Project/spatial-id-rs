@@ -1,5 +1,4 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use spatial_id::Side::Upper;
 use spatial_id::collection::SpatialIdMap;
 use spatial_id::query::merge_policy::Max;
 use spatial_id::query::{FalloffPattern, Source};
@@ -12,9 +11,9 @@ fn run_query(table: SpatialIdMap<u32>) -> SpatialIdMap<u32> {
     table
         .query()
         .zoom_out(22, Max)
-        .falloff_f(25, 10, Some(Upper), FalloffPattern::Linear, Max)
-        .falloff_x(25, 10, None, FalloffPattern::Linear, Max)
-        .falloff_y(25, 10, None, FalloffPattern::Linear, Max)
+        .falloff_f(25, 0..=10, FalloffPattern::Linear, Max)
+        .falloff_x(25, -10..=10, FalloffPattern::Linear, Max)
+        .falloff_y(25, -10..=10, FalloffPattern::Linear, Max)
         .get(..)
         .into_map()
         .unwrap()

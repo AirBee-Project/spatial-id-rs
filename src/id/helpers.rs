@@ -53,7 +53,7 @@ pub fn altitude(f: f64, z: u8) -> f64 {
 /// 座標軸のどちら側かを表す。
 #[derive(Debug, PartialEq, Clone, Copy)]
 #[repr(u8)]
-pub enum Side {
+pub(crate) enum Side {
     /// 座標が小さい方 (Left, Down, Low-F)
     Lower = 0,
     /// 座標が大きい方 (Right, Up, High-F)

@@ -154,22 +154,21 @@ fn get_filters_by_time() {
 
 #[test]
 fn get_directional_falloff_matches_whole() {
-    use crate::Side;
     use crate::query::merge_policy::Sum;
     use crate::query::ops::unary::falloff::FalloffPattern;
 
     let mut table = SpatialIdMap::<u32>::new();
     table.insert(FlexId::new(4, 2, 4, 2, 4, 2).unwrap(), 10);
 
-    for side in [Some(Side::Upper), Some(Side::Lower), None] {
+    for range in [0..=2, -2..=0, -2..=2] {
         let q_f = table
             .clone()
             .query()
-            .falloff_f(4, 2, side, FalloffPattern::Linear, Sum);
+            .falloff_f(4, range.clone(), FalloffPattern::Linear, Sum);
         let expected_f = table
             .clone()
             .query()
-            .falloff_f(4, 2, side, FalloffPattern::Linear, Sum)
+            .falloff_f(4, range.clone(), FalloffPattern::Linear, Sum)
             .get(..)
             .into_map()
             .unwrap();
@@ -182,11 +181,11 @@ fn get_directional_falloff_matches_whole() {
         let q_x = table
             .clone()
             .query()
-            .falloff_x(4, 2, side, FalloffPattern::Linear, Sum);
+            .falloff_x(4, range.clone(), FalloffPattern::Linear, Sum);
         let expected_x = table
             .clone()
             .query()
-            .falloff_x(4, 2, side, FalloffPattern::Linear, Sum)
+            .falloff_x(4, range.clone(), FalloffPattern::Linear, Sum)
             .get(..)
             .into_map()
             .unwrap();
@@ -199,11 +198,11 @@ fn get_directional_falloff_matches_whole() {
         let q_y = table
             .clone()
             .query()
-            .falloff_y(4, 2, side, FalloffPattern::Linear, Sum);
+            .falloff_y(4, range.clone(), FalloffPattern::Linear, Sum);
         let expected_y = table
             .clone()
             .query()
-            .falloff_y(4, 2, side, FalloffPattern::Linear, Sum)
+            .falloff_y(4, range.clone(), FalloffPattern::Linear, Sum)
             .get(..)
             .into_map()
             .unwrap();

@@ -34,12 +34,11 @@ pub mod query;
 pub mod time;
 
 pub use error::Error;
-pub use id::{
-    FlexId, IntoRange, RangeId, Side, SingleId, SpatialId, SpatialIdError, Zoom, ZoomLevel,
-};
+pub use id::{FlexId, IntoRange, RangeId, SingleId, SpatialId, SpatialIdError, Zoom, ZoomLevel};
 
 #[allow(unused_imports)]
 pub(crate) use error::{GeometryError, QueryError};
+pub(crate) use id::Side;
 
 // クレート内部では、公開パスを書かずに短く参照する
 #[allow(unused_imports)]

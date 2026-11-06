@@ -61,14 +61,14 @@ let set = sphere.cover_set(25)?;                             // ズームレベ�
 let tran_risk = tran
     .query()
     .extrude_f(25, 0, 50, Max)
-    .falloff_x(25, 10, None, FalloffPattern::QuadraticIn, Max)
-    .falloff_y(25, 10, None, FalloffPattern::QuadraticIn, Max);
+    .falloff_x(25, -10..=10, FalloffPattern::QuadraticIn, Max)
+    .falloff_y(25, -10..=10, FalloffPattern::QuadraticIn, Max);
 
 let bldg_risk = bldg
     .query()
     .extrude_f(25, 0, 50, Max)
-    .falloff_x(25, 10, None, FalloffPattern::QuadraticIn, Max)
-    .falloff_y(25, 10, None, FalloffPattern::QuadraticIn, Max);
+    .falloff_x(25, -10..=10, FalloffPattern::QuadraticIn, Max)
+    .falloff_y(25, -10..=10, FalloffPattern::QuadraticIn, Max);
 
 let risk = bldg_risk
     .merge(tran_risk, Max)

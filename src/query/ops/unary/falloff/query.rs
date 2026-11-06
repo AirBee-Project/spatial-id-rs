@@ -1,18 +1,16 @@
 use super::{Falloff, FalloffAxis, FalloffPattern};
-use crate::id::helpers::Side;
 use crate::query::Node;
 use crate::query::SafeValue;
 use crate::query::{Query, merge_policy::MergePolicy};
 use core::convert::TryFrom;
-use core::ops::{Add, Div, Mul, Rem, Sub};
+use core::ops::{Add, Div, Mul, RangeInclusive, Rem, Sub};
 
 impl<V: SafeValue + 'static> Query<V> {
     fn falloff<Z: Into<u8>, P>(
         self,
         axis: FalloffAxis,
         z: Z,
-        radius: u32,
-        direction: Option<Side>,
+        range: RangeInclusive<i32>,
         pattern: FalloffPattern,
     ) -> Self
     where
@@ -30,14 +28,17 @@ impl<V: SafeValue + 'static> Query<V> {
         if matches!(self.0, Node::Error(_)) {
             return self;
         }
-        match Falloff::<P>::new(axis, z, radius, direction, pattern) {
+        match Falloff::<P>::new(axis, z, range, pattern) {
             Ok(op) => self.wrap_unary(op),
             Err(e) => Query(Node::Error(e)),
         }
     }
 
-    /// F方向へ値を減少させる。
-    /// 指定した距離で0になる。
+    /// F方向へ値を減らしながら広げる。
+    ///
+    /// `range` はズーム `z` での広げる距離の範囲で、0を含む必要がある。
+    /// 負の側は `-range.start()`、正の側は `range.end()` の距離で値が0になる。
+    /// 例えば `-10..=10` は両方向へ、`0..=10` は正の方向だけへ広げる。
     ///
     /// 値 100 の板（左）から、F 方向へ値を減らしながら広げた例（右）。色は値の大きさを表し、赤ほど大きく、青ほど小さい。
     ///
@@ -46,8 +47,7 @@ impl<V: SafeValue + 'static> Query<V> {
     pub fn falloff_f<Z: Into<u8>, P>(
         self,
         z: Z,
-        radius: u32,
-        direction: Option<Side>,
+        range: RangeInclusive<i32>,
         pattern: FalloffPattern,
         _policy: P,
     ) -> Self
@@ -63,11 +63,14 @@ impl<V: SafeValue + 'static> Query<V> {
             + Send
             + Sync,
     {
-        self.falloff::<Z, P>(FalloffAxis::F, z, radius, direction, pattern)
+        self.falloff::<Z, P>(FalloffAxis::F, z, range, pattern)
     }
 
-    /// X方向へ値を減少させる。
-    /// 指定した距離で0になる。
+    /// X方向へ値を減らしながら広げる。
+    ///
+    /// `range` はズーム `z` での広げる距離の範囲で、0を含む必要がある。
+    /// 負の側は `-range.start()`、正の側は `range.end()` の距離で値が0になる。
+    /// 例えば `-10..=10` は両方向へ、`0..=10` は正の方向だけへ広げる。
     ///
     /// 値 100 の板（左）から、X 方向へ値を減らしながら広げた例（右）。色は値の大きさを表し、赤ほど大きく、青ほど小さい。
     ///
@@ -76,8 +79,7 @@ impl<V: SafeValue + 'static> Query<V> {
     pub fn falloff_x<Z: Into<u8>, P>(
         self,
         z: Z,
-        radius: u32,
-        direction: Option<Side>,
+        range: RangeInclusive<i32>,
         pattern: FalloffPattern,
         _policy: P,
     ) -> Self
@@ -93,11 +95,14 @@ impl<V: SafeValue + 'static> Query<V> {
             + Send
             + Sync,
     {
-        self.falloff::<Z, P>(FalloffAxis::X, z, radius, direction, pattern)
+        self.falloff::<Z, P>(FalloffAxis::X, z, range, pattern)
     }
 
-    /// Y方向へ値を減少させる。
-    /// 指定した距離で0になる。
+    /// Y方向へ値を減らしながら広げる。
+    ///
+    /// `range` はズーム `z` での広げる距離の範囲で、0を含む必要がある。
+    /// 負の側は `-range.start()`、正の側は `range.end()` の距離で値が0になる。
+    /// 例えば `-10..=10` は両方向へ、`0..=10` は正の方向だけへ広げる。
     ///
     /// 値 100 の板（左）から、Y 方向へ値を減らしながら広げた例（右）。色は値の大きさを表し、赤ほど大きく、青ほど小さい。
     ///
@@ -106,8 +111,7 @@ impl<V: SafeValue + 'static> Query<V> {
     pub fn falloff_y<Z: Into<u8>, P>(
         self,
         z: Z,
-        radius: u32,
-        direction: Option<Side>,
+        range: RangeInclusive<i32>,
         pattern: FalloffPattern,
         _policy: P,
     ) -> Self
@@ -123,6 +127,6 @@ impl<V: SafeValue + 'static> Query<V> {
             + Send
             + Sync,
     {
-        self.falloff::<Z, P>(FalloffAxis::Y, z, radius, direction, pattern)
+        self.falloff::<Z, P>(FalloffAxis::Y, z, range, pattern)
     }
 }
