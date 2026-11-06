@@ -64,21 +64,6 @@ pub trait SpatialId:
     /// 時間情報を含まない、空間3次元（F/X/Y）の直方体を構成する8頂点の座標を返す。
     fn spatial_vertices(&self) -> [Coordinate; 8];
 
-    /// 時間間隔 `{i}`を返す。
-    ///
-    /// ```
-    /// # #[cfg(feature = "temporal_id")]
-    /// # {
-    /// # use spatial_id::{SingleId, SpatialId, time::Interval};
-    /// let id = SingleId::new(12, 0, 3638, 1614).unwrap().time_with(1800, 809712).unwrap();
-    /// assert_eq!(id.time_interval().seconds(), 1800);
-    ///
-    /// let plain = SingleId::new(12, 0, 3638, 1614).unwrap();
-    /// assert_eq!(plain.time_interval(), Interval::WHOLE);
-    /// # }
-    /// ```
-    fn time_interval(&self) -> Interval;
-
     /// 占有する絶対秒区間 `[start, end)` を返す。
     fn seconds_range(&self) -> (u64, u64);
 

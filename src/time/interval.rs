@@ -179,20 +179,6 @@ impl Interval {
         t_zoom.check_index(t)?;
         Ok(TimeSegment::new(t_zoom, t))
     }
-
-    /// 検証済みの秒数から直接構築する。
-    pub(crate) const fn from_seconds_unchecked(seconds: u64) -> Interval {
-        #[cfg(feature = "temporal_id")]
-        {
-            Interval(seconds)
-        }
-
-        #[cfg(not(feature = "temporal_id"))]
-        {
-            debug_assert!(seconds == Self::MAX_SECONDS);
-            Interval
-        }
-    }
 }
 
 impl Default for Interval {
@@ -399,7 +385,7 @@ mod api_symmetry {
             .time_with_span(1800, 7200)
             .unwrap();
         assert_eq!(range.seconds_range(), (1800, 7200));
-        assert_eq!((range.time_interval().seconds(), range.t()), (1800, [1, 3]));
+        assert_eq!((range.i().seconds(), range.t()), (1800, [1, 3]));
     }
 
     /// `time_relabel` は3型とも [`Result`]（[`Option`] との混在を許さない）。

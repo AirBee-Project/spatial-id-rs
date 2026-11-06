@@ -155,11 +155,6 @@ impl SpatialId for FlexId {
         out
     }
 
-    fn time_interval(&self) -> crate::Interval {
-        let (start, end) = self.seconds_range();
-        crate::Interval::from_seconds_unchecked(end - start)
-    }
-
     fn as_flex_id(&self) -> Option<FlexId> {
         Some(*self)
     }

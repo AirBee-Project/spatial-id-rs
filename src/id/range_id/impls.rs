@@ -3,7 +3,7 @@ use alloc::string::ToString;
 use core::fmt;
 
 use crate::{
-    Coordinate, Error, Interval, RangeId, SpatialId, SpatialIdError,
+    Coordinate, Error, RangeId, SpatialId, SpatialIdError,
     id::helpers::{self, format_dimension},
 };
 use core::str::FromStr;
@@ -197,10 +197,6 @@ impl SpatialId for RangeId {
         let count = self.y()[0].abs_diff(self.y()[1]) as f64 + 1.0;
 
         one * count
-    }
-
-    fn time_interval(&self) -> Interval {
-        self.i
     }
 
     fn as_range_id(&self) -> Option<RangeId> {

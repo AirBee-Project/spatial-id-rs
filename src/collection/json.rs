@@ -85,7 +85,7 @@ impl Serialize for IdEntry {
         serialize_pair(&mut map, "x", self.range_id.x())?;
         serialize_pair(&mut map, "y", self.range_id.y())?;
         if !whole_time {
-            map.serialize_entry("i", &self.range_id.time_interval().seconds())?;
+            map.serialize_entry("i", &self.range_id.i().seconds())?;
             serialize_pair(&mut map, "t", self.range_id.t())?;
         }
         if let Some(r) = self.r#ref {

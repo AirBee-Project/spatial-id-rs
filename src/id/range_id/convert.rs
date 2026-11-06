@@ -1,4 +1,3 @@
-use crate::SpatialId;
 use core::iter::Chain;
 
 use crate::time::span::TimeSegments;
@@ -38,7 +37,7 @@ impl From<&SingleId> for RangeId {
             y: [id.y(), id.y()],
 
             // 単一Segmentは範囲の退化した形なので常に変換できる。
-            i: id.time_interval(),
+            i: id.i(),
             #[cfg(feature = "temporal_id")]
             t: [id.t(), id.t()],
         }

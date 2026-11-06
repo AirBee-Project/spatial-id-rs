@@ -98,6 +98,11 @@ impl SingleId {
         self.y
     }
 
+    /// 時間間隔 `{i}` を返す。全時間のときは [`Interval::WHOLE`](crate::time::Interval::WHOLE)。
+    pub fn i(&self) -> crate::Interval {
+        self.i
+    }
+
     /// この [`SingleId`] の時間インデックス `{t}` を返す。
     ///
     /// `temporal_id` feature 無効時は常に `0`（全時間の唯一のSegment）。
@@ -225,7 +230,7 @@ impl SingleId {
     /// # use spatial_id::SingleId;
     /// let id = SingleId::new(4, 0, 0, 0).unwrap()
     ///     .time_with_span(1_457_481_600, 1_457_483_400).unwrap();
-    /// assert_eq!(id.time_interval().seconds(), 1800);
+    /// assert_eq!(id.i().seconds(), 1800);
     /// assert_eq!(id.t(), 809712);
     ///
     /// // 1Segmentに収まらない区間（1800秒 × 3Segment）は拒否する。

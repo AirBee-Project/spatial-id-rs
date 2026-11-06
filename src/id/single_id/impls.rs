@@ -250,10 +250,6 @@ impl SpatialId for SingleId {
         r * 2.0 * core::f64::consts::PI / ((1_u64 << self.z()) as f64)
     }
 
-    fn time_interval(&self) -> crate::Interval {
-        self.i
-    }
-
     fn as_single_id(&self) -> Option<SingleId> {
         Some(*self)
     }
