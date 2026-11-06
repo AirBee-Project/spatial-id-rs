@@ -140,7 +140,7 @@ impl FlexId {
     pub fn y_index(&self) -> u32 {
         self.y_index
     }
-    /// この [`FlexId`] の時間インデックス `{t}`。[`time_interval`](crate::SpatialId::time_interval) を単位とする。
+    /// この [`FlexId`] の時間インデックス `{t}`。[`t_zoomlevel`](Self::t_zoomlevel) が決める Segment 幅を単位とする。
     ///
     /// [`t_zoomlevel`](Self::t_zoomlevel) と対で読めば、木の2分岐Segment `(zoom, index)` そのもの。
     /// `temporal_id` feature 無効時は常に `0`（全時間）。
@@ -198,7 +198,7 @@ impl FlexId {
     /// // ズーム25のSegmentは 2^(35-25) = 1024 秒幅。
     /// let id = FlexId::new(5, 3, 2, 3, 10, 1).unwrap().time_with_segment(25, 7).unwrap();
     /// assert_eq!((id.t_zoomlevel(), id.t_index()), (25, 7));
-    /// assert_eq!(id.time_interval().seconds(), 1024);
+    /// assert_eq!(id.seconds_range(), (7 * 1024, 8 * 1024));
     ///
     /// // `TZoomLevel` をそのまま渡してもよい。
     /// let same = FlexId::new(5, 3, 2, 3, 10, 1)

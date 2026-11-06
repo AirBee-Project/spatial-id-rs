@@ -226,10 +226,7 @@ mod tests {
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].0.seconds_range(), (0, 7200));
         // gcd(0, 7200) = 7200 なので「2時間」という単位で1Segmentになる。
-        assert_eq!(
-            (merged[0].0.time_interval().seconds(), merged[0].0.t()),
-            (7200, [0, 0])
-        );
+        assert_eq!((merged[0].0.i().seconds(), merged[0].0.t()), (7200, [0, 0]));
     }
 
     /// 候補集合を渡すと、その中で最も粗い（＝Segment数が最小の）単位が選ばれる。
@@ -245,10 +242,7 @@ mod tests {
 
         let merged = reconstruct_temporal_vec(time_segments, Some(AllowedIntervals::calendar()));
         assert_eq!(merged.len(), 1);
-        assert_eq!(
-            (merged[0].0.time_interval().seconds(), merged[0].0.t()),
-            (3600, [0, 1])
-        );
+        assert_eq!((merged[0].0.i().seconds(), merged[0].0.t()), (3600, [0, 1]));
 
         // 候補が区間を割り切れないときは、必ず含まれる SECOND まで落ちる。
         // 候補集合が貧しいとSegment数が爆発することを示す例でもある
@@ -265,10 +259,7 @@ mod tests {
         );
         let merged =
             reconstruct_temporal_vec(time_segments, Some(&AllowedIntervals::new([Interval::DAY])));
-        assert_eq!(
-            (merged[0].0.time_interval().seconds(), merged[0].0.t()),
-            (1, [0, 3599])
-        );
+        assert_eq!((merged[0].0.i().seconds(), merged[0].0.t()), (1, [0, 3599]));
         // 秒区間そのものは変わらない。
         assert_eq!(merged[0].0.seconds_range(), (0, 3600));
     }

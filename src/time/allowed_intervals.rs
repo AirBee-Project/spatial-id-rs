@@ -396,7 +396,7 @@ mod collection_api {
                 .next()
                 .unwrap(),
         ] {
-            assert_eq!(got.time_interval(), Interval::WHOLE);
+            assert_eq!(got.i(), Interval::WHOLE);
             assert_eq!(got.t(), [0, 0]);
             assert_eq!(got.to_string(), "12/0/3638/1614");
         }
@@ -424,7 +424,7 @@ mod collection_api {
             .reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
             .next()
             .unwrap();
-        assert_eq!(calendar.time_interval(), Interval::MINUTE);
+        assert_eq!(calendar.i(), Interval::MINUTE);
         assert_eq!(calendar.t(), [24_291_360, 24_291_389]);
         // 秒区間は変わらない。
         assert_eq!(calendar.seconds_range(), original.seconds_range());

@@ -15,7 +15,7 @@
 
 - 時間を設定・変更する操作（`time_with`, `time_with_at`, `time_with_span`, `time_with_segment`, `time_with_segment_at`, `time_relabel`）。
 - 時間の指定を外す操作（`time_cleared`）。
-- 時間の情報だけを返す・判定する操作（`time_interval`, `time_is_whole`, `time_contains`）。
+- 時間の情報だけを返す・判定する操作（`time_is_whole`, `time_contains`）。
 
 ## 3. 接頭辞を付けないもの
 
@@ -26,7 +26,7 @@
 | 区分 | 例 |
 | :--- | :--- |
 | `spatial_` | `spatial_center`, `spatial_vertices`, `spatial_parent_at_zoom`, `spatial_children_at_zoom`, `spatial_parent`, `spatial_children`, `spatial_parents`, `spatial_siblings`, `spatial_face_neighbors`, `spatial_edge_neighbors`, `spatial_vertex_neighbors`, `spatial_all_neighbors`, `spatial_shift`, `spatial_is_face_neighbor` |
-| `time_` | `time_with`, `time_with_span`, `time_with_segment`, `time_relabel`, `time_cleared`, `time_is_whole`, `time_contains`, `time_interval` |
+| `time_` | `time_with`, `time_with_span`, `time_with_segment`, `time_relabel`, `time_cleared`, `time_is_whole`, `time_contains` |
 | 付けない | `contains`, `intersects`, `single_ids`, `seconds_range`, `t_index` |
 
 接頭辞の直後に動詞・述語を置く（`spatial_is_face_neighbor`, `time_is_whole`）。

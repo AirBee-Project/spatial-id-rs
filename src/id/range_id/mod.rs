@@ -105,6 +105,11 @@ impl RangeId {
         self.y
     }
 
+    /// 時間間隔 `{i}` を返す。全時間のときは [`Interval::WHOLE`](crate::time::Interval::WHOLE)。
+    pub fn i(&self) -> crate::Interval {
+        self.i
+    }
+
     /// この [`RangeId`] の時間インデックス範囲 `[min, max]`（両端含む）を返す。
     ///
     /// `temporal_id` feature 無効時は常に `[0, 0]`（全時間の唯一のSegment）。
@@ -223,7 +228,7 @@ impl RangeId {
     /// // [1457481600, 1457483400) はちょうど 1800 秒ぶん。
     /// let id = RangeId::new(4, 0, 0, 0).unwrap()
     ///     .time_with_span(1_457_481_600, 1_457_483_400).unwrap();
-    /// assert_eq!(id.time_interval().seconds(), 1800);
+    /// assert_eq!(id.i().seconds(), 1800);
     /// assert_eq!(id.t(), [809712, 809712]);
     /// # }
     /// ```
