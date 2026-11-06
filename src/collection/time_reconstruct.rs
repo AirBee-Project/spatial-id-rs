@@ -37,14 +37,14 @@ where
             Some(p) => p,
             None => {
                 let (id, v) = self.iter.next()?;
-                let (s, e) = id.seconds_range();
+                let (s, e) = id.time_range();
                 (spatial_key_u128(&id), id, s, e, v)
             }
         };
 
         for (next_id, next_value) in self.iter.by_ref() {
             let next_key = spatial_key_u128(&next_id);
-            let (next_start, next_end) = next_id.seconds_range();
+            let (next_start, next_end) = next_id.time_range();
 
             if next_key == key && next_value == value && next_start == end {
                 end = next_end;
@@ -111,7 +111,7 @@ pub(crate) fn reconstruct<'a, V: PartialEq + 'a>(
     // そのため、時間方向の分割がある場合のみ O(N) のメモリを確保して全要素を Vec に集め、ソートしてから結合する。
     let (sorted, lazy) = if has_temporal_split {
         let mut sorted: Vec<(FlexId, V)> = rows.collect();
-        sorted.sort_by_cached_key(|(id, _)| (spatial_key_u128(id), id.seconds_range().0));
+        sorted.sort_by_cached_key(|(id, _)| (spatial_key_u128(id), id.time_range().0));
         (Some(sorted), None)
     } else {
         (None, Some(rows))
@@ -162,7 +162,7 @@ mod tests {
             let key_b = spatial_key_u128(&b.0);
             key_a
                 .cmp(&key_b)
-                .then_with(|| a.0.seconds_range().0.cmp(&b.0.seconds_range().0))
+                .then_with(|| a.0.time_range().0.cmp(&b.0.time_range().0))
         });
         reconstruct_temporal(items, allowed_intervals).collect()
     }
@@ -170,7 +170,9 @@ mod tests {
     /// 時間成分を全時間へ落とした [`FlexId`]。元のテストの `sorted_reference` 用。
     #[allow(dead_code)]
     pub(crate) fn spatial_key(flex_id: &FlexId) -> FlexId {
-        (*flex_id).time_cleared()
+        let mut key = *flex_id;
+        key.time_clear();
+        key
     }
 
     /// 仕様書 1.5.3 の例（`1800/809712`）が、分解 → 結合を経て元の表記へ戻る。
@@ -205,8 +207,8 @@ mod tests {
 
         let merged = reconstruct_temporal_vec(time_segments, None);
         assert_eq!(merged.len(), 2);
-        assert_eq!(merged[0].0.seconds_range(), (0, 3600));
-        assert_eq!(merged[1].0.seconds_range(), (3600, 7200));
+        assert_eq!(merged[0].0.time_range(), (0, 3600));
+        assert_eq!(merged[1].0.time_range(), (3600, 7200));
     }
 
     /// 同じ値なら、隣接する2つの時間Segmentは1つに融合する。
@@ -222,7 +224,7 @@ mod tests {
 
         let merged = reconstruct_temporal_vec(time_segments, None);
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged[0].0.seconds_range(), (0, 7200));
+        assert_eq!(merged[0].0.time_range(), (0, 7200));
         // gcd(0, 7200) = 7200 なので「2時間」という単位で1Segmentになる。
         assert_eq!((merged[0].0.i().seconds(), merged[0].0.t()), (7200, [0, 0]));
     }
@@ -259,7 +261,7 @@ mod tests {
             reconstruct_temporal_vec(time_segments, Some(&AllowedIntervals::new([Interval::DAY])));
         assert_eq!((merged[0].0.i().seconds(), merged[0].0.t()), (1, [0, 3599]));
         // 秒区間そのものは変わらない。
-        assert_eq!(merged[0].0.seconds_range(), (0, 3600));
+        assert_eq!(merged[0].0.time_range(), (0, 3600));
     }
 
     /// FlexIdが違えば、時間が連続していても結合しない。

@@ -273,9 +273,9 @@ mod api_symmetry {
 
         // 同じ `{i}/{t}` を指定したので、占める秒区間も一致する。
         let expected = (1024 * 7, 1024 * 8);
-        assert_eq!(single.seconds_range(), expected);
-        assert_eq!(range.seconds_range(), expected);
-        assert_eq!(flex.seconds_range(), expected);
+        assert_eq!(single.time_range(), expected);
+        assert_eq!(range.time_range(), expected);
+        assert_eq!(flex.time_range(), expected);
     }
 
     /// `interval` 引数は [`Interval`] でも整数リテラルでも `u64` でも通る。

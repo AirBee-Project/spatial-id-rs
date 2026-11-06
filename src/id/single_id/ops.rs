@@ -182,8 +182,8 @@ impl SingleId {
         {
             return false;
         }
-        let (s1, e1) = self.seconds_range();
-        let (s2, e2) = other.seconds_range();
+        let (s1, e1) = self.time_range();
+        let (s2, e2) = other.time_range();
         s1 <= s2 && e2 <= e1
     }
 
@@ -210,8 +210,8 @@ impl SingleId {
         {
             return false;
         }
-        let (s1, e1) = self.seconds_range();
-        let (s2, e2) = other.seconds_range();
+        let (s1, e1) = self.time_range();
+        let (s2, e2) = other.time_range();
         s1 < e2 && s2 < e1
     }
 }

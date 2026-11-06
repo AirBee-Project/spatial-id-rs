@@ -195,7 +195,7 @@ impl FlexId {
     /// // ズーム25のSegmentは 2^(35-25) = 1024 秒幅。
     /// let id = FlexId::new(5, 3, 2, 3, 10, 1).unwrap().time_with_segment(25, 7).unwrap();
     /// assert_eq!((id.t_zoomlevel(), id.t_index()), (25, 7));
-    /// assert_eq!(id.seconds_range(), (7 * 1024, 8 * 1024));
+    /// assert_eq!(id.time_range(), (7 * 1024, 8 * 1024));
     ///
     /// // `TZoomLevel` をそのまま渡してもよい。
     /// let same = FlexId::new(5, 3, 2, 3, 10, 1)
@@ -227,24 +227,6 @@ impl FlexId {
         }
 
         Ok(unsafe { self.time_with_segment_unchecked(tz.get(), t_index) })
-    }
-
-    /// 時間の指定を外し、全時間へ戻した自身を返す。
-    ///
-    /// ```
-    /// # use spatial_id::SpatialId;
-    /// # #[cfg(feature = "temporal_id")]
-    /// # {
-    /// # use spatial_id::{FlexId, SpatialId, time::TZoomLevel};
-    /// let id = FlexId::new(5, 3, 2, 3, 10, 1)
-    ///     .unwrap()
-    ///     .time_with_segment(TZoomLevel::new(25).unwrap(), 7)
-    ///     .unwrap();
-    /// assert!(id.time_cleared().time_is_whole());
-    /// # }
-    /// ```
-    pub fn time_cleared(self) -> Self {
-        unsafe { self.time_with_segment_unchecked(0, 0) }
     }
 
     /// 検証を行わずに時間Segment（4軸目）を設定した自身を返す。

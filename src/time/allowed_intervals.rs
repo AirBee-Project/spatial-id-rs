@@ -54,8 +54,10 @@ impl AllowedIntervals {
     /// # use spatial_id::time::{AllowedIntervals, Interval};
     /// // 30分・1時間で読みたい、という指定。
     /// let intervals = AllowedIntervals::new([Interval::new(1800).unwrap(), Interval::HOUR]);
-    /// assert_eq!(intervals.coarsest_dividing(0, 7200), Interval::HOUR);
-    /// assert_eq!(intervals.coarsest_dividing(0, 1800).seconds(), 1800);
+    /// assert!(intervals.contains(Interval::HOUR));
+    /// assert!(intervals.contains(Interval::new(1800).unwrap()));
+    /// // 自動で加わる候補。
+    /// assert!(intervals.contains(Interval::SECOND));
     /// # }
     /// ```
     pub fn new(intervals: impl IntoIterator<Item = Interval>) -> Self {
@@ -86,11 +88,11 @@ impl AllowedIntervals {
     ///
     /// # なぜ `&'static` を返すのか
     ///
-    /// 読み出し API（[`crate::SpatialIdSet::reconstructed_time_ranges`] など）へ
+    /// 読み出し API（[`crate::SpatialIdSet::time_reconstruct`] など）へ
     /// **一時値のまま直接渡せる**ようにするためである。所有値を返していた頃は
     ///
     /// ```text
-    /// let ids = set.reconstructed_time_ranges(Some(&AllowedIntervals::calendar()));  // 一時値が文末で死ぬ
+    /// let ids = set.time_reconstruct(Some(&AllowedIntervals::calendar()));  // 一時値が文末で死ぬ
     /// ```
     ///
     /// が書けず、コレクションごとに `range_ids_calendar()` のような別名を生やして
@@ -101,10 +103,10 @@ impl AllowedIntervals {
     /// # {
     /// # use spatial_id::time::{AllowedIntervals, Interval};
     /// let intervals = AllowedIntervals::calendar();
-    /// // 2時間ぶんは「1時間 × 2Segment」として表される（`gcd` なら `7200秒 × 1Segment`）。
-    /// assert_eq!(intervals.coarsest_dividing(0, 7200), Interval::HOUR);
-    /// // 暦で割り切れない区間は秒まで落ちる。
-    /// assert_eq!(intervals.coarsest_dividing(30, 90), Interval::SECOND);
+    /// // 暦の単位（日・時・分・秒）だけが候補になる。
+    /// assert!(intervals.contains(Interval::DAY));
+    /// assert!(intervals.contains(Interval::HOUR));
+    /// assert!(!intervals.contains(Interval::new(1800).unwrap()));
     /// # }
     /// ```
     #[cfg(feature = "temporal_id")]
@@ -130,7 +132,7 @@ impl AllowedIntervals {
     ///
     /// `Interval::SECOND` が必ず候補にあるため、**この関数は必ず値を返す**
     /// （`temporal_id` feature 無効時は全時間しか存在せず、[`WHOLE`](Interval::WHOLE) が返る）。
-    pub fn coarsest_dividing(&self, start: u64, end: u64) -> Interval {
+    pub(crate) fn coarsest_dividing(&self, start: u64, end: u64) -> Interval {
         for unit in self.intervals.iter().copied() {
             let seconds = unit.seconds();
             if start.is_multiple_of(seconds) && end.is_multiple_of(seconds) {
@@ -277,29 +279,23 @@ mod collection_api {
         }
 
         // 既定は gcd なので「7200 秒 × 1 TimeSegment」。
-        let natural: Vec<_> = set
-            .reconstructed_time_ranges(None)
-            .map(|r| r.to_string())
-            .collect();
+        let natural: Vec<_> = set.time_reconstruct(None).map(|r| r.to_string()).collect();
         assert_eq!(natural, ["12/0/3638/1614_7200/0"]);
 
         // 暦に正規化すると「3600 秒 × 2 TimeSegment」。
         let calendar: Vec<_> = set
-            .reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
+            .time_reconstruct(Some(AllowedIntervals::calendar()))
             .map(|r| r.to_string())
             .collect();
         assert_eq!(calendar, ["12/0/3638/1614_3600/0:1"]);
 
         // 秒区間はどの表現でも変わらない。
         assert_eq!(
-            set.reconstructed_time_ranges(None)
+            set.time_reconstruct(None).next().unwrap().time_range(),
+            set.time_reconstruct(Some(AllowedIntervals::calendar()))
                 .next()
                 .unwrap()
-                .seconds_range(),
-            set.reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
-                .next()
-                .unwrap()
-                .seconds_range()
+                .time_range()
         );
     }
 
@@ -312,13 +308,13 @@ mod collection_api {
             set.insert(id);
         }
 
-        let iter = set.reconstructed_time_ranges(Some(AllowedIntervals::calendar()));
+        let iter = set.time_reconstruct(Some(AllowedIntervals::calendar()));
         let got: Vec<_> = iter.map(|r| r.to_string()).collect();
         assert_eq!(got, ["12/0/3638/1614_3600/0:1"]);
 
         // 一時値の候補集合でも同じ（`intervals` は `&self` とライフタイムを共有しない）。
         let intervals = AllowedIntervals::new([Interval::MINUTE]);
-        let iter = set.reconstructed_time_ranges(Some(&intervals));
+        let iter = set.time_reconstruct(Some(&intervals));
         assert_eq!(iter.count(), 1);
     }
 
@@ -337,8 +333,8 @@ mod collection_api {
         assert_eq!(set.count(), 32);
 
         for hint in [
-            set.reconstructed_time_ranges(None).size_hint(),
-            set.reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
+            set.time_reconstruct(None).size_hint(),
+            set.time_reconstruct(Some(AllowedIntervals::calendar()))
                 .size_hint(),
             set.flat_single_ids(None).size_hint(),
             set.flat_single_ids(Some(AllowedIntervals::calendar()))
@@ -356,7 +352,7 @@ mod collection_api {
         }
 
         let got: Vec<_> = table
-            .reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
+            .time_reconstruct(Some(AllowedIntervals::calendar()))
             .map(|(r, v)| (r.to_string(), *v))
             .collect();
         assert_eq!(got, [("12/0/3638/1614_3600/0:1".into(), 7u32)]);
@@ -391,8 +387,8 @@ mod collection_api {
         set.insert(SingleId::new(12, 0, 3638, 1614).unwrap());
 
         for got in [
-            set.reconstructed_time_ranges(None).next().unwrap(),
-            set.reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
+            set.time_reconstruct(None).next().unwrap(),
+            set.time_reconstruct(Some(AllowedIntervals::calendar()))
                 .next()
                 .unwrap(),
         ] {
@@ -413,20 +409,17 @@ mod collection_api {
         set.insert(original);
 
         assert_eq!(
-            set.reconstructed_time_ranges(None)
-                .next()
-                .unwrap()
-                .to_string(),
+            set.time_reconstruct(None).next().unwrap().to_string(),
             "12/0/3638/1614_1800/809712"
         );
         // 1800 は暦の候補に無いので、割り切れる最も粗い候補＝分になる。
         let calendar = set
-            .reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
+            .time_reconstruct(Some(AllowedIntervals::calendar()))
             .next()
             .unwrap();
         assert_eq!(calendar.i(), Interval::MINUTE);
         assert_eq!(calendar.t(), [24_291_360, 24_291_389]);
         // 秒区間は変わらない。
-        assert_eq!(calendar.seconds_range(), original.seconds_range());
+        assert_eq!(calendar.time_range(), original.time_range());
     }
 }

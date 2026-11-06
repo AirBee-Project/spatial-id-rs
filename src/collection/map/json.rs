@@ -10,7 +10,7 @@ where
 {
     fn serialize<Ser: Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
         serialize_with_values(
-            self.reconstructed_time_ranges(Some(&AllowedIntervals::default())),
+            self.time_reconstruct(Some(&AllowedIntervals::default())),
             serializer,
         )
     }

@@ -182,14 +182,14 @@ where
     ///
     /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1Segmentになる。
     /// [`AllowedIntervals`] を渡すと、その候補のうち区間を割り切る最も粗い単位で表す。
-    pub fn reconstructed_time_ranges<'a>(
+    pub fn time_reconstruct<'a>(
         &'a self,
         allowed_intervals: Option<&'a AllowedIntervals>,
     ) -> impl Iterator<Item = (RangeId, &'a V)> + 'a {
-        self.inner.reconstructed_time_ranges(allowed_intervals)
+        self.inner.time_reconstruct(allowed_intervals)
     }
 
-    /// [`reconstructed_time_ranges`](Self::reconstructed_time_ranges) を、テーブル全体の最大ズームレベルに揃えた [`SingleId`] へ展開する。
+    /// [`time_reconstruct`](Self::time_reconstruct) を、テーブル全体の最大ズームレベルに揃えた [`SingleId`] へ展開する。
     pub fn flat_single_ids<'a>(
         &'a self,
         allowed_intervals: Option<&'a AllowedIntervals>,

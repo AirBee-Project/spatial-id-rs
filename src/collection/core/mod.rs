@@ -202,7 +202,7 @@ impl<V: PartialEq> FlexTreeCore<V> {
     ///
     /// [`iter`](Self::iter) が返す [FlexId] は時間を2の冪秒のSegmentとして持つので、
     /// `1800` 秒のような単位で入れた ID も、こちらなら元の表記で取り出せる。
-    pub fn reconstructed_time_ranges<'a>(
+    pub fn time_reconstruct<'a>(
         &'a self,
         allowed_intervals: Option<&'a AllowedIntervals>,
     ) -> impl Iterator<Item = (RangeId, &'a V)> + 'a {
@@ -213,13 +213,13 @@ impl<V: PartialEq> FlexTreeCore<V> {
         time_reconstruct::reconstruct(self.iter(), has_temporal_split, allowed_intervals)
     }
 
-    /// [`reconstructed_time_ranges`](Self::reconstructed_time_ranges) を、全体の最大ズームレベルに揃えた [`SingleId`] へ展開する。
+    /// [`time_reconstruct`](Self::time_reconstruct) を、全体の最大ズームレベルに揃えた [`SingleId`] へ展開する。
     pub fn flat_single_ids<'a>(
         &'a self,
         allowed_intervals: Option<&'a AllowedIntervals>,
     ) -> impl Iterator<Item = (SingleId, &'a V)> + 'a {
         let max_z = self.max_zoomlevel().unwrap_or(ZoomLevel::MIN).get();
-        self.reconstructed_time_ranges(allowed_intervals)
+        self.time_reconstruct(allowed_intervals)
             .flat_map(move |(range, value)| {
                 let range = if range.z() == max_z {
                     range

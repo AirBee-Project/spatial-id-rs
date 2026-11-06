@@ -27,7 +27,7 @@ impl From<&FlexId> for RangeId {
         let x_range = scale_to_range(flex_id.x_index as i64, flex_id.x_zoomlevel.get());
         let y_range = scale_to_range(flex_id.y_index as i64, flex_id.y_zoomlevel.get());
 
-        let (start, end) = flex_id.seconds_range();
+        let (start, end) = flex_id.time_range();
 
         let spatial = RangeId::new(
             max_z,

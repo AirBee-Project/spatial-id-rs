@@ -159,14 +159,14 @@ impl SpatialId for FlexId {
         Some(*self)
     }
 
-    fn seconds_range(&self) -> (u64, u64) {
+    fn time_range(&self) -> (u64, u64) {
         let zoom = crate::id::zoom_level::TZoomLevel::new(self.t_zoomlevel()).unwrap();
         let time_span = crate::time::segment::TimeSegment::new(zoom, self.t_index()).time_span();
         (time_span.start(), time_span.end())
     }
 
-    fn time_cleared(self) -> Self {
-        self.time_cleared()
+    fn time_clear(&mut self) {
+        *self = unsafe { self.time_with_segment_unchecked(0, 0) };
     }
 
     fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<Self, Error> {

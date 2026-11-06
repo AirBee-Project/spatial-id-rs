@@ -195,22 +195,6 @@ impl SingleId {
         self.set_time(self.i, t)
     }
 
-    /// 時間の指定を外し、全時間へ戻した自身を返す。
-    ///
-    /// ```
-    /// # use spatial_id::SpatialId;
-    /// # #[cfg(feature = "temporal_id")]
-    /// # {
-    /// # use spatial_id::{SingleId, SpatialId};
-    /// let mut id = SingleId::new(5, 3, 2, 10).unwrap();
-    /// id.set_time(3600, 5).unwrap();
-    /// assert!(id.time_cleared().time_is_whole());
-    /// # }
-    /// ```
-    pub fn time_cleared(self) -> Self {
-        self.time_with_unchecked(Interval::WHOLE, 0)
-    }
-
     /// 内部表現をそのまま取得する。クレート内部専用。
     pub(crate) fn time_segments(&self) -> span::TimeSegments {
         span::TimeSpan::of(self).into_segments()

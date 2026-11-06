@@ -226,8 +226,8 @@ impl FlexId {
         // `temporal_id` 無効時は双方とも全時間で必ず重なるため、判定ごと消す。
         #[cfg(feature = "temporal_id")]
         {
-            let (self_start, self_end) = self.seconds_range();
-            let (range_start, range_end) = range.seconds_range();
+            let (self_start, self_end) = self.time_range();
+            let (range_start, range_end) = range.time_range();
             if self_start >= range_end || range_start >= self_end {
                 return false;
             }

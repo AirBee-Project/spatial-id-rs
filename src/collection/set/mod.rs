@@ -150,23 +150,23 @@ impl SpatialIdSet {
     /// set.insert(id);
     ///
     /// // 既定（gcd）では 2 時間ぶんが「7200 秒 × 1 TimeSegment」になる。
-    /// assert_eq!(set.reconstructed_time_ranges(None).next().unwrap().to_string(), "12/0/3638/1614_7200/0");
+    /// assert_eq!(set.time_reconstruct(None).next().unwrap().to_string(), "12/0/3638/1614_7200/0");
     ///
     /// // 暦の単位に正規化すると「3600 秒 × 2 TimeSegment」になる。
-    /// let got = set.reconstructed_time_ranges(Some(AllowedIntervals::calendar())).next().unwrap();
+    /// let got = set.time_reconstruct(Some(AllowedIntervals::calendar())).next().unwrap();
     /// assert_eq!(got.to_string(), "12/0/3638/1614_3600/0:1");
     /// # }
     /// ```
-    pub fn reconstructed_time_ranges<'a>(
+    pub fn time_reconstruct<'a>(
         &'a self,
         allowed_intervals: Option<&'a AllowedIntervals>,
     ) -> impl Iterator<Item = RangeId> + 'a {
         self.inner
-            .reconstructed_time_ranges(allowed_intervals)
+            .time_reconstruct(allowed_intervals)
             .map(|(range_id, _)| range_id)
     }
 
-    /// [`reconstructed_time_ranges`](Self::reconstructed_time_ranges) を、集合全体の最大ズームレベルに揃えた [`SingleId`] へ展開する。
+    /// [`time_reconstruct`](Self::time_reconstruct) を、集合全体の最大ズームレベルに揃えた [`SingleId`] へ展開する。
     pub fn flat_single_ids<'a>(
         &'a self,
         allowed_intervals: Option<&'a AllowedIntervals>,

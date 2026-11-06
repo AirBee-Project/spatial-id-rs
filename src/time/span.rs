@@ -12,7 +12,7 @@ pub(crate) struct TimeSpan {
 impl TimeSpan {
     /// `id` が占有する絶対秒区間。
     pub(crate) fn of(id: &impl crate::SpatialId) -> Self {
-        let (start, end) = id.seconds_range();
+        let (start, end) = id.time_range();
         Self::new_unchecked(start, end)
     }
 

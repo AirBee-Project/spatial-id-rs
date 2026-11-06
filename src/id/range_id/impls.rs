@@ -203,14 +203,14 @@ impl SpatialId for RangeId {
         Some(*self)
     }
 
-    fn seconds_range(&self) -> (u64, u64) {
+    fn time_range(&self) -> (u64, u64) {
         let unit = self.i.seconds();
         let t = self.t();
         (t[0] * unit, (t[1] + 1) * unit)
     }
 
-    fn time_cleared(self) -> Self {
-        self.time_cleared()
+    fn time_clear(&mut self) {
+        *self = self.time_with_unchecked(crate::Interval::WHOLE, [0, 0]);
     }
 
     fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<Self, Error> {

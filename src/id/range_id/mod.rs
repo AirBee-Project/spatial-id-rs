@@ -195,22 +195,6 @@ impl RangeId {
         self.set_time(self.i, t)
     }
 
-    /// 時間の指定を外し、全時間へ戻した自身を返す。
-    ///
-    /// ```
-    /// # use spatial_id::SpatialId;
-    /// # #[cfg(feature = "temporal_id")]
-    /// # {
-    /// # use spatial_id::{RangeId, SpatialId, time::Interval};
-    /// let mut id = RangeId::new(4, 0, 0, 0).unwrap();
-    /// id.set_time(Interval::HOUR, [0, 1]).unwrap();
-    /// assert!(id.time_cleared().time_is_whole());
-    /// # }
-    /// ```
-    pub fn time_cleared(self) -> Self {
-        self.time_with_unchecked(Interval::WHOLE, [0, 0])
-    }
-
     /// 検証済みの `{i}` / `{t}` を書き込む。
     fn time_with_unchecked(
         #[cfg_attr(not(feature = "temporal_id"), allow(unused_mut))] mut self,
