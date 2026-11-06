@@ -417,11 +417,6 @@ impl<V: Ord + Clone> FlexTreeCore<V> {
         self.filter(&|_| Decision::Descend, &|_, value| range.contains(value))
     }
 
-    /// 全ての値の集合。
-    pub fn value_set(&self) -> BTreeSet<V> {
-        self.iter().map(|(_, value)| value.clone()).collect()
-    }
-
     /// 値が `values` に含まれる [FlexId] だけを残す。
     pub fn filter_values(&self, values: &BTreeSet<V>) -> Self {
         self.filter(&|_| Decision::Descend, &|_, value| values.contains(value))
