@@ -209,6 +209,12 @@ impl SpatialId for RangeId {
         (t[0] * unit, (t[1] + 1) * unit)
     }
 
+    fn move_t(&mut self, by: i64) -> Result<(), Error> {
+        let [min, max] = self.t();
+        let i = self.i();
+        self.set_t([i.shifted_index(min, by)?, i.shifted_index(max, by)?])
+    }
+
     fn time_clear(&mut self) {
         *self = self.time_with_unchecked(crate::Interval::WHOLE, [0, 0]);
     }

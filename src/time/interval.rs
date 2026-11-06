@@ -139,6 +139,18 @@ impl Interval {
         unix_seconds / self.seconds()
     }
 
+    /// 時間インデックス `t` を `by` だけ動かす。`u64` の範囲を出る場合は
+    /// [`SpatialIdError::TOutOfRange`] を返す。`{i}` による上限の検証は呼び出し側で行う。
+    pub(crate) fn shifted_index(self, t: u64, by: i64) -> Result<u64, Error> {
+        t.checked_add_signed(by).ok_or_else(|| {
+            SpatialIdError::TOutOfRange {
+                i: self.seconds(),
+                t: if by >= 0 { u64::MAX } else { 0 },
+            }
+            .into()
+        })
+    }
+
     /// `{i}` と `{t}` の範囲（両端含む）が占める絶対秒区間 `[start, end)` を、検証して返す。
     ///
     /// 単一Segmentの型（[`SingleId`](crate::SingleId) / [`FlexId`](crate::FlexId)）は
@@ -309,5 +321,38 @@ mod api_symmetry {
         let before = range;
         assert!(range.set_t([0, u64::MAX]).is_err());
         assert_eq!(range, before);
+    }
+
+    /// `move_t` と `length_t_seconds` は3型で同じ意味を持ち、範囲外では元の値を保つ。
+    #[test]
+    fn move_t_and_length_work_on_every_type() {
+        let mut single = SingleId::new(4, 0, 1, 1).unwrap();
+        single.set_time(1024, 7).unwrap();
+        let mut range = RangeId::new(4, 0, 1, 1).unwrap();
+        range.set_time(1024, [7, 8]).unwrap();
+        let mut flex = FlexId::new(4, 0, 4, 1, 4, 1)
+            .unwrap()
+            .time_with_segment(25, 7)
+            .unwrap();
+
+        single.move_t(3).unwrap();
+        range.move_t(3).unwrap();
+        flex.move_t(3).unwrap();
+        assert_eq!(single.time_range(), (1024 * 10, 1024 * 11));
+        assert_eq!(range.time_range(), (1024 * 10, 1024 * 12));
+        assert_eq!(flex.time_range(), (1024 * 10, 1024 * 11));
+        assert_eq!(single.length_t_seconds(), 1024);
+        assert_eq!(range.length_t_seconds(), 2048);
+        assert_eq!(flex.length_t_seconds(), 1024);
+
+        let (before_single, before_range, before_flex) = (single, range, flex);
+        assert!(single.move_t(-11).is_err());
+        assert!(range.move_t(-11).is_err());
+        assert!(flex.move_t(-11).is_err());
+        assert!(single.move_t(i64::MAX).is_err());
+        assert_eq!(
+            (single, range, flex),
+            (before_single, before_range, before_flex)
+        );
     }
 }
