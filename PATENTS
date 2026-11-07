@@ -1,0 +1,49 @@
+# 特許に関する通知 / Patent Notice
+
+## 日本語
+
+本ソフトウェア（spatial-id-rs / crate `spatial-id`）には、国立大学法人筑波大学が
+特許出願している技術が含まれています。
+
+- 出願番号: 特願2026-069551
+- 出願人: 国立大学法人筑波大学
+
+本ソフトウェアのソースコードは The Clear BSD License（BSD-3-Clause-Clear）で
+提供されています。このライセンスは著作権についての許諾であり、特許権の実施を
+明示的にも黙示的にも許諾するものではありません。
+
+本ソフトウェアに含まれる技術を実施する場合（本ソフトウェアやその改変物を製品・
+サービスに組み込む場合を含む）には、別途、特許権者の許諾が必要となる場合が
+あります。
+
+v0.1.1 以前の版は MIT License で配布されています。版を問わず、本ソフトウェアに
+含まれる技術を実施するには、別途、特許権者の許諾が必要となる場合があります。
+
+特許の実施許諾に関するお問い合わせは、学生団体AirBeeの問い合わせフォームからご連絡ください。
+
+- https://forms.gle/5yP7y213qbUqd989A
+
+## English
+
+This software (spatial-id-rs / crate `spatial-id`) contains technology that is the
+subject of a patent application filed by the University of Tsukuba.
+
+- Application number: Japanese Patent Application No. 2026-069551
+- Applicant: University of Tsukuba
+
+The source code of this software is licensed under The Clear BSD License
+(BSD-3-Clause-Clear). That license grants copyright permissions only; it does not
+grant, expressly or by implication, any license under any patent rights.
+
+Practicing the technology contained in this software (including incorporating this
+software or derivative works of it into products or services) may require a
+separate license from the patent holder.
+
+Versions 0.1.1 and earlier were distributed under the MIT License. Regardless of
+version, practicing the technology contained in this software may require a
+separate license from the patent holder.
+
+For inquiries about patent licensing, please contact AirBee (student organization)
+via the inquiry form:
+
+- https://forms.gle/5yP7y213qbUqd989A
