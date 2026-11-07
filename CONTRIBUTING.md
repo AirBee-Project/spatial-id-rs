@@ -40,6 +40,14 @@
 
 rustdoc は日本語・常体で書く（[docs/docs-rule.md](docs/docs-rule.md)）。設計思想は rustdoc ではなく [docs/](docs/) に書き、命名は [docs/method-naming.md](docs/method-naming.md) と [docs/file-naming-conventions.md](docs/file-naming-conventions.md) に従う。
 
+## ライセンスと権利
+
+本プロジェクトは [The Clear BSD License](LICENSE) で提供しており、特許出願中の技術を含む（[PATENTS](PATENTS)）。Pull Request を送ることで、貢献者は次のことに同意したものとする。
+
+- 貢献したコードやドキュメントが、本プロジェクトのライセンスで提供されること。
+- 学生団体AirBee が、貢献を含む本ソフトウェアのライセンスを将来変更し、または別のライセンス（商用ライセンスを含む）を追加できること。
+- 貢献したものについて、自身がこれらを許諾する権利を持っていること（所属先の規程などで権利が制限される場合は、事前に確認すること）。
+
 # リリース手順
 
 `spatial-id` の crates.io へのリリースは [release-plz](https://release-plz.dev/) で自動化している。
