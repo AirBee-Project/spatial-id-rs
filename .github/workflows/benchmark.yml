@@ -58,6 +58,10 @@ jobs:
       matrix:
         bench_name: ${{ fromJson(needs.build-benchmarks.outputs.benches) }}
     steps:
+      # query 系ベンチは実行時に sample/ を読むため、リポジトリを checkout する。
+      # checkout は作業ディレクトリを空にするので、artifact のダウンロードより前に置く。
+      - uses: actions/checkout@v7
+
       - name: Download benchmark binaries
         uses: actions/download-artifact@v8
         with:
