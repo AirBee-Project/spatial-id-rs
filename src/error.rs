@@ -70,6 +70,9 @@ pub enum GeometryError {
 
     /// GeoJSON の Polygon の穴が外周の内側に収まっていないことを示す。`index` は内周リングの位置（0 始まり）。
     HoleOutsideExterior { index: usize },
+
+    /// XML として読めないことを示す。依存クレートの型を公開しないよう、内容は文字列で持つ。
+    InvalidXml { message: String },
 }
 
 /// [`SpatialId`](crate::SpatialId) 関連で発生するエラー。
@@ -231,6 +234,7 @@ impl fmt::Display for GeometryError {
             GeometryError::HoleOutsideExterior { index } => {
                 write!(f, "Polygon hole {} is not inside the exterior ring", index)
             }
+            GeometryError::InvalidXml { message } => write!(f, "invalid XML: {}", message),
         }
     }
 }
