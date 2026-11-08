@@ -37,8 +37,7 @@ jobs:
     if: ${{ github.repository_owner == 'AirBee-Project' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     concurrency:
       group: release-plz-${{ github.ref }}
       cancel-in-progress: false
@@ -52,10 +51,18 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.RELEASE_PLZ_APP_ID }}
+          private-key: ${{ secrets.RELEASE_PLZ_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Run release-plz
         uses: release-plz/action@v0.5
         with:
           command: release-pr
         env:
-          # 既定の GITHUB_TOKEN で開いた PR には CI が走らないため PAT を使う
-          GITHUB_TOKEN: ${{ secrets.SPATIAL_ID_RS_RELEASE_PLZ_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
