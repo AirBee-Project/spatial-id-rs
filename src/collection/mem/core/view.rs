@@ -6,7 +6,7 @@ use triomphe::Arc;
 /// 領域 `this` の上の Node を借りて見たもの。
 pub(super) enum View<'a, V> {
     Empty,
-    Leaf(&'a V),
+    Value(&'a V),
     Branch(&'a Arc<Branch<V>>),
     /// 領域のうち `region` だけに `child` があり、外側は空。
     Skip {
@@ -17,7 +17,7 @@ pub(super) enum View<'a, V> {
 
 /// Skip の先にある、空でも Skip でもない Node を借りたもの。
 pub(super) enum Target<'a, V> {
-    Leaf(&'a V),
+    Value(&'a V),
     Branch(&'a Arc<Branch<V>>),
 }
 
@@ -38,18 +38,18 @@ impl<V> Clone for Target<'_, V> {
 impl<V> Copy for Target<'_, V> {}
 
 impl<'a, V> Target<'a, V> {
-    /// Leaf か Branch の `node` を借りる。
+    /// Value か Branch の `node` を借りる。
     pub(super) fn of(node: &'a Node<V>) -> Self {
         match node {
-            Node::Leaf(value) => Target::Leaf(value),
+            Node::Value(value) => Target::Value(value),
             Node::Branch(branch) => Target::Branch(branch),
-            _ => unreachable!("Skip の先は Leaf か Branch"),
+            _ => unreachable!("Skip の先は Value か Branch"),
         }
     }
 
     pub(super) fn split_dimensions(self) -> u8 {
         match self {
-            Target::Leaf(_) => 0,
+            Target::Value(_) => 0,
             Target::Branch(branch) => branch.split_dimensions,
         }
     }
@@ -57,12 +57,12 @@ impl<'a, V> Target<'a, V> {
 
 impl<'a, V> View<'a, V> {
     /// 領域 `this` の `node` を見る。
-    pub(super) fn of(node: &'a Node<V>, this: &FlexId) -> Self {
+    pub(super) fn of(node: Option<&'a Node<V>>, this: &FlexId) -> Self {
         match node {
-            Node::Empty => View::Empty,
-            Node::Leaf(value) => View::Leaf(value),
-            Node::Branch(branch) => View::Branch(branch),
-            node => {
+            None => View::Empty,
+            Some(Node::Value(value)) => View::Value(value),
+            Some(Node::Branch(branch)) => View::Branch(branch),
+            Some(node) => {
                 let (region, child) = node.skip_target(this).unwrap();
                 View::Skip { region, child }
             }
@@ -71,11 +71,13 @@ impl<'a, V> View<'a, V> {
 
     /// 領域 `this` のうち `region` だけに、領域 `region` の `node` がある View。
     pub(super) fn skip(this: &FlexId, region: FlexId, node: &'a Node<V>) -> Self {
-        match View::of(node, &region) {
-            View::Empty => View::Empty,
-            View::Leaf(value) => View::at(this, region, Target::Leaf(value)),
-            View::Branch(branch) => View::at(this, region, Target::Branch(branch)),
-            View::Skip { region, child } => View::at(this, region, child),
+        match node {
+            Node::Value(value) => View::at(this, region, Target::Value(value)),
+            Node::Branch(branch) => View::at(this, region, Target::Branch(branch)),
+            node => {
+                let (target_region, child) = node.skip_target(&region).unwrap();
+                View::at(this, target_region, child)
+            }
         }
     }
 
@@ -83,7 +85,7 @@ impl<'a, V> View<'a, V> {
     pub(super) fn at(this: &FlexId, region: FlexId, child: Target<'a, V>) -> Self {
         match child {
             _ if region != *this => View::Skip { region, child },
-            Target::Leaf(value) => View::Leaf(value),
+            Target::Value(value) => View::Value(value),
             Target::Branch(branch) => View::Branch(branch),
         }
     }
@@ -92,10 +94,10 @@ impl<'a, V> View<'a, V> {
         matches!(self, View::Empty)
     }
 
-    /// Leaf ならその値。
-    pub(super) fn leaf(&self) -> Option<&'a V> {
+    /// Value ならその値。
+    pub(super) fn value(&self) -> Option<&'a V> {
         match self {
-            View::Leaf(value) => Some(value),
+            View::Value(value) => Some(value),
             _ => None,
         }
     }
@@ -114,14 +116,14 @@ impl<'a, V> View<'a, V> {
                     region,
                     child: Target::Branch(a),
                 },
-                Node::BranchAt(_, b),
+                Node::ShortSkipBranch(_, b),
             ) => same(a, b) && node.skip_target(this).is_some_and(|(r, _)| r == *region),
             (
                 View::Skip {
                     region,
                     child: Target::Branch(a),
                 },
-                Node::Skip(skip),
+                Node::LongSkip(skip),
             ) => {
                 matches!(&skip.child, Node::Branch(b) if same(a, b))
                     && node.skip_target(this).is_some_and(|(r, _)| r == *region)
@@ -138,10 +140,10 @@ impl<'a, V> View<'a, V> {
         }
     }
 
-    /// 最初に割る次元の候補（[`Dimension::bit`] の OR）。Leaf や空なら 0。
+    /// 最初に割る次元の候補（[`Dimension::bit`] の OR）。Value や空なら 0。
     pub(super) fn head_dimensions(&self, this: &FlexId) -> u8 {
         match self {
-            View::Empty | View::Leaf(_) => 0,
+            View::Empty | View::Value(_) => 0,
             View::Branch(branch) => branch.dimension.bit(),
             View::Skip { region, child } => {
                 region.finer_dimensions_than(this) | child.split_dimensions()
@@ -161,8 +163,8 @@ impl<'a, V> View<'a, V> {
         let (region, child) = match *self {
             View::Branch(branch) if branch.dimension == dimension => {
                 return [
-                    View::of(&branch.lower, &halves[0]),
-                    View::of(&branch.upper, &halves[1]),
+                    View::of(Some(&branch.lower), &halves[0]),
+                    View::of(Some(&branch.upper), &halves[1]),
                 ];
             }
             View::Skip { region, child } => (region, child),
@@ -184,17 +186,17 @@ impl<'a, V> View<'a, V> {
 
 impl<V: PartialEq + Clone> View<'_, V> {
     /// 領域 `this` の Node として取り出す。
-    pub(super) fn to_node(self, this: &FlexId) -> Node<V> {
+    pub(super) fn to_node(self, this: &FlexId) -> Option<Node<V>> {
         match self {
-            View::Empty => Node::Empty,
-            View::Leaf(value) => Node::Leaf(value.clone()),
-            View::Branch(branch) => Node::Branch(branch.clone()),
+            View::Empty => None,
+            View::Value(value) => Some(Node::Value(value.clone())),
+            View::Branch(branch) => Some(Node::Branch(branch.clone())),
             View::Skip { region, child } => {
                 let child = match child {
-                    Target::Leaf(value) => Node::Leaf(value.clone()),
+                    Target::Value(value) => Node::Value(value.clone()),
                     Target::Branch(branch) => Node::Branch(branch.clone()),
                 };
-                Node::rebase(child, &region, this)
+                Some(Node::rebase(child, &region, this))
             }
         }
     }
