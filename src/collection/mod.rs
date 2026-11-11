@@ -4,8 +4,8 @@ pub mod mem;
 
 pub use self::mem::{IntoIter, SpatialIdMap, SpatialIdSet};
 
-#[allow(unused_imports)]
-pub(crate) use self::mem::{core, time_reconstruct, traits};
 #[cfg(test)]
 #[allow(unused_imports)]
 pub(crate) use self::mem::set;
+#[allow(unused_imports)]
+pub(crate) use self::mem::{core, time_reconstruct, traits};
