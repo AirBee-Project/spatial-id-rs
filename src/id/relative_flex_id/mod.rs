@@ -68,18 +68,18 @@ impl RelativeFlexId {
     }
 }
 
-/// T 方向に深くならず、F / X / Y の深さの合計が [`ShortPath::MAX_STEPS`] 段以内の [RelativeFlexId] を u16 に詰めたもの。
+/// T 方向に深くならず、F / X / Y の深さの合計が [`ShortRelativeFlexId::MAX_STEPS`] 段以内の [RelativeFlexId] を u16 に詰めたもの。
 ///
 /// 下位9ビットに F / X / Y の深さを3ビットずつ、残りの7ビットに F / X / Y の順で各次元の下位ビットを並べる。
 /// 段の数や次元によらず同じ手順で復元できるので、分岐せずに行き先を求められる。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct ShortPath(u16);
+pub(crate) struct ShortRelativeFlexId(u16);
 
-impl ShortPath {
+impl ShortRelativeFlexId {
     pub const MAX_STEPS: u8 = 7;
 
     /// `relative` が T 方向に深いか、深さの合計が [`Self::MAX_STEPS`] 段を超えるなら [`None`]。
-    pub fn new(relative: RelativeFlexId) -> Option<ShortPath> {
+    pub fn new(relative: RelativeFlexId) -> Option<ShortRelativeFlexId> {
         let id = relative.0;
         let (zf, zx, zy) = (id.f_zoomlevel(), id.x_zoomlevel(), id.y_zoomlevel());
         if id.t_zoomlevel() != 0 || zf + zx + zy > Self::MAX_STEPS {
@@ -87,7 +87,7 @@ impl ShortPath {
         }
         let bits =
             id.f_index() as u16 | (id.x_index() as u16) << zf | (id.y_index() as u16) << (zf + zx);
-        Some(ShortPath(
+        Some(ShortRelativeFlexId(
             u16::from(zf) | u16::from(zx) << 3 | u16::from(zy) << 6 | bits << 9,
         ))
     }

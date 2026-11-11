@@ -43,12 +43,14 @@
 
 ## 7. Node
 
-- **定義**: `FlexTreeCore` を構成する要素。自身の `FlexId` を持たず、辿るときに親から渡される領域で意味を持つ。次の種類がある。
-  - **Leaf**: 値を1つ持つか、空。値を持つ `Leaf` が、値を持つ `FlexId` 1つに対応する。
+- **定義**: `FlexTreeCore` を構成する要素。自身の `FlexId` を持たず、辿るときに親から渡される領域で意味を持つ。空の領域は `Option<Node<V>>` の `None` で表現し、`Node` 自体は常に実体を持つ。次の種類がある。
+  - **Value**: 値を1つ持つ。値を持つ `Value` が、値を持つ `FlexId` 1つに対応する。
   - **Branch**: 領域を1つの `Dimension` で2つに分ける。
-  - **Skip**: 片側が空の `Branch` が続く経路を、1つにまとめる。
-- **命名規則**: 「ノード」「葉」と訳さず、**`Node`**・**`Leaf`**・**`Branch`**・**`Skip`** と書く。値を持つ領域そのものを指すときは **`FlexId`** と書く。
-- **コード例**: `Node::Leaf`、`Node::Branch`、`Node::Skip`
+  - **LongSkip**: 片側が空の `Branch` が続く経路を、1つにまとめたもの。
+  - **ShortSkipValue**: 深さ合計が7段以下の空間方向の相対位置で `Value` に到達する Skip。`Node` に埋め込まれる。
+  - **ShortSkipBranch**: 深さ合計が7段以下の空間方向の相対位置で `Branch` に到達する Skip。`Node` に埋め込まれる。
+- **命名規則**: 「ノード」「葉」と訳さず、**`Node`**・**`Value`**・**`Branch`**・**`LongSkip`**・**`ShortSkipValue`**・**`ShortSkipBranch`** と書く。値を持つ領域そのものを指すときは **`FlexId`** と書く。
+- **コード例**: `Node::Value`、`Node::Branch`、`Node::LongSkip`、`Node::ShortSkipValue`、`Node::ShortSkipBranch`
 
 ## 8. 子孫
 
@@ -72,10 +74,10 @@
 
 ## 11. FlexId のカノニカル列
 
-- **定義**: FlexId の Z-order 列のうち、`FlexTreeCore` の規則（`Node::join` で、まとめられる左右を1つにし、片側が空なら `Skip` にする）でこれ以上まとめられないもの。`FlexTreeCore` から得られる列がこれにあたる。
+- **定義**: FlexId の Z-order 列のうち、`FlexTreeCore` の規則（`Node::join` で、まとめられる左右を1つにし、片側が空なら Skip にする）でこれ以上まとめられないもの。`FlexTreeCore` から得られる列がこれにあたる。
 - **特徴**: 形状（領域から値への写像）に対して一意に定まる。区切り方や挿入の順によらず、同じ形状からは同じ列が得られる。まとめられるかは兄弟の子孫どうしを比べて決まるので、隣り合う 2 要素だけでは判定できない。
 - **命名規則**: 「canonical sequence」「正規形」とは書かず、**FlexId のカノニカル列** と書く。このときの木の構造は、形状に対して一意に定まる **`FlexTreeCore`** そのものなので、「canonical form」「カノニカル形」とは書かず、`FlexTreeCore` と書く。
 
 ## 共通の規則
 
-型として存在する名前（`FlexId`・`FlexTreeCore`・`Node`・`Leaf`・`Branch`・`Skip` など）は、ドキュメントやコメントでも日本語に訳さず、型名のまま書く。
+型として存在する名前（`FlexId`・`FlexTreeCore`・`Node`・`Value`・`Branch`・`LongSkip`・`ShortSkipValue`・`ShortSkipBranch` など）は、ドキュメントやコメントでも日本語に訳さず、型名のまま書く。

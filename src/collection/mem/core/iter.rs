@@ -38,20 +38,21 @@ impl<'a, V> Iterator for Iter<'a, V> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some((node, this)) = self.stack.pop() {
             match node {
-                Node::Leaf(value) => {
+                Node::Value(value) => {
                     self.remaining -= 1;
                     return Some((this, value));
                 }
-                Node::LeafAt(path, value) => {
+                Node::ShortSkipValue(path, value) => {
                     self.remaining -= 1;
                     return Some((path.to_absolute(&this), value));
                 }
                 Node::Branch(branch) => self.push_branch(this, branch),
-                Node::BranchAt(path, branch) => self.push_branch(path.to_absolute(&this), branch),
-                Node::Skip(skip) => self
+                Node::ShortSkipBranch(path, branch) => {
+                    self.push_branch(path.to_absolute(&this), branch)
+                }
+                Node::LongSkip(skip) => self
                     .stack
                     .push((&skip.child, skip.path.to_absolute(&this).unwrap())),
-                Node::Empty => {}
             }
         }
         None
@@ -97,18 +98,19 @@ impl<V: Clone> Iterator for IntoIter<V> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some((node, this)) = self.stack.pop() {
             match node {
-                Node::Empty => {}
-                Node::Leaf(value) => {
+                Node::Value(value) => {
                     self.remaining -= 1;
                     return Some((this, value));
                 }
-                Node::LeafAt(path, value) => {
+                Node::ShortSkipValue(path, value) => {
                     self.remaining -= 1;
                     return Some((path.to_absolute(&this), value));
                 }
                 Node::Branch(branch) => self.push_branch(this, branch),
-                Node::BranchAt(path, branch) => self.push_branch(path.to_absolute(&this), branch),
-                Node::Skip(skip) => {
+                Node::ShortSkipBranch(path, branch) => {
+                    self.push_branch(path.to_absolute(&this), branch)
+                }
+                Node::LongSkip(skip) => {
                     let region = skip.path.to_absolute(&this).unwrap();
                     let child = Arc::try_unwrap(skip)
                         .map_or_else(|skip| skip.child.clone(), |skip| skip.child);
@@ -160,11 +162,19 @@ impl<V: Clone> IntoIterator for FlexTreeCore<V> {
 
     fn into_iter(self) -> Self::IntoIter {
         let remaining = self.count();
-        let height = self.upper_root.height().max(self.lower_root.height());
+        let height = self
+            .upper_root
+            .as_ref()
+            .map_or(0, |r| r.height())
+            .max(self.lower_root.as_ref().map_or(0, |r| r.height()));
         let mut stack = Vec::with_capacity(usize::from(height) + 2);
         // 後に積んだものから取り出すので、上側のルートを後に積む
-        stack.push((self.lower_root, FlexId::LOWER_MAX));
-        stack.push((self.upper_root, FlexId::UPPER_MAX));
+        if let Some(lower) = self.lower_root {
+            stack.push((lower, FlexId::LOWER_MAX));
+        }
+        if let Some(upper) = self.upper_root {
+            stack.push((upper, FlexId::UPPER_MAX));
+        }
         IntoIter { stack, remaining }
     }
 }
@@ -183,7 +193,7 @@ struct OrderedRootBuilder<V> {
     root_id: FlexId,
     prev_id: FlexId,
     cur_region: FlexId,
-    cur_node: Node<V>,
+    cur_node: Option<Node<V>>,
     stack: Vec<(FlexId, Dimension, u8, Node<V>)>,
 }
 
@@ -193,7 +203,7 @@ impl<V: PartialEq + Clone> OrderedRootBuilder<V> {
             root_id,
             prev_id: id,
             cur_region: id,
-            cur_node: Node::Leaf(value),
+            cur_node: Some(Node::Value(value)),
             stack: Vec::new(),
         }
     }
@@ -208,35 +218,30 @@ impl<V: PartialEq + Clone> OrderedRootBuilder<V> {
             }
             let (_, _, _, lower) = self.stack.pop().unwrap();
             let upper_id = top_fork.split_on(top_dim, Side::Upper).unwrap();
-            let upper = Node::rebase(
-                core::mem::take(&mut self.cur_node),
-                &self.cur_region,
-                &upper_id,
-            );
-            self.cur_node = Node::join(&top_fork, top_dim, lower, upper);
+            let cur = self.cur_node.take().unwrap();
+            let upper = Node::rebase(cur, &self.cur_region, &upper_id);
+            self.cur_node = Some(Node::join(&top_fork, top_dim, Some(lower), Some(upper)).unwrap());
             self.cur_region = top_fork;
         }
         let lower_id = fork.split_on(split_dim, Side::Lower).unwrap();
-        let lower = Node::rebase(
-            core::mem::take(&mut self.cur_node),
-            &self.cur_region,
-            &lower_id,
-        );
+        let cur = self.cur_node.take().unwrap();
+        let lower = Node::rebase(cur, &self.cur_region, &lower_id);
         self.stack.push((fork, split_dim, agree, lower));
         self.prev_id = id;
         self.cur_region = id;
-        self.cur_node = Node::Leaf(value);
+        self.cur_node = Some(Node::Value(value));
         Ok(())
     }
 
     fn finish(mut self) -> Node<V> {
+        let mut cur = self.cur_node.take().unwrap();
         while let Some((top_fork, top_dim, _, lower)) = self.stack.pop() {
             let upper_id = top_fork.split_on(top_dim, Side::Upper).unwrap();
-            let upper = Node::rebase(self.cur_node, &self.cur_region, &upper_id);
-            self.cur_node = Node::join(&top_fork, top_dim, lower, upper);
+            let upper = Node::rebase(cur, &self.cur_region, &upper_id);
+            cur = Node::join(&top_fork, top_dim, Some(lower), Some(upper)).unwrap();
             self.cur_region = top_fork;
         }
-        Node::rebase(self.cur_node, &self.cur_region, &self.root_id)
+        Node::rebase(cur, &self.cur_region, &self.root_id)
     }
 }
 
@@ -245,8 +250,8 @@ fn finish_builders<V: PartialEq + Clone>(
     lower: Option<OrderedRootBuilder<V>>,
 ) -> FlexTreeCore<V> {
     FlexTreeCore {
-        upper_root: upper.map_or(Node::Empty, OrderedRootBuilder::finish),
-        lower_root: lower.map_or(Node::Empty, OrderedRootBuilder::finish),
+        upper_root: upper.map(OrderedRootBuilder::finish),
+        lower_root: lower.map(OrderedRootBuilder::finish),
     }
 }
 

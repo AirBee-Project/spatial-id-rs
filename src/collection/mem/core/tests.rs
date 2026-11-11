@@ -6,42 +6,42 @@ use triomphe::Arc;
 
 use super::FlexTreeCore;
 use super::node::{Branch, Node, Skip, common_descent};
-use crate::id::relative_flex_id::ShortPath;
+use crate::id::relative_flex_id::ShortRelativeFlexId;
 use crate::{FlexId, RangeId, Side, SingleId, id::dimension::Dimension};
 
-/// Leaf と Branch の数。Skip は数えない。
+/// Value と Branch の数。Skip は数えない。
 fn node_count<V>(node: &Node<V>) -> usize {
     match node {
-        Node::Empty | Node::Leaf(_) | Node::LeafAt(..) => 1,
-        Node::Branch(branch) | Node::BranchAt(_, branch) => {
+        Node::Value(_) | Node::ShortSkipValue(..) => 1,
+        Node::Branch(branch) | Node::ShortSkipBranch(_, branch) => {
             1 + node_count(&branch.lower) + node_count(&branch.upper)
         }
         // Skip は位置を移すだけで、値も分岐も持たない
-        Node::Skip(skip) => node_count(&skip.child),
+        Node::LongSkip(skip) => node_count(&skip.child),
     }
 }
 
 /// 領域 `this` の Node が FlexTreeCore の規則を守っているか検査する。
 fn check_rules<V: PartialEq + Debug>(node: &Node<V>, this: FlexId) -> Result<(), String> {
     match node {
-        Node::Empty | Node::Leaf(_) => Ok(()),
+        Node::Value(_) => Ok(()),
         Node::Branch(branch) => check_branch(branch, this),
-        Node::LeafAt(path, _) => check_path(this, path.to_absolute(&this), 0),
-        Node::BranchAt(path, branch) => {
+        Node::ShortSkipValue(path, _) => check_path(this, path.to_absolute(&this), 0),
+        Node::ShortSkipBranch(path, branch) => {
             let region = path.to_absolute(&this);
             check_path(this, region, branch.split_dimensions)?;
             check_branch(branch, region)
         }
-        Node::Skip(skip) => {
+        Node::LongSkip(skip) => {
             let Skip {
                 path,
                 split_dimensions,
                 child,
             } = &**skip;
-            if !matches!(child, Node::Leaf(_) | Node::Branch(_)) {
-                return Err(format!("{this:?}: Skip の先が Leaf でも Branch でもない"));
+            if !matches!(child, Node::Value(_) | Node::Branch(_)) {
+                return Err(format!("{this:?}: Skip の先が Value でも Branch でもない"));
             }
-            if ShortPath::new(*path).is_some() {
+            if ShortRelativeFlexId::new(*path).is_some() {
                 return Err(format!("{this:?}: 埋め込める Skip を確保している"));
             }
             if *split_dimensions != (path.deeper_dimensions() | child.split_dimensions()) {
@@ -67,9 +67,6 @@ fn check_branch<V: PartialEq + Debug>(branch: &Branch<V>, this: FlexId) -> Resul
     let expected = dimension.bit() | lower.split_dimensions() | upper.split_dimensions();
     if *split_dimensions != expected {
         return Err(format!("{this:?}: split_dimensions のキャッシュが古い"));
-    }
-    if lower.is_empty() || upper.is_empty() {
-        return Err(format!("{this:?}: 片側が空の Branch（Skip にすべき）"));
     }
     if lower.split_dimensions() & dimension.bit() == 0 && lower == upper {
         return Err(format!("{this:?}: 割る必要のない Branch"));
@@ -112,8 +109,12 @@ fn check_path(this: FlexId, region: FlexId, split: u8) -> Result<(), String> {
 }
 
 fn assert_rules<V: PartialEq + Debug>(tree: &FlexTreeCore<V>) {
-    check_rules(&tree.upper_root, FlexId::UPPER_MAX).unwrap();
-    check_rules(&tree.lower_root, FlexId::LOWER_MAX).unwrap();
+    if let Some(upper) = &tree.upper_root {
+        check_rules(upper, FlexId::UPPER_MAX).unwrap();
+    }
+    if let Some(lower) = &tree.lower_root {
+        check_rules(lower, FlexId::LOWER_MAX).unwrap();
+    }
 }
 
 /// FlexId と値の列から FlexTreeCore を組み立てる。
@@ -230,14 +231,14 @@ fn f_zero_goes_to_upper_root() {
     let mut tree = FlexTreeCore::<u64>::default();
     tree.insert(FlexId::new(3, 0, 3, 0, 3, 0).unwrap(), 1u64);
     assert_eq!(tree.iter().count(), 1);
-    assert!(tree.lower_root.is_empty());
+    assert!(tree.lower_root.is_none());
 }
 
 #[test]
 fn insert_whole_root_becomes_single_leaf() {
     let mut tree = FlexTreeCore::<u64>::default();
     tree.insert(FlexId::UPPER_MAX, 7u64);
-    assert!(matches!(tree.upper_root, Node::Leaf(7)));
+    assert!(matches!(tree.upper_root, Some(Node::Value(7))));
 }
 
 #[test]
@@ -245,7 +246,7 @@ fn sibling_halves_with_same_value_merge() {
     let mut tree = FlexTreeCore::<u64>::default();
     tree.insert(FlexId::new(1, 0, 0, 0, 0, 0).unwrap(), 5u64);
     tree.insert(FlexId::new(1, 1, 0, 0, 0, 0).unwrap(), 5u64);
-    assert!(matches!(tree.upper_root, Node::Leaf(5)));
+    assert!(matches!(tree.upper_root, Some(Node::Value(5))));
 }
 
 #[test]
@@ -255,10 +256,10 @@ fn overwrite_inside_filled_leaf_splits() {
     tree.insert(FlexId::new(2, 1, 2, 3, 2, 0).unwrap(), 2u64);
     assert!(tree.iter().count() > 2);
     // 周りに値があるので段は飛ばさない
-    assert!(matches!(tree.upper_root, Node::Branch(_)));
+    assert!(matches!(tree.upper_root, Some(Node::Branch(_))));
 
     tree.insert(FlexId::new(2, 1, 2, 3, 2, 0).unwrap(), 1u64);
-    assert!(matches!(tree.upper_root, Node::Leaf(1)));
+    assert!(matches!(tree.upper_root, Some(Node::Value(1))));
 }
 
 /// 空の FlexTreeCore へ細かい点を入れても、一本道の Branch を作らず Skip 1 つで降りる。
@@ -266,7 +267,9 @@ fn overwrite_inside_filled_leaf_splits() {
 fn deep_point_in_empty_tree_skips_levels() {
     let mut tree = FlexTreeCore::<u64>::default();
     tree.insert(FlexId::new(20, 12345, 20, 54321, 20, 999).unwrap(), 1u64);
-    assert!(matches!(&tree.upper_root, Node::Skip(skip) if matches!(skip.child, Node::Leaf(1))));
+    assert!(
+        matches!(&tree.upper_root, Some(Node::LongSkip(skip)) if matches!(skip.child, Node::Value(1)))
+    );
 }
 
 /// 離れた2点は、分かれる地点の Branch 1 つの下に並ぶ。
@@ -275,8 +278,8 @@ fn two_distant_points_share_one_fork() {
     let mut tree = FlexTreeCore::<u64>::default();
     tree.insert(FlexId::new(20, 1, 20, 1, 20, 1).unwrap(), 1u64);
     tree.insert(FlexId::new(20, 1, 20, 900_000, 20, 1).unwrap(), 2u64);
-    // 分岐の Branch 1つと、各点の Leaf
-    assert_eq!(node_count(&tree.upper_root), 3);
+    // 分岐の Branch 1つと、各点の Value
+    assert_eq!(node_count(tree.upper_root.as_ref().unwrap()), 3);
     assert_eq!(tree.iter().count(), 2);
     assert_rules(&tree);
 }
@@ -384,10 +387,9 @@ fn set_operations_match_model() {
 /// 参照実装：再帰でたどって、値を持つ領域を下側から順に集める。
 fn collect_recursive<'a, V>(node: &'a Node<V>, this: FlexId, out: &mut Vec<(FlexId, &'a V)>) {
     match node {
-        Node::Empty => {}
-        Node::Leaf(value) => out.push((this, value)),
-        Node::LeafAt(path, value) => out.push((path.to_absolute(&this), value)),
-        Node::BranchAt(path, branch) => {
+        Node::Value(value) => out.push((this, value)),
+        Node::ShortSkipValue(path, value) => out.push((path.to_absolute(&this), value)),
+        Node::ShortSkipBranch(path, branch) => {
             let this = path.to_absolute(&this);
             let dimension = branch.dimension;
             collect_recursive(
@@ -414,7 +416,7 @@ fn collect_recursive<'a, V>(node: &'a Node<V>, this: FlexId, out: &mut Vec<(Flex
                 out,
             );
         }
-        Node::Skip(skip) => {
+        Node::LongSkip(skip) => {
             collect_recursive(&skip.child, skip.path.to_absolute(&this).unwrap(), out);
         }
     }
@@ -438,8 +440,12 @@ fn iterators_match_recursive_walk_and_round_trip() {
             }
 
             let mut expected = Vec::new();
-            collect_recursive(&tree.upper_root, FlexId::UPPER_MAX, &mut expected);
-            collect_recursive(&tree.lower_root, FlexId::LOWER_MAX, &mut expected);
+            if let Some(upper) = &tree.upper_root {
+                collect_recursive(upper, FlexId::UPPER_MAX, &mut expected);
+            }
+            if let Some(lower) = &tree.lower_root {
+                collect_recursive(lower, FlexId::LOWER_MAX, &mut expected);
+            }
 
             assert_eq!(tree.iter().collect::<Vec<_>>(), expected);
             assert_eq!((&tree).into_iter().collect::<Vec<_>>(), expected);
@@ -750,12 +756,20 @@ fn traversal_stack_fits_height_bound() {
     for max_zoom in [5, 20] {
         for _ in 0..50 {
             let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
-            let bound = usize::from(tree.upper_root.height().max(tree.lower_root.height())) + 2;
+            let bound = usize::from(
+                tree.upper_root
+                    .as_ref()
+                    .map_or(0, Node::height)
+                    .max(tree.lower_root.as_ref().map_or(0, Node::height)),
+            ) + 2;
 
-            let mut stack = Vec::from([
-                (&tree.lower_root, FlexId::LOWER_MAX),
-                (&tree.upper_root, FlexId::UPPER_MAX),
-            ]);
+            let mut stack = Vec::new();
+            if let Some(lower) = &tree.lower_root {
+                stack.push((lower, FlexId::LOWER_MAX));
+            }
+            if let Some(upper) = &tree.upper_root {
+                stack.push((upper, FlexId::UPPER_MAX));
+            }
             let mut deepest = stack.len();
             while let Some((node, this)) = stack.pop() {
                 stack.extend(node.children(this).rev());
@@ -793,7 +807,12 @@ fn eq_skips_shared_subtrees() {
     for i in 0..1000 {
         tree.insert(random_id(&mut next, 20), Counted(i % 5));
     }
-    let height = usize::from(tree.upper_root.height().max(tree.lower_root.height()));
+    let height = usize::from(
+        tree.upper_root
+            .as_ref()
+            .map_or(0, Node::height)
+            .max(tree.lower_root.as_ref().map_or(0, Node::height)),
+    );
 
     let calls = COUNTED_EQ_CALLS.load(Relaxed);
     assert!(tree == tree.clone());
@@ -806,7 +825,7 @@ fn eq_skips_shared_subtrees() {
     let compared = COUNTED_EQ_CALLS.load(Relaxed) - calls;
     assert!(
         compared <= height + 2,
-        "値を {compared} 回比べた（高さ {height}、Leaf {}）",
+        "値を {compared} 回比べた（高さ {height}、Value {}）",
         tree.count()
     );
 }
@@ -838,6 +857,63 @@ fn writes_do_not_change_clones() {
             );
         }
     }
+}
+
+std::thread_local! {
+    static LIVE_TRACKED: core::cell::Cell<isize> = const { core::cell::Cell::new(0) };
+}
+
+/// 生きている数を数える値。Node を確保し直さずに書き換えても、二重に解放せず、漏らしもしないことを確かめる。
+#[derive(Debug, PartialEq)]
+struct Tracked(u64);
+
+impl Tracked {
+    fn new(value: u64) -> Self {
+        LIVE_TRACKED.with(|live| live.set(live.get() + 1));
+        Tracked(value)
+    }
+}
+
+impl Clone for Tracked {
+    fn clone(&self) -> Self {
+        Tracked::new(self.0)
+    }
+}
+
+impl Drop for Tracked {
+    fn drop(&mut self) {
+        LIVE_TRACKED.with(|live| live.set(live.get() - 1));
+    }
+}
+
+/// 書き込みと集合演算を重ねても、値はちょうど1回ずつ解放される。
+#[test]
+fn values_are_dropped_exactly_once() {
+    let mut next = rng(21);
+    for max_zoom in [5, 20] {
+        let mut tree = FlexTreeCore::<Tracked>::default();
+        let mut other = FlexTreeCore::<Tracked>::default();
+        for _ in 0..300 {
+            let id = random_id(&mut next, max_zoom);
+            let value = Tracked::new(next(3));
+            match next(4) {
+                0 => tree.insert(id, value),
+                1 => tree.insert_with(id, value, |old, new| Tracked::new(old.0 + new.0)),
+                2 => other.insert(id, value),
+                _ => {
+                    tree.remove(id);
+                }
+            }
+            if next(16) == 0 {
+                let snapshot = tree.clone();
+                tree = tree.union(&other);
+                tree = tree.difference(&snapshot.intersection(&other));
+                assert_rules(&snapshot);
+            }
+        }
+        assert_rules(&tree);
+    }
+    assert_eq!(LIVE_TRACKED.with(core::cell::Cell::get), 0);
 }
 
 /// `common_descent` を1段ずつ降りて求める素朴な版。行き先 `a` の外へは降りない。
