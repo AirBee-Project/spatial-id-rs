@@ -2,19 +2,6 @@ use alloc::string::String;
 
 use crate::Coordinate;
 use core::{f64::consts::PI, fmt};
-pub fn scale_range_i32(start: i32, end: i32, scale: i32) -> [i32; 2] {
-    [
-        start.saturating_mul(scale),
-        end.saturating_mul(scale).saturating_add(scale - 1),
-    ]
-}
-
-pub fn scale_range_u32(start: u32, end: u32, scale: u32) -> [u32; 2] {
-    [
-        start.saturating_mul(scale),
-        end.saturating_mul(scale).saturating_add(scale - 1),
-    ]
-}
 
 /// 経度 (longitude) を返す（実数 x 対応）
 ///

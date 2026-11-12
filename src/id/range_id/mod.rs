@@ -220,7 +220,8 @@ impl RangeId {
     }
 
     /// 検証済みの `{i}` / `{t}` を書き込む。
-    fn time_with_unchecked(
+    #[inline]
+    pub(crate) fn time_with_unchecked(
         #[cfg_attr(not(feature = "temporal_id"), allow(unused_mut))] mut self,
         interval: Interval,
         t: [u64; 2],
@@ -382,6 +383,7 @@ impl RangeId {
     /// let result = id.spatial_children_at_zoom(4);
     /// assert!(matches!(result, Err(Error::SpatialId(SpatialIdError::ZoomLevelTransitionOutOfRange { current_z: 5, target_z: 4 }))));
     /// ```
+    #[inline]
     pub fn spatial_children_at_zoom(&self, target_z: u8) -> Result<RangeId, Error> {
         let z = self.z.get();
         if target_z < z {
@@ -392,20 +394,20 @@ impl RangeId {
             .into());
         }
 
-        if ZoomLevel::new(target_z).is_err() {
+        let Ok(target_zoom) = ZoomLevel::new(target_z) else {
             return Err(SpatialIdError::ZOutOfRange { z: target_z }.into());
-        }
+        };
 
-        let difference = target_z - z;
-        let scale_f = 1_i32 << difference as u32;
-        let scale_xy = 1_u32 << difference as u32;
+        let diff = (target_z - z) as u32;
+        let mask_i = (1_i32 << diff) - 1;
+        let mask_u = (1_u32 << diff) - 1;
 
-        let f = helpers::scale_range_i32(self.f[0], self.f[1], scale_f);
-        let x = helpers::scale_range_u32(self.x[0], self.x[1], scale_xy);
-        let y = helpers::scale_range_u32(self.y[0], self.y[1], scale_xy);
+        let f = [self.f[0] << diff, (self.f[1] << diff) | mask_i];
+        let x = [self.x[0] << diff, (self.x[1] << diff) | mask_u];
+        let y = [self.y[0] << diff, (self.y[1] << diff) | mask_u];
 
         Ok(RangeId {
-            z: ZoomLevel::new(target_z).unwrap(),
+            z: target_zoom,
             f,
             x,
             y,
@@ -464,6 +466,7 @@ impl RangeId {
     /// let result = id.spatial_parent_at_zoom(6);
     /// assert!(matches!(result, Err(Error::SpatialId(SpatialIdError::ZoomLevelTransitionOutOfRange { current_z: 5, target_z: 6 }))));
     /// ```
+    #[inline]
     pub fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<RangeId, Error> {
         let z = self.z.get();
         if target_z > z {

@@ -92,6 +92,23 @@ impl Interval {
         }
     }
 
+    /// 検証を行わずに秒数から [`Interval`] を作成する。
+    #[inline]
+    pub(crate) const unsafe fn new_unchecked(seconds: u64) -> Interval {
+        #[cfg(feature = "temporal_id")]
+        {
+            debug_assert!(seconds > 0 && seconds <= Self::MAX_SECONDS);
+            Interval(seconds)
+        }
+
+        #[cfg(not(feature = "temporal_id"))]
+        {
+            debug_assert!(seconds == Self::MAX_SECONDS);
+            let _ = seconds;
+            Interval
+        }
+    }
+
     /// この [`Interval`] の秒数。
     pub const fn seconds(self) -> u64 {
         #[cfg(feature = "temporal_id")]

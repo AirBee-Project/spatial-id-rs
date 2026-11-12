@@ -17,6 +17,7 @@ pub struct SingleIdFlexIds {
 impl Iterator for SingleIdFlexIds {
     type Item = FlexId;
 
+    #[inline]
     fn next(&mut self) -> Option<FlexId> {
         let time_segment = self.time_segments.next()?;
         Some(unsafe {
@@ -32,6 +33,7 @@ impl Iterator for SingleIdFlexIds {
 /// Segmentへ分解すると複数個になりうる（例: 30分間隔なら最大10個）。そのため戻り値はイテレータで、
 /// 全要素を合わせて元の [`SingleId`] の時空間領域をちょうど覆う。
 impl SingleId {
+    #[inline]
     pub fn flex_ids(self) -> SingleIdFlexIds {
         SingleIdFlexIds {
             // `SingleId` は3軸とも同じズームで、各インデックスは構築時に検証済み。

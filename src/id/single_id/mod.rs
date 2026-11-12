@@ -415,10 +415,11 @@ impl SingleId {
     /// let result = id.spatial_children_at_zoom(2);
     /// assert!(matches!(result, Err(Error::SpatialId(SpatialIdError::ZoomLevelTransitionOutOfRange { current_z: 3, target_z: 2 }))));
     /// ```
+    #[inline]
     pub fn spatial_children_at_zoom(
         &self,
         target_z: u8,
-    ) -> Result<impl Iterator<Item = SingleId>, Error> {
+    ) -> Result<impl Iterator<Item = SingleId> + use<>, Error> {
         let target_zoom = ZoomLevel::new(target_z)?;
 
         if target_z < self.z() {
@@ -429,35 +430,29 @@ impl SingleId {
             .into());
         }
 
-        let difference = target_z - self.z();
+        let d = (target_z - self.z()) as u32;
+        let mask = (1_u32 << d) - 1;
+        let f_start = self.f << d;
+        let x_start = self.x << d;
+        let y_start = self.y << d;
+        let i = self.i;
+        #[cfg(feature = "temporal_id")]
+        let t = self.t;
 
-        let scale_f = 1_i32 << difference as u32;
-        let scale_xy = 1_u32 << difference as u32;
-
-        let f_start = self.f * scale_f;
-        let x_start = self.x * scale_xy;
-        let y_start = self.y * scale_xy;
-
-        let f_range = f_start..=f_start + scale_f - 1;
-        let x_range = x_start..=x_start + scale_xy - 1;
-        let y_range = y_start..=y_start + scale_xy - 1;
-
-        Ok(f_range.flat_map(move |f| {
-            let x_range = x_range.clone();
-            let y_range = y_range.clone();
-
-            x_range.flat_map(move |x| {
-                y_range.clone().map(move |y| SingleId {
-                    z: target_zoom,
-                    f,
-                    x,
-                    y,
-
-                    i: self.i,
-                    #[cfg(feature = "temporal_id")]
-                    t: self.t,
-                })
-            })
+        let total = 1_u128 << (3 * d);
+        Ok((0..total).map(move |idx| {
+            let df = (idx >> (2 * d)) as i32;
+            let dx = ((idx >> d) as u32) & mask;
+            let dy = (idx as u32) & mask;
+            SingleId {
+                z: target_zoom,
+                f: f_start | df,
+                x: x_start | dx,
+                y: y_start | dy,
+                i,
+                #[cfg(feature = "temporal_id")]
+                t,
+            }
         }))
     }
 
@@ -465,7 +460,8 @@ impl SingleId {
     ///
     /// # バリデーション
     /// - 現在のズームレベルが最大ズームレベル [`ZoomLevel::MAX`] の場合は、[`SpatialIdError::ZOutOfRange`] を返す。
-    pub fn spatial_children(&self) -> Result<impl Iterator<Item = SingleId>, Error> {
+    #[inline]
+    pub fn spatial_children(&self) -> Result<impl Iterator<Item = SingleId> + use<>, Error> {
         self.spatial_children_at_zoom(self.z() + 1)
     }
 
@@ -516,6 +512,7 @@ impl SingleId {
     /// let result = id.spatial_parent_at_zoom(4);
     /// assert!(matches!(result, Err(Error::SpatialId(SpatialIdError::ZoomLevelTransitionOutOfRange { current_z: 3, target_z: 4 }))));
     /// ```
+    #[inline]
     pub fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<SingleId, Error> {
         let target_zoom = ZoomLevel::new(target_z)?;
 
@@ -545,6 +542,7 @@ impl SingleId {
     }
 
     /// 1 段浅いズームレベル（`z - 1`）にある親 [`SingleId`] を返す。`z = 0` の場合は [`None`] を返す。
+    #[inline]
     pub fn spatial_parent(&self) -> Option<SingleId> {
         if self.z() == 0 {
             None
@@ -579,104 +577,29 @@ impl SingleId {
     /// let id = SingleId::new(0, 0, 0, 0).unwrap();
     /// assert!(id.spatial_siblings().is_none());
     /// ```
+    #[inline]
     pub fn spatial_siblings(&self) -> Option<[SingleId; 7]> {
         if self.z() == 0 {
             return None;
         }
 
-        let parent_z = self.z() - 1;
-        let parent = self.spatial_parent_at_zoom(parent_z).ok()?;
-        let next_zoom = self.z;
-        let f_start = parent.f() * 2;
-        let x_start = parent.x() * 2;
-        let y_start = parent.y() * 2;
+        let f_base = self.f & !1;
+        let x_base = self.x & !1;
+        let y_base = self.y & !1;
+        let self_idx = (((self.f as u32 & 1) << 2) | ((self.x & 1) << 1) | (self.y & 1)) as usize;
 
-        let candidates = [
+        Some(core::array::from_fn(|k| {
+            let idx = (k + usize::from(k >= self_idx)) as u32;
             SingleId {
-                z: next_zoom,
-                f: f_start,
-                x: x_start,
-                y: y_start,
+                z: self.z,
+                f: f_base | ((idx >> 2) as i32),
+                x: x_base | ((idx >> 1) & 1),
+                y: y_base | (idx & 1),
                 i: self.i,
                 #[cfg(feature = "temporal_id")]
                 t: self.t,
-            },
-            SingleId {
-                z: next_zoom,
-                f: f_start,
-                x: x_start,
-                y: y_start + 1,
-                i: self.i,
-                #[cfg(feature = "temporal_id")]
-                t: self.t,
-            },
-            SingleId {
-                z: next_zoom,
-                f: f_start,
-                x: x_start + 1,
-                y: y_start,
-                i: self.i,
-                #[cfg(feature = "temporal_id")]
-                t: self.t,
-            },
-            SingleId {
-                z: next_zoom,
-                f: f_start,
-                x: x_start + 1,
-                y: y_start + 1,
-                i: self.i,
-                #[cfg(feature = "temporal_id")]
-                t: self.t,
-            },
-            SingleId {
-                z: next_zoom,
-                f: f_start + 1,
-                x: x_start,
-                y: y_start,
-                i: self.i,
-                #[cfg(feature = "temporal_id")]
-                t: self.t,
-            },
-            SingleId {
-                z: next_zoom,
-                f: f_start + 1,
-                x: x_start,
-                y: y_start + 1,
-                i: self.i,
-                #[cfg(feature = "temporal_id")]
-                t: self.t,
-            },
-            SingleId {
-                z: next_zoom,
-                f: f_start + 1,
-                x: x_start + 1,
-                y: y_start,
-                i: self.i,
-                #[cfg(feature = "temporal_id")]
-                t: self.t,
-            },
-            SingleId {
-                z: next_zoom,
-                f: f_start + 1,
-                x: x_start + 1,
-                y: y_start + 1,
-                i: self.i,
-                #[cfg(feature = "temporal_id")]
-                t: self.t,
-            },
-        ];
-
-        let mut siblings: [Option<SingleId>; 7] = [None, None, None, None, None, None, None];
-        let mut index = 0;
-
-        for child in candidates {
-            if child != *self {
-                siblings[index] = Some(child);
-                index += 1;
             }
-        }
-
-        Some(siblings.map(|child| child.expect("sibling set should contain exactly 7 items")))
+        }))
     }
 
     /// この [`SingleId`] の全ての親を、直近の親から順に列挙する。

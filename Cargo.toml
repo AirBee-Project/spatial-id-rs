@@ -134,6 +134,12 @@ path = "benches/geometry/point/conversion.rs"
 harness = false
 
 [[bench]]
+name = "id_conversion"
+path = "benches/id/conversion.rs"
+harness = false
+required-features = ["temporal_id"]
+
+[[bench]]
 name = "spatial_id_set_insert"
 path = "benches/spatial_id_set/systematic_insert.rs"
 harness = false

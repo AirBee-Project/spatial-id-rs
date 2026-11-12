@@ -127,6 +127,7 @@ pub(crate) fn reconstruct<'a, V: PartialEq + 'a>(
 }
 
 /// 結合し終えた1件を [`RangeId`] に組み立てる。
+#[inline]
 fn finish<V>(
     key: &FlexId,
     start: u64,
@@ -134,18 +135,26 @@ fn finish<V>(
     value: V,
     allowed_intervals: Option<&AllowedIntervals>,
 ) -> (RangeId, V) {
-    let range = TimeSpan::new(start, end)
-        .expect("結合した秒区間は空でない")
-        .apply_to(RangeId::from(key))
-        .expect("結合した秒区間は元のSegmentの和なので常に有効");
+    let base = RangeId::from(key);
 
-    // 候補集合が指定されていれば、その中で最も粗い（＝Segment数が最小の）単位へ表し直す。
-    // `AllowedIntervals` は必ず全区間を表せる候補を含むので、この `time_relabel` は失敗しない。
+    // 候補集合が指定されていれば、その中で最も粗い（＝Segment数が最小の）単位を直接選んで付与する。
+    // 指定がなければ `TimeSpan::apply_to` で `gcd(start, end - start)` の最粗単位を計算する。
     let range = match allowed_intervals {
-        None => range,
-        Some(allowed_intervals) => range
-            .time_relabel(allowed_intervals.coarsest_dividing(start, end))
-            .expect("AllowedIntervals が選んだ単位は必ずこの区間を割り切る"),
+        Some(allowed) => {
+            let interval = allowed.coarsest_dividing(start, end);
+            let unit = interval.seconds();
+            let t = if unit.is_power_of_two() {
+                let shift = unit.trailing_zeros();
+                [start >> shift, (end >> shift) - 1]
+            } else {
+                [start / unit, (end / unit) - 1]
+            };
+            base.time_with_unchecked(interval, t)
+        }
+        None => TimeSpan::new(start, end)
+            .expect("結合した秒区間は空でない")
+            .apply_to(base)
+            .expect("結合した秒区間は元のSegmentの和なので常に有効"),
     };
 
     (range, value)

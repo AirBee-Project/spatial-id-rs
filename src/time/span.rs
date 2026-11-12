@@ -72,49 +72,62 @@ impl TimeSpan {
 
     /// この秒区間を表せる最も粗い単位（秒数）を返す。
     /// 単位は `start` と区間幅の両方を割り切れなければならないので、最大公約数を求める。
+    #[inline]
     pub const fn coarsest_unit(&self) -> u64 {
-        let (mut a, mut b) = (self.start, self.width());
-        while b != 0 {
-            let rem = a % b;
-            a = b;
-            b = rem;
+        let mut a = self.start;
+        let mut b = self.width();
+        if a == 0 {
+            return b;
         }
-        a
+        let shift = (a | b).trailing_zeros();
+        b >>= b.trailing_zeros();
+        // 幅が2の冪（単一TimeSegmentなど）なら、奇数部が1になるため除算・ループなしで即座に決まる
+        if b == 1 {
+            return 1 << shift;
+        }
+        a >>= a.trailing_zeros();
+        loop {
+            if a > b {
+                let tmp = a;
+                a = b;
+                b = tmp;
+            }
+            b -= a;
+            if b == 0 {
+                return a << shift;
+            }
+            b >>= b.trailing_zeros();
+        }
     }
 
     /// この区間を、それをちょうど表せる最も粗い単位と `{t}` の範囲へ直す。
+    #[inline]
     pub fn to_interval_range(self) -> Result<(Interval, u64, u64), Error> {
         let unit = self.coarsest_unit();
         let interval = Interval::new(unit)?;
-        Ok((interval, self.start / unit, self.end / unit - 1))
+        let (t_min, t_max) = if unit.is_power_of_two() {
+            let shift = unit.trailing_zeros();
+            (self.start >> shift, (self.end >> shift) - 1)
+        } else {
+            (self.start / unit, self.end / unit - 1)
+        };
+        Ok((interval, t_min, t_max))
     }
 
     /// この区間を `id` の時間として設定した [`RangeId`](crate::RangeId) を返す。単位は区間をちょうど表せる最も粗いもの。
+    #[inline]
     pub(crate) fn apply_to(self, id: crate::RangeId) -> Result<crate::RangeId, Error> {
         let (interval, t_min, t_max) = self.to_interval_range()?;
-        id.time_with(interval, [t_min, t_max])
+        Ok(id.time_with_unchecked(interval, [t_min, t_max]))
     }
 
     /// 区間木的に高々 `O(log 幅)` 個の2分岐 TimeSegment へ分解する。
+    #[inline]
     pub fn into_segments(self) -> TimeSegments {
-        let l = self.start;
-        let r = self.end - 1;
-
-        let trailing = |v: u64| {
-            if v == 0 {
-                u64::BITS
-            } else {
-                v.trailing_zeros()
-            }
-        };
-        let k = trailing(l)
-            .min(trailing(r.wrapping_add(1)))
-            .min(TZoomLevel::MAX.get() as u32) as u8;
-
         TimeSegments {
-            l: l >> k,
-            r: r >> k,
-            cur_z: (TZoomLevel::MAX.get() - k) as i8,
+            l: self.start,
+            r: self.end - 1,
+            cur_z: TZoomLevel::MAX.get() as i8,
         }
     }
 }
@@ -127,40 +140,38 @@ pub(crate) struct TimeSegments {
     cur_z: i8,
 }
 
+impl TimeSegments {
+    #[inline]
+    pub(crate) const fn is_empty(&self) -> bool {
+        self.l > self.r
+    }
+}
+
 impl Iterator for TimeSegments {
     type Item = TimeSegment;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if self.l > self.r {
-                return None;
-            }
+        if self.l > self.r {
+            return None;
+        }
 
-            if self.cur_z == 0 {
-                let v = self.l;
-                self.l += 1;
-                return Some(TimeSegment::new(unsafe { TZoomLevel::new_unchecked(0) }, v));
-            }
+        // l が偶数かつ r が奇数（r + 1 が偶数）である段数だけ、ループせずに一括で親へシフトする。
+        // 1 << cur_z を OR することで、cur_z を超えてシフトしないよう上限を抑える。
+        let k = (self.l | self.r.wrapping_add(1) | (1u64 << self.cur_z)).trailing_zeros();
+        self.l >>= k;
+        self.r >>= k;
+        self.cur_z -= k as i8;
 
-            let z = self.cur_z as u8;
-            if self.l == self.r {
-                let v = self.l;
-                self.l += 1;
-                return Some(TimeSegment::new(unsafe { TZoomLevel::new_unchecked(z) }, v));
-            }
-            if self.l & 1 == 1 {
-                let v = self.l;
-                self.l += 1;
-                return Some(TimeSegment::new(unsafe { TZoomLevel::new_unchecked(z) }, v));
-            }
-            if self.r & 1 == 0 {
-                let v = self.r;
-                self.r -= 1;
-                return Some(TimeSegment::new(unsafe { TZoomLevel::new_unchecked(z) }, v));
-            }
-            self.l >>= 1;
-            self.r >>= 1;
-            self.cur_z -= 1;
+        let z = unsafe { TZoomLevel::new_unchecked(self.cur_z as u8) };
+        if self.l & 1 == 1 || self.l == self.r || self.cur_z == 0 {
+            let v = self.l;
+            self.l += 1;
+            Some(TimeSegment::new(z, v))
+        } else {
+            let v = self.r;
+            self.r -= 1;
+            Some(TimeSegment::new(z, v))
         }
     }
 }

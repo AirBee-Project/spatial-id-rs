@@ -1,7 +1,7 @@
 use core::iter::Chain;
 
-use crate::time::span::TimeSegments;
-use crate::{FlexId, RangeId, SingleId, id::zoom_level::ZoomLevel};
+use crate::time::{segment::TimeSegment, span::TimeSegments};
+use crate::{FlexId, RangeId, SingleId};
 
 /// XYにおけるセグメントの最適配置関数
 pub fn split_xy(z: u8, range: [u32; 2]) -> impl Iterator<Item = (u8, u32)> {
@@ -13,33 +13,31 @@ pub fn split_f(z: u8, range: [i32; 2]) -> impl Iterator<Item = (u8, i32)> {
     SegmentIter::f(z, range).map(f_segment)
 }
 
+#[inline]
 fn xy_segment((z, dim): (u8, i64)) -> (u8, u32) {
     (z, dim as u32)
 }
 
 /// [`SegmentIter::f`] の Segment を、F の元のインデックスに戻す。
+#[inline]
 fn f_segment((z, dim): (u8, i64)) -> (u8, i32) {
     (z, (dim - (1i64 << z)) as i32)
 }
 
 impl From<SingleId> for RangeId {
+    #[inline]
     fn from(id: SingleId) -> Self {
         RangeId::from(&id)
     }
 }
 
 impl From<&SingleId> for RangeId {
+    #[inline]
     fn from(id: &SingleId) -> Self {
-        RangeId {
-            z: ZoomLevel::new(id.z()).unwrap(),
-            f: [id.f(), id.f()],
-            x: [id.x(), id.x()],
-            y: [id.y(), id.y()],
-
-            // 単一Segmentは範囲の退化した形なので常に変換できる。
-            i: id.i(),
-            #[cfg(feature = "temporal_id")]
-            t: [id.t(), id.t()],
+        // 単一Segmentは範囲の退化した形であり、SingleId の構築時に検証済みなので常に変換できる。
+        unsafe {
+            RangeId::new_unchecked(id.z(), [id.f(), id.f()], [id.x(), id.x()], [id.y(), id.y()])
+                .time_with_unchecked(id.i(), [id.t(), id.t()])
         }
     }
 }
@@ -48,28 +46,48 @@ impl RangeId {
     /// この [RangeId]を[SingleId]に分解する。
     pub fn single_ids(self) -> impl Iterator<Item = SingleId> {
         let z = self.z.get();
-        let f_range = self.f[0]..=self.f[1];
-        let x = self.x;
-        let y_range = self.y[0]..=self.y[1];
+        let xy_max = self.z.xy_max();
+        let [f_min, f_max] = self.f;
+        let [x0, x1] = self.x;
+        let x_max_offset = x1.wrapping_sub(x0) & xy_max;
+        let [y_min, y_max] = self.y;
         let (interval, [t_min, t_max]) = (self.i, self.t());
 
-        f_range.flat_map(move |f| {
-            let y_range = y_range.clone();
+        let mut f = f_min;
+        let mut dx = 0u32;
+        let mut y = y_min;
+        let mut t = t_min;
+        let mut done = false;
 
-            let x_iter = if x[0] <= x[1] {
-                #[allow(clippy::reversed_empty_ranges)]
-                (x[0]..=x[1]).chain(1..=0)
+        core::iter::from_fn(move || {
+            if done {
+                return None;
+            }
+            let x = (x0 + dx) & xy_max;
+            let id =
+                unsafe { SingleId::new_unchecked(z, f, x, y).time_with_unchecked(interval, t) };
+
+            if t < t_max {
+                t += 1;
             } else {
-                (x[0]..=self.z.xy_max()).chain(0..=x[1])
-            };
-
-            x_iter.flat_map(move |x| {
-                let y_range = y_range.clone();
-                y_range.flat_map(move |y: u32| {
-                    let base = SingleId::new(z, f, x, y).unwrap();
-                    (t_min..=t_max).map(move |t| base.time_with_unchecked(interval, t))
-                })
-            })
+                t = t_min;
+                if y < y_max {
+                    y += 1;
+                } else {
+                    y = y_min;
+                    if dx < x_max_offset {
+                        dx += 1;
+                    } else {
+                        dx = 0;
+                        if f < f_max {
+                            f += 1;
+                        } else {
+                            done = true;
+                        }
+                    }
+                }
+            }
+            Some(id)
         })
     }
 }
@@ -83,7 +101,8 @@ pub struct RangeIdFlexIds {
     f: SegmentIter,
     x_start: Chain<SegmentIter, SegmentIter>,
     y_start: SegmentIter,
-    t_start: TimeSegments,
+    t_first: TimeSegment,
+    t_rest_start: TimeSegments,
     x: Chain<SegmentIter, SegmentIter>,
     y: SegmentIter,
     t: TimeSegments,
@@ -91,13 +110,14 @@ pub struct RangeIdFlexIds {
     f_segment: Option<(u8, i32)>,
     /// 今の F・X の Segment。
     fx_segment: Option<(u8, i32, u8, u32)>,
-    /// 今の F・X・Y の Segment からなる空間部分。
+    /// 今の F・X・Y の Segment からなる空間部分（時間Segmentが2個以上あるときの2個目以降用）。
     spatial: Option<FlexId>,
 }
 
 impl Iterator for RangeIdFlexIds {
     type Item = FlexId;
 
+    #[inline]
     fn next(&mut self) -> Option<FlexId> {
         loop {
             if let Some(spatial) = self.spatial {
@@ -114,10 +134,17 @@ impl Iterator for RangeIdFlexIds {
             if let Some((f_z, f_i, x_z, x_i)) = self.fx_segment {
                 if let Some((y_z, y_i)) = self.y.next().map(xy_segment) {
                     // SAFETY: 各軸の Segment は、検証済みの RangeId の範囲を分割したもの
-                    self.spatial =
-                        Some(unsafe { FlexId::new_unchecked(f_z, f_i, x_z, x_i, y_z, y_i) });
-                    self.t = self.t_start.clone();
-                    continue;
+                    let spatial = unsafe { FlexId::new_unchecked(f_z, f_i, x_z, x_i, y_z, y_i) };
+                    if !self.t_rest_start.is_empty() {
+                        self.spatial = Some(spatial);
+                        self.t = self.t_rest_start.clone();
+                    }
+                    return Some(unsafe {
+                        spatial.time_with_segment_unchecked(
+                            self.t_first.zoom().get(),
+                            self.t_first.index(),
+                        )
+                    });
                 }
                 self.fx_segment = None;
             }
@@ -149,15 +176,19 @@ impl RangeId {
         let y_start = SegmentIter::xy(z, self.y);
         // 時間は `Interval` が2の冪とは限らないので、2分岐Segmentへ分解してから掛け合わせる
         // （時間を使っていなければ全時間の1Segmentだけになる）
-        let t_start = self.time_segments();
+        let mut t_rest_start = self.time_segments();
+        let t_first = t_rest_start
+            .next()
+            .expect("有効な RangeId の時間Segmentは少なくとも1つ存在する");
         RangeIdFlexIds {
             f: SegmentIter::f(z, self.f),
             x: x_start.clone(),
             y: y_start.clone(),
-            t: t_start.clone(),
+            t: t_rest_start.clone(),
             x_start,
             y_start,
-            t_start,
+            t_first,
+            t_rest_start,
             f_segment: None,
             fx_segment: None,
             spatial: None,
@@ -185,22 +216,39 @@ impl SegmentIter {
     };
 
     /// X・Y のズーム `z` の範囲 `range` を分ける。
+    #[inline]
     fn xy(z: u8, [l, r]: [u32; 2]) -> SegmentIter {
-        SegmentIter {
+        let mut iter = SegmentIter {
             l: l as i64,
             r: r as i64,
             cur_z: z as i8,
-        }
+        };
+        iter.ascend();
+        iter
     }
 
     /// F のズーム `z` の範囲 `range` を分ける。負のインデックスを扱えるよう `2^z` ずらして持つので、
     /// 返す Segment は [`f_segment`] で元のインデックスに戻す。
+    #[inline]
     fn f(z: u8, [l, r]: [i32; 2]) -> SegmentIter {
         let diff = 1i64 << z;
-        SegmentIter {
+        let mut iter = SegmentIter {
             l: l as i64 + diff,
             r: r as i64 + diff,
             cur_z: z as i8,
+        };
+        iter.ascend();
+        iter
+    }
+
+    /// `l` が偶数かつ `r` が奇数である間、`trailing_zeros` で共通の2冪因子を一括シフトして親階層へ引き上げる。
+    #[inline]
+    fn ascend(&mut self) {
+        if self.l < self.r && self.cur_z > 0 {
+            let k = (self.l as u64 | (self.r as u64 + 1) | (1u64 << self.cur_z)).trailing_zeros();
+            self.l >>= k;
+            self.r >>= k;
+            self.cur_z -= k as i8;
         }
     }
 }
@@ -208,38 +256,24 @@ impl SegmentIter {
 impl Iterator for SegmentIter {
     type Item = (u8, i64); // (z, dimension)
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            if self.l > self.r {
-                return None;
-            }
-
-            if self.cur_z == 0 {
-                let v = self.l;
-                self.l += 1;
-                return Some((0, v));
-            }
-
-            let z = self.cur_z as u8;
-            if self.l == self.r {
-                let v = self.l;
-                self.l += 1;
-                return Some((z, v));
-            }
-            if self.l & 1 == 1 {
-                let v = self.l;
-                self.l += 1;
-                return Some((z, v));
-            }
-            if self.r & 1 == 0 {
-                let v = self.r;
-                self.r -= 1;
-                return Some((z, v));
-            }
-            self.l >>= 1;
-            self.r >>= 1;
-            self.cur_z -= 1;
+        if self.l > self.r {
+            return None;
         }
+
+        let z = self.cur_z as u8;
+        let v = if self.l & 1 == 1 || self.l == self.r || self.cur_z == 0 {
+            let v = self.l;
+            self.l += 1;
+            v
+        } else {
+            let v = self.r;
+            self.r -= 1;
+            v
+        };
+        self.ascend();
+        Some((z, v))
     }
 }
 

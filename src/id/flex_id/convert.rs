@@ -1,45 +1,43 @@
-use crate::SpatialId;
-use crate::time::span::TimeSpan;
+use crate::time::Interval;
 use crate::{FlexId, RangeId, SingleId};
 
 impl From<FlexId> for RangeId {
+    #[inline]
     fn from(flex_id: FlexId) -> Self {
         RangeId::from(&flex_id)
     }
 }
 
 impl From<&FlexId> for RangeId {
+    #[inline]
     fn from(flex_id: &FlexId) -> Self {
-        let max_z = flex_id
-            .f_zoomlevel
-            .get()
-            .max(flex_id.x_zoomlevel.get())
-            .max(flex_id.y_zoomlevel.get());
+        let f_z = flex_id.f_zoomlevel.get();
+        let x_z = flex_id.x_zoomlevel.get();
+        let y_z = flex_id.y_zoomlevel.get();
+        let max_z = f_z.max(x_z).max(y_z);
 
-        let scale_to_range = |val: i64, current_z: u8| -> [i64; 2] {
-            let diff = max_z - current_z;
-            let start = val << diff;
-            let end = start + (1_i64 << diff) - 1;
-            [start, end]
-        };
+        let df = max_z - f_z;
+        let dx = max_z - x_z;
+        let dy = max_z - y_z;
 
-        let f_range = scale_to_range(flex_id.f_index as i64, flex_id.f_zoomlevel.get());
-        let x_range = scale_to_range(flex_id.x_index as i64, flex_id.x_zoomlevel.get());
-        let y_range = scale_to_range(flex_id.y_index as i64, flex_id.y_zoomlevel.get());
+        let f0 = flex_id.f_index << df;
+        let f1 = f0 | ((1_i32 << df) - 1);
+        let x0 = flex_id.x_index << dx;
+        let x1 = x0 | ((1_u32 << dx) - 1);
+        let y0 = flex_id.y_index << dy;
+        let y1 = y0 | ((1_u32 << dy) - 1);
 
-        let (start, end) = flex_id.seconds_range();
+        // FlexId の時間Segment `(tz, ti)` は常に幅 `unit = 2^(35 - tz)`、開始秒 `ti * unit` の
+        // 単一Segmentであるため、`gcd(ti * unit, unit) = unit` となり、`RangeId` の時間表現は
+        // 単位 `unit`・インデックス `[ti, ti]` に一意に定まる。
+        let tz = flex_id.t_zoomlevel();
+        let ti = flex_id.t_index();
+        let interval = unsafe { Interval::new_unchecked(1u64 << (Interval::MAX_POW - tz)) };
 
-        let spatial = RangeId::new(
-            max_z,
-            [f_range[0] as i32, f_range[1] as i32],
-            [x_range[0] as u32, x_range[1] as u32],
-            [y_range[0] as u32, y_range[1] as u32],
-        )
-        .unwrap();
-        TimeSpan::new(start, end)
-            .expect("Segmentの秒区間は空でない")
-            .apply_to(spatial)
-            .expect("Segmentの秒区間は常に有効")
+        unsafe {
+            RangeId::new_unchecked(max_z, [f0, f1], [x0, x1], [y0, y1])
+                .time_with_unchecked(interval, [ti, ti])
+        }
     }
 }
 

@@ -54,10 +54,18 @@ impl FlexId {
         // 占有区間を整列したインデックス値群へ分解し、F以外の成分を保ったままFlexIdを構築する。
         Ok(
             split_f(max_z, [left, right]).map(move |(seg_z, seg_index)| {
-                let id = FlexId::new(seg_z, seg_index, x_zoomlevel, x_index, y_zoomlevel, y_index)
-                    .unwrap();
-                // SAFETY: t_zoomlevel と t_index は元の有効な FlexId から取得した値
-                unsafe { id.time_with_segment_unchecked(t_zoomlevel, t_index) }
+                // SAFETY: 空間成分は範囲内検証済み、時間成分は元の有効な FlexId を継承
+                unsafe {
+                    FlexId::new_unchecked(
+                        seg_z,
+                        seg_index,
+                        x_zoomlevel,
+                        x_index,
+                        y_zoomlevel,
+                        y_index,
+                    )
+                    .time_with_segment_unchecked(t_zoomlevel, t_index)
+                }
             }),
         )
     }

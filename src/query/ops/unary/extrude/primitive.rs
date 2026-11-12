@@ -31,10 +31,11 @@ impl FlexId {
         let (t_zoomlevel, t_index) = (self.t_zoomlevel(), self.t_index());
 
         Ok(split_f(z, [left, right]).map(move |(seg_z, seg_index)| {
-            let id =
-                FlexId::new(seg_z, seg_index, x_zoomlevel, x_index, y_zoomlevel, y_index).unwrap();
-            // SAFETY: t_zoomlevel と t_index は元の有効な FlexId から取得した値
-            unsafe { id.time_with_segment_unchecked(t_zoomlevel, t_index) }
+            // SAFETY: 空間成分は範囲内検証済み、時間成分は元の有効な FlexId を継承
+            unsafe {
+                FlexId::new_unchecked(seg_z, seg_index, x_zoomlevel, x_index, y_zoomlevel, y_index)
+                    .time_with_segment_unchecked(t_zoomlevel, t_index)
+            }
         }))
     }
 
@@ -111,10 +112,11 @@ impl FlexId {
         let (t_zoomlevel, t_index) = (self.t_zoomlevel(), self.t_index());
 
         Ok(split_xy(z, [left, right]).map(move |(seg_z, seg_index)| {
-            let id =
-                FlexId::new(f_zoomlevel, f_index, x_zoomlevel, x_index, seg_z, seg_index).unwrap();
-            // SAFETY: t_zoomlevel と t_index は元の有効な FlexId から取得した値
-            unsafe { id.time_with_segment_unchecked(t_zoomlevel, t_index) }
+            // SAFETY: 空間成分は範囲内検証済み、時間成分は元の有効な FlexId を継承
+            unsafe {
+                FlexId::new_unchecked(f_zoomlevel, f_index, x_zoomlevel, x_index, seg_z, seg_index)
+                    .time_with_segment_unchecked(t_zoomlevel, t_index)
+            }
         }))
     }
 }
