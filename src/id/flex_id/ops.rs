@@ -1,8 +1,6 @@
 #[cfg(feature = "temporal_id")]
 use crate::SpatialId;
-#[cfg(feature = "temporal_id")]
-use crate::id::zoom_level::TZoomLevel;
-use crate::{FlexId, Side, id::zoom_level::ZoomLevel};
+use crate::{FlexId, Side};
 use alloc::vec::Vec;
 
 impl FlexId {
@@ -27,36 +25,23 @@ impl FlexId {
 
         let mut current = *self;
 
-        // 次元ごとに違うのは「その次元のズームを取る方法」と「その次元で2分する方法」だけ。
-        // `temporal_id` 無効時はTの次元自体が無いので、空回りする1周ごと削る。
-        //
-        // `Dimension`（次元そのものを表す値）とは別物なので、同じ名前を避けて
-        // `DimensionOps` にしている（これは次元の値ではなく、次元ごとの操作関数のペア）。
-        type DimensionOps = (fn(&FlexId) -> u8, fn(&FlexId, Side) -> Option<FlexId>);
-        #[cfg(feature = "temporal_id")]
-        const DIMENSIONS: [DimensionOps; 4] = [
-            (FlexId::f_zoomlevel, FlexId::split_f),
-            (FlexId::x_zoomlevel, FlexId::split_x),
-            (FlexId::y_zoomlevel, FlexId::split_y),
-            (FlexId::t_zoomlevel, FlexId::split_t),
-        ];
-        #[cfg(not(feature = "temporal_id"))]
-        const DIMENSIONS: [DimensionOps; 3] = [
-            (FlexId::f_zoomlevel, FlexId::split_f),
-            (FlexId::x_zoomlevel, FlexId::split_x),
-            (FlexId::y_zoomlevel, FlexId::split_y),
-        ];
-
-        for (zoom_of, split) in DIMENSIONS {
-            while zoom_of(&current) < zoom_of(&intersect) {
-                let lower = split(&current, Side::Lower).expect("交差より浅いので必ず割れる");
-                let upper = split(&current, Side::Upper).expect("交差より浅いので必ず割れる");
-                if lower.intersection(&intersect).is_some() {
-                    results.push(upper);
-                    current = lower;
-                } else {
-                    results.push(lower);
-                    current = upper;
+        for dim in crate::id::Dimension::ALL {
+            while current.zoomlevel_on(dim) < intersect.zoomlevel_on(dim) {
+                let lower = current
+                    .split_on(dim, Side::Lower)
+                    .expect("交差より浅いので必ず割れる");
+                let upper = current
+                    .split_on(dim, Side::Upper)
+                    .expect("交差より浅いので必ず割れる");
+                match current.side_toward(dim, &intersect) {
+                    Side::Lower => {
+                        results.push(upper);
+                        current = lower;
+                    }
+                    Side::Upper => {
+                        results.push(lower);
+                        current = upper;
+                    }
                 }
             }
         }
@@ -76,36 +61,48 @@ impl FlexId {
     /// assert!(parent.intersects(&child));
     /// assert!(!parent.intersects(&other));
     /// ```
+    #[inline]
     pub fn intersects(&self, other: &FlexId) -> bool {
-        let nested = |z1: u8, i1: i64, z2: u8, i2: i64| nested_dimension(z1, i1, z2, i2).is_some();
+        let f_ok = if self.f_zoomlevel >= other.f_zoomlevel {
+            (self.f_index >> (self.f_zoomlevel.get() - other.f_zoomlevel.get())) == other.f_index
+        } else {
+            (other.f_index >> (other.f_zoomlevel.get() - self.f_zoomlevel.get())) == self.f_index
+        };
+        if !f_ok {
+            return false;
+        }
+        let x_ok = if self.x_zoomlevel >= other.x_zoomlevel {
+            (self.x_index >> (self.x_zoomlevel.get() - other.x_zoomlevel.get())) == other.x_index
+        } else {
+            (other.x_index >> (other.x_zoomlevel.get() - self.x_zoomlevel.get())) == self.x_index
+        };
+        if !x_ok {
+            return false;
+        }
+        let y_ok = if self.y_zoomlevel >= other.y_zoomlevel {
+            (self.y_index >> (self.y_zoomlevel.get() - other.y_zoomlevel.get())) == other.y_index
+        } else {
+            (other.y_index >> (other.y_zoomlevel.get() - self.y_zoomlevel.get())) == self.y_index
+        };
+        if !y_ok {
+            return false;
+        }
 
         // 時間軸は `temporal_id` 無効時には存在しない（双方とも全時間で必ず入れ子）
         #[cfg(feature = "temporal_id")]
-        let time = nested(
-            self.t_zoomlevel(),
-            self.t_index() as i64,
-            other.t_zoomlevel(),
-            other.t_index() as i64,
-        );
+        {
+            if self.t_zoomlevel >= other.t_zoomlevel {
+                (self.t_index >> (self.t_zoomlevel.get() - other.t_zoomlevel.get()))
+                    == other.t_index
+            } else {
+                (other.t_index >> (other.t_zoomlevel.get() - self.t_zoomlevel.get()))
+                    == self.t_index
+            }
+        }
         #[cfg(not(feature = "temporal_id"))]
-        let time = true;
-
-        nested(
-            self.f_zoomlevel(),
-            self.f_index() as i64,
-            other.f_zoomlevel(),
-            other.f_index() as i64,
-        ) && nested(
-            self.x_zoomlevel(),
-            self.x_index() as i64,
-            other.x_zoomlevel(),
-            other.x_index() as i64,
-        ) && nested(
-            self.y_zoomlevel(),
-            self.y_index() as i64,
-            other.y_zoomlevel(),
-            other.y_index() as i64,
-        ) && time
+        {
+            true
+        }
     }
 
     /// 2つの [`FlexId`] の重なっている領域（Intersection）を計算して返す。
@@ -114,50 +111,78 @@ impl FlexId {
     /// どの軸も「浅い側のSegmentが深い側を含むか」で判定する。四分木（八分木）／2進トライでは
     /// 異なるズームのSegmentは入れ子か素のどちらかしかないので、重なる場合の交差は必ず
     /// 深い側のSegmentそのものになる。
+    #[inline]
     pub fn intersection(&self, other: &FlexId) -> Option<FlexId> {
-        let (f_z, f_i) = nested_dimension(
-            self.f_zoomlevel(),
-            self.f_index() as i64,
-            other.f_zoomlevel(),
-            other.f_index() as i64,
-        )?;
-        let (x_z, x_i) = nested_dimension(
-            self.x_zoomlevel(),
-            self.x_index() as i64,
-            other.x_zoomlevel(),
-            other.x_index() as i64,
-        )?;
-        let (y_z, y_i) = nested_dimension(
-            self.y_zoomlevel(),
-            self.y_index() as i64,
-            other.y_zoomlevel(),
-            other.y_index() as i64,
-        )?;
+        let (f_zoomlevel, f_index) = if self.f_zoomlevel >= other.f_zoomlevel {
+            if (self.f_index >> (self.f_zoomlevel.get() - other.f_zoomlevel.get())) != other.f_index
+            {
+                return None;
+            }
+            (self.f_zoomlevel, self.f_index)
+        } else {
+            if (other.f_index >> (other.f_zoomlevel.get() - self.f_zoomlevel.get())) != self.f_index
+            {
+                return None;
+            }
+            (other.f_zoomlevel, other.f_index)
+        };
+
+        let (x_zoomlevel, x_index) = if self.x_zoomlevel >= other.x_zoomlevel {
+            if (self.x_index >> (self.x_zoomlevel.get() - other.x_zoomlevel.get())) != other.x_index
+            {
+                return None;
+            }
+            (self.x_zoomlevel, self.x_index)
+        } else {
+            if (other.x_index >> (other.x_zoomlevel.get() - self.x_zoomlevel.get())) != self.x_index
+            {
+                return None;
+            }
+            (other.x_zoomlevel, other.x_index)
+        };
+
+        let (y_zoomlevel, y_index) = if self.y_zoomlevel >= other.y_zoomlevel {
+            if (self.y_index >> (self.y_zoomlevel.get() - other.y_zoomlevel.get())) != other.y_index
+            {
+                return None;
+            }
+            (self.y_zoomlevel, self.y_index)
+        } else {
+            if (other.y_index >> (other.y_zoomlevel.get() - self.y_zoomlevel.get())) != self.y_index
+            {
+                return None;
+            }
+            (other.y_zoomlevel, other.y_index)
+        };
 
         // 時間軸は `temporal_id` 無効時には存在しない（双方とも全時間で必ず入れ子）ので、
         // 判定ごと消して空間3軸だけの費用に戻す。
         #[cfg(feature = "temporal_id")]
-        let (t_z, t_i) = nested_dimension(
-            self.t_zoomlevel(),
-            self.t_index() as i64,
-            other.t_zoomlevel(),
-            other.t_index() as i64,
-        )?;
-
-        // SAFETY: 各次元のズームとインデックスは、どちらかの入力のものをそのまま使っている
-        Some(unsafe {
-            FlexId {
-                f_zoomlevel: ZoomLevel::new_unchecked(f_z),
-                f_index: f_i as i32,
-                x_zoomlevel: ZoomLevel::new_unchecked(x_z),
-                x_index: x_i as u32,
-                y_zoomlevel: ZoomLevel::new_unchecked(y_z),
-                y_index: y_i as u32,
-                #[cfg(feature = "temporal_id")]
-                t_zoomlevel: TZoomLevel::new_unchecked(t_z),
-                #[cfg(feature = "temporal_id")]
-                t_index: t_i as u64,
+        let (t_zoomlevel, t_index) = if self.t_zoomlevel >= other.t_zoomlevel {
+            if (self.t_index >> (self.t_zoomlevel.get() - other.t_zoomlevel.get())) != other.t_index
+            {
+                return None;
             }
+            (self.t_zoomlevel, self.t_index)
+        } else {
+            if (other.t_index >> (other.t_zoomlevel.get() - self.t_zoomlevel.get())) != self.t_index
+            {
+                return None;
+            }
+            (other.t_zoomlevel, other.t_index)
+        };
+
+        Some(FlexId {
+            f_zoomlevel,
+            f_index,
+            x_zoomlevel,
+            x_index,
+            y_zoomlevel,
+            y_index,
+            #[cfg(feature = "temporal_id")]
+            t_zoomlevel,
+            #[cfg(feature = "temporal_id")]
+            t_index,
         })
     }
 
@@ -174,43 +199,28 @@ impl FlexId {
     /// assert!(!child.contains(&parent)); // 子は親を包含しない
     /// assert!(parent.contains(&parent)); // 自身は自身を包含する
     /// ```
+    #[inline]
     pub fn contains(&self, other: &FlexId) -> bool {
-        if !contains_dimension(
-            self.f_zoomlevel(),
-            self.f_index() as i64,
-            other.f_zoomlevel(),
-            other.f_index() as i64,
-        ) {
-            return false;
-        }
-        if !contains_dimension(
-            self.x_zoomlevel(),
-            self.x_index() as i64,
-            other.x_zoomlevel(),
-            other.x_index() as i64,
-        ) {
-            return false;
-        }
-        if !contains_dimension(
-            self.y_zoomlevel(),
-            self.y_index() as i64,
-            other.y_zoomlevel(),
-            other.y_index() as i64,
-        ) {
-            return false;
-        }
-
-        // `temporal_id` 無効時は双方とも全時間で必ず入れ子なので、判定ごと消す。
-        #[cfg(feature = "temporal_id")]
+        if self.f_zoomlevel > other.f_zoomlevel
+            || (other.f_index >> (other.f_zoomlevel.get() - self.f_zoomlevel.get())) != self.f_index
         {
-            if !contains_dimension(
-                self.t_zoomlevel(),
-                self.t_index() as i64,
-                other.t_zoomlevel(),
-                other.t_index() as i64,
-            ) {
-                return false;
-            }
+            return false;
+        }
+        if self.x_zoomlevel > other.x_zoomlevel
+            || (other.x_index >> (other.x_zoomlevel.get() - self.x_zoomlevel.get())) != self.x_index
+        {
+            return false;
+        }
+        if self.y_zoomlevel > other.y_zoomlevel
+            || (other.y_index >> (other.y_zoomlevel.get() - self.y_zoomlevel.get())) != self.y_index
+        {
+            return false;
+        }
+        #[cfg(feature = "temporal_id")]
+        if self.t_zoomlevel > other.t_zoomlevel
+            || (other.t_index >> (other.t_zoomlevel.get() - self.t_zoomlevel.get())) != self.t_index
+        {
+            return false;
         }
 
         true
@@ -220,6 +230,7 @@ impl FlexId {
     ///
     /// X は経度方向に周期的なので、`x[0] > x[1]` の範囲は末尾から先頭へ折り返した
     /// 2区間として扱う（[`RangeId::set_x`](crate::RangeId::set_x) と同じ規約）。
+    #[inline]
     pub fn intersects_range(&self, range: &crate::RangeId) -> bool {
         // 時間軸だけは「共通ズームでの整数範囲」に落とせない（`RangeId` の `Interval` は
         // 2の冪とは限らない）ので、絶対秒区間の重なりで判定する。
@@ -233,85 +244,59 @@ impl FlexId {
             }
         }
 
-        let overlaps_x = |start: i64, end: i64| {
-            overlaps_dimension(
-                self.x_zoomlevel(),
-                self.x_index() as i64,
-                range.z(),
-                start,
-                end,
-            )
-        };
-        let [x_start, x_end] = range.x().map(i64::from);
-        let x_overlaps = if x_start <= x_end {
-            overlaps_x(x_start, x_end)
+        let rz = range.z();
+        let [f_start, f_end] = range.f();
+        if !overlaps_i32(self.f_zoomlevel(), self.f_index(), rz, f_start, f_end) {
+            return false;
+        }
+
+        let [y_start, y_end] = range.y();
+        if !overlaps_u32(self.y_zoomlevel(), self.y_index(), rz, y_start, y_end) {
+            return false;
+        }
+
+        let [x_start, x_end] = range.x();
+        let xz = self.x_zoomlevel();
+        let xi = self.x_index();
+        if x_start <= x_end {
+            overlaps_u32(xz, xi, rz, x_start, x_end)
         } else {
-            overlaps_x(x_start, (1i64 << range.z()) - 1) || overlaps_x(0, x_end)
-        };
-
-        x_overlaps
-            && overlaps_dimension(
-                self.f_zoomlevel(),
-                self.f_index() as i64,
-                range.z(),
-                range.f()[0] as i64,
-                range.f()[1] as i64,
-            )
-            && overlaps_dimension(
-                self.y_zoomlevel(),
-                self.y_index() as i64,
-                range.z(),
-                range.y()[0] as i64,
-                range.y()[1] as i64,
-            )
+            overlaps_u32(xz, xi, rz, x_start, (1_u32 << rz) - 1)
+                || overlaps_u32(xz, xi, rz, 0, x_end)
+        }
     }
 }
 
-/// 1次元について、`(shallow_z, shallow_i)` が `(deep_z, deep_i)` を包含するか判定する。
-///
-/// [`nested_dimension`] と違い対称ではない（`self` 側を浅い側に固定して判定する）ため、
-/// 深さが逆（`shallow_z > deep_z`）なら即座に包含しないと判断できる。
-fn contains_dimension(shallow_z: u8, shallow_i: i64, deep_z: u8, deep_i: i64) -> bool {
-    if shallow_z > deep_z {
-        return false;
-    }
-    let shift = deep_z - shallow_z;
-    (deep_i >> shift) == shallow_i
-}
-
-/// 1次元について、2つのSegmentが入れ子なら「深い側」の `(zoom, index)` を返す。素なら [`None`]。
-///
-/// F は符号付き `i32`、X/Y は `u32`、T は `u64` と幅が違うが判定式は同じなので、`i64` へ
-/// 揃えて1つの関数で扱う（このクレートが扱う範囲——`u32` の全域と `2^62` までの `u64`——は
-/// `i64` で情報を落とさずに表せる）。
-fn nested_dimension(z1: u8, i1: i64, z2: u8, i2: i64) -> Option<(u8, i64)> {
-    let (deep_z, deep_i, shallow_z, shallow_i) = if z1 > z2 {
-        (z1, i1, z2, i2)
-    } else {
-        (z2, i2, z1, i1)
-    };
-
-    let shift = deep_z - shallow_z;
-    ((deep_i >> shift) == shallow_i).then_some((deep_z, deep_i))
-}
-
-/// 1次元について、Segmentと（別ズームの）整数範囲が重なるか。
-fn overlaps_dimension(
+#[inline]
+fn overlaps_i32(
     segment_z: u8,
-    segment_i: i64,
+    segment_i: i32,
     range_z: u8,
-    range_min: i64,
-    range_max: i64,
+    range_min: i32,
+    range_max: i32,
 ) -> bool {
-    let (deep_z, deep_min, deep_max, shallow_z, shallow_min, shallow_max) = if segment_z > range_z {
-        (
-            segment_z, segment_i, segment_i, range_z, range_min, range_max,
-        )
+    if segment_z > range_z {
+        let projected = segment_i >> (segment_z - range_z);
+        projected >= range_min && projected <= range_max
     } else {
-        (
-            range_z, range_min, range_max, segment_z, segment_i, segment_i,
-        )
-    };
-    let shift = deep_z - shallow_z;
-    !((deep_max >> shift) < shallow_min || (deep_min >> shift) > shallow_max)
+        let shift = range_z - segment_z;
+        (range_min >> shift) <= segment_i && segment_i <= (range_max >> shift)
+    }
+}
+
+#[inline]
+fn overlaps_u32(
+    segment_z: u8,
+    segment_i: u32,
+    range_z: u8,
+    range_min: u32,
+    range_max: u32,
+) -> bool {
+    if segment_z > range_z {
+        let projected = segment_i >> (segment_z - range_z);
+        projected >= range_min && projected <= range_max
+    } else {
+        let shift = range_z - segment_z;
+        (range_min >> shift) <= segment_i && segment_i <= (range_max >> shift)
+    }
 }

@@ -24,10 +24,23 @@ pub(crate) struct DimensionSet(u8);
 impl DimensionSet {
     pub(crate) const EMPTY: Self = DimensionSet(0);
 
+    #[inline]
+    pub(crate) const fn from_bits(bits: u8) -> Self {
+        DimensionSet(bits)
+    }
+
+    #[inline]
+    pub(crate) const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    #[inline]
     pub(crate) const fn contains(self, dimension: Dimension) -> bool {
         self.0 & 1 << dimension as u8 != 0
     }
 
+    #[cfg(test)]
+    #[inline]
     pub(crate) fn iter(self) -> impl Iterator<Item = Dimension> {
         Dimension::ALL
             .into_iter()
@@ -36,6 +49,7 @@ impl DimensionSet {
 }
 
 impl From<Dimension> for DimensionSet {
+    #[inline]
     fn from(dimension: Dimension) -> Self {
         DimensionSet(1 << dimension as u8)
     }
@@ -44,12 +58,14 @@ impl From<Dimension> for DimensionSet {
 impl BitOr for DimensionSet {
     type Output = Self;
 
+    #[inline]
     fn bitor(self, rhs: Self) -> Self {
         DimensionSet(self.0 | rhs.0)
     }
 }
 
 impl FromIterator<Dimension> for DimensionSet {
+    #[inline]
     fn from_iter<I: IntoIterator<Item = Dimension>>(iter: I) -> Self {
         iter.into_iter()
             .fold(DimensionSet::EMPTY, |set, d| set | d.into())
