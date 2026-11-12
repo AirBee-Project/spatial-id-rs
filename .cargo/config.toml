@@ -1,0 +1,5 @@
+[alias]
+# docs.rs と同じ設定（Cargo.toml の [package.metadata.docs.rs]）でドキュメントを作る。
+# `--cfg docsrs` は nightly の feature(doc_cfg) を有効にするため、`cargo +nightly docsrs` で実行する。
+# `cargo doc` は組み込みのコマンドなので alias で上書きできない。
+docsrs = ["doc", "--no-deps", "--all-features", "--config", "build.rustdocflags=['--cfg', 'docsrs']"]

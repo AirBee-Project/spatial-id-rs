@@ -40,6 +40,12 @@
 
 rustdoc は日本語・常体で書く（[docs/docs-rule.md](docs/docs-rule.md)）。設計思想は rustdoc ではなく [docs/](docs/) に書き、命名は [docs/method-naming.md](docs/method-naming.md) と [docs/file-naming-conventions.md](docs/file-naming-conventions.md) に従う。
 
+docs.rs と同じ設定（全 feature と `--cfg docsrs`）でドキュメントを確かめるには、nightly で次を実行する。`unstable` の API と、各 API に要る feature の表示も含まれる。
+
+```sh
+cargo +nightly docsrs --open
+```
+
 ## ライセンスと権利
 
 本プロジェクトは [The Clear BSD License](LICENSE) で提供しており、特許出願中の技術を含む（[PATENTS](PATENTS)）。Pull Request を送ることで、貢献者は次のことに同意したものとする。

@@ -15,6 +15,7 @@ exclude = [
     "/docs/images",
     "/.github",
     "/.vscode",
+    "/.cargo",
     "/deny.toml",
     "/release-plz.toml",
     "/commitlint.config.mjs",
