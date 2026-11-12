@@ -49,9 +49,11 @@ rayon = { version = "1.10", optional = true }
 # geojson クレートは std に依存するため、std feature のときだけ使う。
 geojson = { version = "1.0.0", default-features = false, optional = true }
 
-compio = { version = "0.19.2", features = ["macros", "fs"], optional = true }
+compio = { version = "0.19.2", features = ["fs"], optional = true }
+flume = { version = "0.12", default-features = false, features = ["async"], optional = true }
 crc32c = { version = "0.6", optional = true }
 bytemuck = { version = "1", features = ["derive", "min_const_generics", "extern_crate_alloc"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"], optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2", optional = true }
@@ -72,6 +74,7 @@ disk = [
     "unstable",
     "dep:bytemuck",
     "dep:compio",
+    "dep:flume",
     "dep:crc32c",
     "dep:libc",
     "dep:windows-sys",
@@ -109,7 +112,7 @@ bench = false
 [[bin]]
 name = "spatial-id"
 path = "src/main.rs"
-required-features = ["std", "unstable"]
+required-features = ["std", "unstable", "disk", "tokio"]
 
 
 [[bench]]

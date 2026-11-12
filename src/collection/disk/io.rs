@@ -1,18 +1,20 @@
 use std::io;
 use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::thread;
 
 use alloc::boxed::Box;
 use bytemuck::{CheckedBitPattern, NoUninit, Zeroable};
 use compio::buf::{IoBuf, IoBufMut, SetLen};
 use compio::fs::{File, OpenOptions};
 use compio::io::{AsyncReadAtExt, AsyncWriteAtExt};
+use compio::runtime::Runtime;
 
 use crate::error::DiskError;
 
 /// Direct I/O でファイルを開く。
-pub(crate) async fn open_direct(path: impl AsRef<Path>, options: &OpenOptions) -> io::Result<File> {
+async fn open_direct(path: impl AsRef<Path>, options: &OpenOptions) -> io::Result<File> {
     let mut options = options.clone();
     #[cfg(all(unix, not(target_vendor = "apple")))]
     options.custom_flags(libc::O_DIRECT);
@@ -75,20 +77,32 @@ impl Page {
 }
 
 /// ページを末尾に追記していくファイル。
-pub(crate) struct PageFile {
-    file: File,
+///
+/// I/O は専用スレッドで動く compio ランタイム（io_uring / IOCP）が担うため、呼び出し側の非同期ランタイムは問わない。
+#[derive(Debug)]
+pub(crate) struct PagedFile {
+    path: PathBuf,
+    requests: flume::Sender<Request>,
     /// ページ数。
     len: u64,
 }
 
-impl PageFile {
+impl PagedFile {
     /// ファイルを開く。存在しなければ空のファイルを作る。
     pub(crate) async fn open(path: impl AsRef<Path>) -> io::Result<Self> {
-        let mut options = OpenOptions::new();
-        options.read(true).write(true).create(true);
-        let file = open_direct(path, &options).await?;
-        let len = file.metadata().await?.len() / Page::SIZE as u64;
-        Ok(PageFile { file, len })
+        let path = path.as_ref().to_path_buf();
+        let (requests, receiver) = flume::unbounded();
+        let (opened, ready) = flume::bounded(1);
+        let path_clone = path.clone();
+        thread::Builder::new()
+            .name("spatial-id-disk".into())
+            .spawn(move || serve(&path_clone, opened, receiver))?;
+        let len = ready.recv_async().await.map_err(|_| stopped())??;
+        Ok(PagedFile { path, requests, len })
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
     }
 
     pub(crate) fn len(&self) -> u64 {
@@ -100,41 +114,121 @@ impl PageFile {
         if index >= self.len {
             return Err(DiskError::Corrupt);
         }
-        let (result, page) = self
-            .file
-            .read_exact_at(Page::new(), index * Page::SIZE as u64)
-            .await
-            .into();
-        result?;
-        Ok(page)
+        Ok(self.request(|reply| Request::Read { index, reply }).await?)
     }
 
     /// 末尾にページを足し、その番号を返す。
     pub(crate) async fn append(&mut self, page: Box<Page>) -> io::Result<u64> {
         let index = self.len;
-        self.file
-            .write_all_at(page, index * Page::SIZE as u64)
-            .await
-            .0?;
+        self.request(|reply| Request::Write { index, page, reply })
+            .await?;
         self.len += 1;
         Ok(index)
     }
 
     /// 先頭の `len` ページだけを残す。
     pub(crate) async fn truncate(&mut self, len: u64) -> io::Result<()> {
-        self.file.set_len(len * Page::SIZE as u64).await?;
+        self.request(|reply| Request::SetLen { len, reply }).await?;
         self.len = len;
         Ok(())
     }
 
     /// ここまでに書いたページを永続化する。
     pub(crate) async fn sync(&self) -> io::Result<()> {
-        self.file.sync_data().await
+        self.request(Request::Sync).await
     }
 
+    /// ファイルを閉じ、専用スレッドを止める。閉じる際のエラーが要らなければ drop するだけでよい。
     pub(crate) async fn close(self) -> io::Result<()> {
-        self.file.close().await
+        self.request(Request::Close).await
     }
+
+    async fn request<T>(&self, request: impl FnOnce(Reply<T>) -> Request) -> io::Result<T> {
+        let (reply, response) = flume::bounded(1);
+        self.requests.send(request(reply)).map_err(|_| stopped())?;
+        response.recv_async().await.map_err(|_| stopped())?
+    }
+}
+
+type Reply<T> = flume::Sender<io::Result<T>>;
+
+enum Request {
+    Read {
+        index: u64,
+        reply: Reply<Box<Page>>,
+    },
+    Write {
+        index: u64,
+        page: Box<Page>,
+        reply: Reply<()>,
+    },
+    SetLen {
+        len: u64,
+        reply: Reply<()>,
+    },
+    Sync(Reply<()>),
+    Close(Reply<()>),
+}
+
+/// 専用スレッドの本体。ファイルを開いてページ数を `opened` に返し、要求を処理し続ける。
+fn serve(path: &Path, opened: Reply<u64>, requests: flume::Receiver<Request>) {
+    let runtime = match Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            let _ = opened.send(Err(err));
+            return;
+        }
+    };
+    runtime.block_on(async {
+        let mut options = OpenOptions::new();
+        options.read(true).write(true).create(true);
+        let mut file = match open_direct(path, &options).await {
+            Ok(file) => file,
+            Err(err) => {
+                let _ = opened.send(Err(err));
+                return;
+            }
+        };
+        let _ = opened.send(file.metadata().await.map(|m| m.len() / Page::SIZE as u64));
+
+        while let Ok(request) = requests.recv_async().await {
+            match request {
+                // 読み込みは互いに独立なので、完了を待たずに次の要求を受け付けて並行に投入する。
+                // close は複製した File がすべて drop されるのを待つため、読み込み中に閉じても安全。
+                Request::Read { index, reply } => {
+                    let file = file.clone();
+                    compio::runtime::spawn(async move {
+                        let (result, page) =
+                            file.read_exact_at(Page::new(), offset(index)).await.into();
+                        let _ = reply.send(result.map(|()| page));
+                    })
+                    .detach();
+                }
+                Request::Write { index, page, reply } => {
+                    let _ = reply.send(file.write_all_at(page, offset(index)).await.0);
+                }
+                Request::SetLen { len, reply } => {
+                    let _ = reply.send(file.set_len(offset(len)).await);
+                }
+                Request::Sync(reply) => {
+                    let _ = reply.send(file.sync_data().await);
+                }
+                Request::Close(reply) => {
+                    let _ = reply.send(file.close().await);
+                    return;
+                }
+            }
+        }
+        let _ = file.close().await;
+    });
+}
+
+fn offset(index: u64) -> u64 {
+    index * Page::SIZE as u64
+}
+
+fn stopped() -> io::Error {
+    io::Error::other("ディスク I/O スレッドが停止した")
 }
 
 impl Deref for Page {
