@@ -168,7 +168,7 @@ impl SpatialIdSet {
         self.inner.max_zoomlevel()
     }
 
-    /// 時間方向に結合した [`RangeId`] として読み出す。**空間解像度は変えない**。
+    /// 時間方向に結合した [`RangeId`] として読み出す。**ズームレベルは変えない**。
     ///
     /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1Segmentになる。
     /// [`AllowedIntervals`] を渡すと、その候補のうち**区間を割り切る最も粗いもの**で表す
