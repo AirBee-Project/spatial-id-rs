@@ -1,3 +1,5 @@
+空間IDの仕組みと、[`SingleId`](crate::SingleId)・[`RangeId`](crate::RangeId) の使い方。
+
 # 空間IDとは
 空間IDは地球上の空間をグリッド状に区切り、それぞれに `{z}/{f}/{x}/{y}` という番号を振ったものである。
 
@@ -158,13 +160,13 @@ use spatial_id::{SingleId, SpatialId};
 
 let id = SingleId::new(20, 9, 931389, 412900)?;
 
-println!("高さ: {} m", id.length_f_meters());
+println!("{}", id.length_f_meters());
 # Ok(())
 # }
 ```
 
 ```console
-高さ: 32 m
+32
 ```
 
 ## 位置
@@ -178,13 +180,13 @@ use spatial_id::{SingleId, SpatialId};
 let id = SingleId::new(20, 9, 931389, 412900)?;
 
 let center = id.spatial_center();
-println!("中心: 緯度 {:.4}, 経度 {:.4}", center.latitude(), center.longitude());
+println!("{:.4}, {:.4}", center.latitude(), center.longitude());
 # Ok(())
 # }
 ```
 
 ```console
-中心: 緯度 35.6828, 経度 139.7672
+35.6828, 139.7672
 ```
 
 # 範囲をまとめて表す `RangeId`
@@ -222,16 +224,22 @@ use spatial_id::{RangeId, SingleId};
 let id = SingleId::new(20, 9, 931389, 412900)?;
 println!("{}", RangeId::from(id));
 
-let range = RangeId::new(20, 9, [931385, 931393], 412900)?;
-let ids: Vec<SingleId> = range.single_ids().collect();
-println!("{} 個: {} 〜 {}", ids.len(), ids[0], ids[ids.len() - 1]);
+println!();
+
+let range = RangeId::new(20, 9, [931389, 931391], 412900)?;
+for id in range.single_ids() {
+    println!("{id},");
+}
 # Ok(())
 # }
 ```
 
 ```console
 20/9/931389/412900
-9 個: 20/9/931385/412900 〜 20/9/931393/412900
+
+20/9/931389/412900,
+20/9/931390/412900,
+20/9/931391/412900,
 ```
 
 `RangeId` も `SingleId` と同じように移動できる。範囲全体がそのまま平行移動する。
@@ -267,17 +275,15 @@ fn height(id: &impl SpatialId) -> f64 {
     id.length_f_meters()
 }
 
-println!("{} m", height(&SingleId::new(20, 9, 931389, 412900)?));
-println!("{} m", height(&RangeId::new(20, [9, 10], 931389, 412900)?));
+println!("{}", height(&SingleId::new(20, 9, 931389, 412900)?));
+println!("{}", height(&RangeId::new(20, [9, 10], 931389, 412900)?));
 # Ok(())
 # }
 ```
 
 ```console
-32 m
-64 m
+32
+64
 ```
 
 次章で扱うコレクションの `insert` や `get` も `SpatialId` を受け取るので、どちらの型でも渡せる。
-
-次章: [2. コレクション](crate::_tutorial::_02_collection)

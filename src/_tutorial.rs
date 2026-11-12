@@ -51,11 +51,3 @@ pub mod _04_query {}
 #[doc = include_str!("../docs/tutorial/05_temporal.md")]
 #[doc = doc_image!("temporal_range", "docs/images/tutorial/temporal_range.jpg")]
 pub mod _05_temporal {}
-
-#[doc = include_str!("../docs/tutorial/06_flextree.md")]
-#[doc = doc_image!("flextree_segment", "docs/images/tutorial/flextree_segment.jpg")]
-#[doc = doc_image!("flextree_flex_id", "docs/images/tutorial/flextree_flex_id.jpg")]
-#[doc = doc_image!("flextree_point", "docs/images/tutorial/flextree_point.jpg")]
-#[doc = doc_image!("flextree_aabb", "docs/images/tutorial/flextree_aabb.jpg")]
-#[doc = doc_image!("flextree_voxel_count", "docs/images/tutorial/flextree_voxel_count.jpg")]
-pub mod _06_flextree {}

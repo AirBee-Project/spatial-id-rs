@@ -1,3 +1,5 @@
+座標や図形を空間IDに変換する方法。
+
 # 幾何図形と空間IDの変換
 
 建物や道路、飛行経路などの地理データを空間IDで扱うには、図形を空間IDに変換する必要がある。
@@ -91,14 +93,14 @@ let coord = Coordinate::new(35.681236, 139.767125, 10.0)?;
 let frac = coord.fractional_id(20)?;
 
 // 整数部が空間IDのインデックスになる
-println!("x = {}", frac.x());
+println!("{}", frac.x());
 println!("{}", frac.round_to_single_id());
 # Ok(())
 # }
 ```
 
 ```console
-x = 931389.2579555555
+931389.2579555555
 20/0/931389/412906
 ```
 
@@ -123,18 +125,18 @@ let center = Coordinate::new(35.681236, 139.767125, 50.0)?;
 let sphere = Sphere::new(center, 30.0)?; // 半径 30m
 
 // ズームレベル 25（約1m）の空間IDの数
-println!("{} 個", sphere.cover_single_ids(25)?.count());
+println!("{}", sphere.cover_single_ids(25)?.count());
 
 // SpatialIdSet にまとめたときの、内部の要素の数
 let set = sphere.cover_set(25)?;
-println!("{} 個", set.count());
+println!("{}", set.count());
 # Ok(())
 # }
 ```
 
 ```console
-133264 個
-5372 個
+133264
+5372
 ```
 
 ## 線分
@@ -184,13 +186,13 @@ let polygon = Polygon::new(vec![
 ]);
 
 let set = polygon.cover_set(22)?;
-println!("{} 個", set.count());
+println!("{}", set.count());
 # Ok(())
 # }
 ```
 
 ```console
-12 個
+12
 ```
 
 `Polygon` はイヤークリッピング法で三角形に分けてから変換する。
@@ -261,5 +263,3 @@ Some((80, 80))
 
 
 ![GeoJSON と、それが覆う空間ID][geojson_cover]
-
-次章: [4. Query](crate::_tutorial::_04_query)

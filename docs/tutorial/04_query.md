@@ -1,3 +1,5 @@
+[`Query`](crate::query::Query) でコレクションを加工する方法。
+
 [`Query`](crate::query::Query) は、コレクションに対する演算をメソッドチェーンで組み立て、まとめて評価する仕組みである。
 押し出し、減衰拡散、集約、絞り込み、合成などを組み合わせて、空間データを加工できる。
 
@@ -25,15 +27,15 @@ map.insert(SingleId::new(20, 9, 931391, 412900)?, 100);
 let high = map.query().filter_in(50..).get(..).into_map()?;
 
 for (id, v) in high.flat_single_ids(None) {
-    println!("{id} => {v}");
+    println!("({id}, {v}),");
 }
 # Ok(())
 # }
 ```
 
 ```console
-20/9/931390/412900 => 80
-20/9/931391/412900 => 100
+(20/9/931390/412900, 80),
+(20/9/931391/412900, 100),
 ```
 
 `query()` は元のコレクションを消費する。元のデータを残しておきたいときは、`map.clone().query()` のように複製してから始める。
@@ -54,13 +56,15 @@ for (id, v) in high.flat_single_ids(None) {
 # map.insert(SingleId::new(20, 9, 931391, 412900)?, 100);
 let target = SingleId::new(20, 9, 931390, 412900)?;
 let part = map.query().get(target).into_map()?;
-println!("{} 個", part.flat_single_ids(None).count());
+for (id, v) in part.flat_single_ids(None) {
+    println!("({id}, {v}),");
+}
 # Ok(())
 # }
 ```
 
 ```console
-1 個
+(20/9/931390/412900, 80),
 ```
 
 評価は結果を読み出すときに始まり、読んだ分だけ進む。途中で止めたいときは [`get_cancellable`](crate::query::Query::get_cancellable) を使う。
@@ -196,14 +200,14 @@ map.insert(SingleId::new(20, 9, 931391, 412900)?, 100);
 let coarse = map.query().zoom_out(19, Max).get(..).into_map()?;
 
 for (id, v) in coarse.flat_single_ids(None) {
-    println!("{id} => {v}");
+    println!("({id}, {v}),");
 }
 # Ok(())
 # }
 ```
 
 ```console
-19/4/465695/206450 => 100
+(19/4/465695/206450, 100),
 ```
 
 ![ズームレベル 21 の値（左）を、ズームレベル 19 の平均（Average）にまとめた例（右）。赤ほど値が大きい][query_zoom_out]
@@ -344,5 +348,3 @@ std::fs::write("riskmap.json", serde_json::to_string(&risk)?)?;
 ```sh
 cargo run --release --example riskmap --features unstable
 ```
-
-次章: [5. 時空間ID](crate::_tutorial::_05_temporal)

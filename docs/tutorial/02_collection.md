@@ -1,3 +1,5 @@
+[`SpatialIdSet`](crate::collection::SpatialIdSet) と [`SpatialIdMap`](crate::collection::SpatialIdMap) で空間IDをまとめて扱う方法。
+
 大量の空間IDを扱うときは、コレクションにまとめる。
 
 | 型 | 保持するもの | 向いている用途 |
@@ -7,7 +9,6 @@
 
 どちらも重なった空間IDを1つにし、まとめられる部分は大きな単位にまとめて保持する。
 そのため、`SingleId` を1個ずつ持つより、少ないメモリで大きな領域を扱える。
-仕組みは [6章](crate::_tutorial::_06_flextree) で説明する。
 
 # `SpatialIdSet`
 
@@ -193,16 +194,16 @@ map.upsert(SingleId::new(20, 9, 931389, 412900)?, 99); // 値があるので変�
 map.upsert(SingleId::new(20, 9, 931391, 412900)?, 80); // 新しく入る
 
 for (id, v) in map.flat_single_ids(None) {
-    println!("{id} => {v}");
+    println!("({id}, {v}),");
 }
 # Ok(())
 # }
 ```
 
 ```console
-20/9/931389/412900 => 30
-20/9/931390/412900 => 80
-20/9/931391/412900 => 80
+(20/9/931389/412900, 30),
+(20/9/931390/412900, 80),
+(20/9/931391/412900, 80),
 ```
 
 同じ値を持つ空間IDは、まとめられる部分が自動で1つにまとまる。
@@ -216,15 +217,15 @@ for (id, v) in map.flat_single_ids(None) {
 # map.insert(SingleId::new(20, 9, 931390, 412900)?, 80);
 # map.insert(SingleId::new(20, 9, 931391, 412900)?, 80);
 for (range, v) in map.iter() {
-    println!("{range} => {v}");
+    println!("({range}, {v}),");
 }
 # Ok(())
 # }
 ```
 
 ```console
-20/9/931389/412900 => 30
-20/9/931390:931391/412900 => 80
+(20/9/931389/412900, 30),
+(20/9/931390:931391/412900, 80),
 ```
 
 ## 取得と削除
@@ -241,22 +242,31 @@ for (range, v) in map.iter() {
 # map.insert(SingleId::new(20, 9, 931391, 412900)?, 80);
 let target = RangeId::new(20, 9, [931389, 931390], 412900)?;
 for (range, v) in map.get(target) {
-    println!("{range} => {v}");
+    println!("({range}, {v}),");
 }
 
+println!();
+
 for (range, v) in map.remove(SingleId::new(20, 9, 931390, 412900)?) {
-    println!("削除: {range} => {v}");
+    println!("({range}, {v}),");
 }
-println!("{} 個", map.flat_single_ids(None).count());
+println!();
+
+for (id, v) in map.flat_single_ids(None) {
+    println!("({id}, {v}),");
+}
 # Ok(())
 # }
 ```
 
 ```console
-20/9/931389/412900 => 30
-20/9/931390/412900 => 80
-削除: 20/9/931390/412900 => 80
-2 個
+(20/9/931389/412900, 30),
+(20/9/931390/412900, 80),
+
+(20/9/931390/412900, 80),
+
+(20/9/931389/412900, 30),
+(20/9/931391/412900, 80),
 ```
 
 ## 値で絞り込む
@@ -277,14 +287,17 @@ println!("{:?}", map.value_range());
 
 // 値が 50 以上の部分だけを取り出した新しいマップ
 let high = map.filter_range(50..);
-println!("{} 個", high.flat_single_ids(None).count());
+for (id, v) in high.flat_single_ids(None) {
+    println!("({id}, {v}),");
+}
 # Ok(())
 # }
 ```
 
 ```console
 Some((30, 80))
-2 個
+(20/9/931390/412900, 80),
+(20/9/931391/412900, 80),
 ```
 
 ![中心ほど値が大きいマップ（左）から、値が 40 以上 80 未満の部分を取り出した例（右）。赤ほど値が大きい][query_filter_in]
@@ -307,7 +320,9 @@ map.insert(SingleId::new(20, 9, 931391, 412900)?, 80);
 let json = serde_json::to_string(&map)?;
 let restored: SpatialIdMap<u32> = serde_json::from_str(&json)?;
 
-println!("{} 個", restored.flat_single_ids(None).count());
+for (id, v) in restored.flat_single_ids(None) {
+    println!("({id}, {v}),");
+}
 # Ok(())
 # }
 # #[cfg(not(feature = "unstable"))]
@@ -315,7 +330,8 @@ println!("{} 個", restored.flat_single_ids(None).count());
 ```
 
 ```console
-2 個
+(20/9/931389/412900, 30),
+(20/9/931391/412900, 80),
 ```
 
 書き出した JSON では、同じ値を持つ空間IDが `value` 配列の1つの要素を `ref` で参照する。
@@ -338,5 +354,3 @@ println!("{} 個", restored.flat_single_ids(None).count());
   ]
 }
 ```
-
-次章: [3. 図形から空間IDへの変換](crate::_tutorial::_03_geometry)

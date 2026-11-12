@@ -1,3 +1,5 @@
+時間を持つ空間ID（時空間ID）の扱い方。
+
 空間IDに時間を加えたものが時空間IDである。
 「この空間を、この時間帯に」という単位でデータを扱えるので、ドローンの飛行計画や時間帯ごとの規制などを表せる。
 
@@ -102,8 +104,8 @@ set.insert(RangeId::new(20, 9, 931389, 412900)?.time_with(Interval::HOUR, [49400
 // 同じ空間でも、時間が重ならなければ何も返らない
 let inside = SingleId::new(20, 9, 931389, 412900)?.time_with(3600, 494001)?;
 let outside = SingleId::new(20, 9, 931389, 412900)?.time_with(3600, 494005)?;
-println!("494001 と重なる: {}", set.get(inside).next().is_some());
-println!("494005 と重なる: {}", set.get(outside).next().is_some());
+println!("{}", set.get(inside).next().is_some());
+println!("{}", set.get(outside).next().is_some());
 
 // 読み出すと、元の時間間隔の表記に戻る
 for range in set.reconstructed_time_ranges(None) {
@@ -116,8 +118,8 @@ for range in set.reconstructed_time_ranges(None) {
 ```
 
 ```console
-494001 と重なる: true
-494005 と重なる: false
+true
+false
 20/9/931389/412900_3600/494000:494002,
 ```
 
@@ -138,5 +140,3 @@ spatial-id = { version = "0.1", default-features = false, features = ["std", "ra
 ```
 
 時間の扱いの詳細な仕様は [`time`](crate::time) モジュールにまとめている。
-
-次章: [6. FlexTree の仕組み](crate::_tutorial::_06_flextree)
