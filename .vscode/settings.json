@@ -1,7 +1,7 @@
 {
 	"rust-analyzer.cargo.targetDir": true,
 	"rust-analyzer.procMacro.enable": false,
-	"rust-analyzer.cargo.features": [],
+	"rust-analyzer.cargo.features": ["unstable", "disk"],
 	"rust-analyzer.check.command": "clippy",
 	"chat.tools.terminal.autoApprove": {
 		"cargo test *": true,

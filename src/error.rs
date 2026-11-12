@@ -14,6 +14,20 @@ pub enum Error {
 
     /// クエリまわりのエラー。
     Query(QueryError),
+
+    #[cfg(feature = "disk")]
+    /// ディスクI/Oまわりのエラー。
+    Disk(DiskError),
+}
+
+#[cfg(feature = "disk")]
+/// ディスク関連で発生するエラー。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiskError {
+    /// I/O エラー。
+    Io(alloc::string::String),
+    /// ファイルの中身が想定した形式になっていない（チェックサム不一致や不正データ）。
+    Corrupt,
 }
 
 /// クエリ関連で発生するエラー。
@@ -123,6 +137,41 @@ impl From<QueryError> for Error {
     }
 }
 
+#[cfg(feature = "disk")]
+impl From<DiskError> for Error {
+    fn from(value: DiskError) -> Self {
+        Self::Disk(value)
+    }
+}
+
+#[cfg(feature = "disk")]
+impl From<std::io::Error> for DiskError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(alloc::format!("{err}"))
+    }
+}
+
+#[cfg(feature = "disk")]
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Self::Disk(DiskError::from(err))
+    }
+}
+
+#[cfg(feature = "disk")]
+impl From<bytemuck::checked::CheckedCastError> for DiskError {
+    fn from(_: bytemuck::checked::CheckedCastError) -> Self {
+        Self::Corrupt
+    }
+}
+
+#[cfg(feature = "disk")]
+impl From<bytemuck::checked::CheckedCastError> for Error {
+    fn from(err: bytemuck::checked::CheckedCastError) -> Self {
+        Self::Disk(DiskError::from(err))
+    }
+}
+
 /// 時間 API は `interval` を `impl TryInto<Interval>` で受けるため、`Error: From<変換エラー>`
 /// を要求する。[`Interval`](crate::Interval) をそのまま渡した場合の変換は恒等（失敗しない）で
 /// エラー型が [`Infallible`](core::convert::Infallible) になるので、その分の橋渡しを用意する。
@@ -139,6 +188,8 @@ impl fmt::Display for Error {
             Error::SpatialId(inner) => inner.fmt(f),
             Error::Geometry(inner) => inner.fmt(f),
             Error::Query(inner) => inner.fmt(f),
+            #[cfg(feature = "disk")]
+            Error::Disk(inner) => inner.fmt(f),
         }
     }
 }
@@ -292,6 +343,16 @@ impl fmt::Display for SpatialIdError {
     }
 }
 
+#[cfg(feature = "disk")]
+impl fmt::Display for DiskError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DiskError::Io(err) => write!(f, "I/O error: {err}"),
+            DiskError::Corrupt => write!(f, "corrupt file"),
+        }
+    }
+}
+
 impl error::Error for Error {}
 
 impl error::Error for GeometryError {}
@@ -299,3 +360,6 @@ impl error::Error for GeometryError {}
 impl error::Error for SpatialIdError {}
 
 impl error::Error for QueryError {}
+
+#[cfg(feature = "disk")]
+impl error::Error for DiskError {}

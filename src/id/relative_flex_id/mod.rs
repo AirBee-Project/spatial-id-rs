@@ -86,6 +86,37 @@ impl RelativeFlexId {
         };
         Ok(absolute)
     }
+
+    /// [`encode`](Self::encode) / [`decode`](Self::decode) が扱う固定長バイト列の長さ。
+    pub(crate) const ENCODED_LEN: usize = 20;
+
+    /// 自身を固定長バイト列に変換する。
+    pub(crate) fn encode(&self) -> [u8; Self::ENCODED_LEN] {
+        let dimensions = dimensions(&self.0);
+        let index = dimensions
+            .iter()
+            .zip(MAX_ZOOM)
+            .rev()
+            .fold(0u128, |packed, (&(_, i), bits)| packed << bits | i as u128);
+        let mut out = [0; Self::ENCODED_LEN];
+        out[..4].copy_from_slice(&dimensions.map(|(z, _)| z));
+        out[4..].copy_from_slice(&index.to_le_bytes());
+        out
+    }
+
+    /// 固定長バイト列から [`RelativeFlexId`] を復元する（[`encode`](Self::encode) の逆変換）。
+    pub(crate) fn decode(bytes: &[u8; Self::ENCODED_LEN]) -> Result<Self, Error> {
+        let [fz, xz, yz, tz, ..] = *bytes;
+        let mut index = u128::from_le_bytes(bytes[4..].try_into().unwrap());
+        let [f, x, y, t] = MAX_ZOOM.map(|bits| {
+            let i = index & ((1 << bits) - 1);
+            index >>= bits;
+            i as u64
+        });
+        let relative =
+            FlexId::new(fz, f as i32, xz, x as u32, yz, y as u32)?.time_with_segment(tz, t)?;
+        Ok(RelativeFlexId(relative))
+    }
 }
 
 /// T 方向に深くならず、F / X / Y の深さの合計が [`ShortRelativeFlexId::MAX_STEPS`] 段以内の [RelativeFlexId] を u16 に詰めたもの。
@@ -206,5 +237,14 @@ mod tests {
         assert_eq!(rel.depth_on(Dimension::X), 3);
         assert_eq!(rel.depth_on(Dimension::Y), 0);
         assert_eq!(rel.to_absolute(&ancestor).unwrap(), descendant);
+    }
+
+    #[test]
+    fn encode_round_trips() {
+        let ancestor = FlexId::new(2, 1, 1, 0, 3, 5).unwrap();
+        let descendant = FlexId::new(5, 12, 4, 7, 3, 5).unwrap();
+        let rel = descendant.relative_to(&ancestor).unwrap();
+        let encoded = rel.encode();
+        assert_eq!(RelativeFlexId::decode(&encoded).unwrap(), rel);
     }
 }

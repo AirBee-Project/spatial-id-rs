@@ -475,7 +475,6 @@ impl FlexId {
     }
 
     /// `dimension` 方向で二つに切り分けた側のうち、`target` を含む側を返す。その次元が最大ズームなら [`None`]。
-    #[cfg(test)]
     pub(crate) fn split_toward(&self, dimension: Dimension, target: &FlexId) -> Option<FlexId> {
         let upper = self.split_on(dimension, Side::Upper)?;
         if upper.contains(target) {
