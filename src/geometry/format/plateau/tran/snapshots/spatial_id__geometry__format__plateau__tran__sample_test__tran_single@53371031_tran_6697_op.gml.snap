@@ -1,5 +1,5 @@
 ---
-source: src/geometry/format/plateau/sample_test.rs
+source: src/geometry/format/plateau/tran/sample_test.rs
 expression: ids_snapshot(file.cover_single_ids(TRAN_Z).unwrap())
 input_file: sample/plateau/tran/53371031_tran_6697_op.gml
 ---

@@ -4,8 +4,6 @@ pub mod bldg;
 mod geometry;
 mod parser;
 #[cfg(test)]
-mod sample_test;
-#[cfg(test)]
 mod test;
 pub mod tran;
 

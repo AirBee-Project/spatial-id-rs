@@ -21,6 +21,11 @@
 //!     .unwrap();
 //! ```
 
+#[cfg(test)]
+mod sample_test;
+#[cfg(test)]
+pub(super) mod test;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::str::FromStr;

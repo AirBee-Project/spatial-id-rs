@@ -20,6 +20,11 @@
 //! let commercial = usages.filter_values(&[Some(BldgUsage::Commercial)].into());
 //! ```
 
+#[cfg(test)]
+mod sample_test;
+#[cfg(test)]
+mod test;
+
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::str::FromStr;

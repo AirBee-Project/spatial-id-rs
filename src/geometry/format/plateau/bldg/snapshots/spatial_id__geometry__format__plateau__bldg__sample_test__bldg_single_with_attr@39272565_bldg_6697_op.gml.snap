@@ -1,5 +1,5 @@
 ---
-source: src/geometry/format/plateau/sample_test.rs
+source: src/geometry/format/plateau/bldg/sample_test.rs
 expression: "counts_snapshot(file.buildings.iter().map(|b| &b.attribute),\nfile.cover_single_ids_with_value(BLDG_Z).unwrap(),)"
 input_file: sample/plateau/bldg/39272565_bldg_6697_op.gml
 ---
