@@ -8,7 +8,7 @@ pub mod ops;
 use crate::{
     Error, Side,
     id::{
-        dimension::Dimension,
+        dimension::{Dimension, DimensionSet},
         zoom_level::{TZoomLevel, ZoomLevel},
     },
 };
@@ -487,9 +487,12 @@ impl FlexId {
         }
     }
 
-    /// 自身が `other` より細かい次元の集合（[`Dimension::bit`] の OR）。
-    pub(crate) fn finer_dimensions_than(&self, other: &FlexId) -> u8 {
-        Dimension::mask(|d| self.zoomlevel_on(d) > other.zoomlevel_on(d))
+    /// 自身が `other` より細かい次元の集合。
+    pub(crate) fn finer_dimensions_than(&self, other: &FlexId) -> DimensionSet {
+        Dimension::ALL
+            .into_iter()
+            .filter(|&d| self.zoomlevel_on(d) > other.zoomlevel_on(d))
+            .collect()
     }
 
     /// FlexId の PartialOrd の各位置について、自身がどちら側にあるかを、先に割る位置から順に返す。
@@ -600,12 +603,10 @@ impl FlexId {
         self.ancestor_at(zoom)
     }
 
-    /// 次元の集合 `dimensions`（[`Dimension::bit`] の OR）のうち、自身のズームが一番粗い次元を返す。
-    /// 同じズームなら F→X→Y→T の順。空なら [`None`]。
-    pub(crate) fn coarsest_dimension_in(&self, dimensions: u8) -> Option<Dimension> {
-        Dimension::ALL
-            .into_iter()
-            .filter(|&d| dimensions & d.bit() != 0)
+    /// `dimensions` のうち、自身のズームが一番粗い次元を返す。同じズームなら F→X→Y→T の順。空なら [`None`]。
+    pub(crate) fn coarsest_dimension_in(&self, dimensions: DimensionSet) -> Option<Dimension> {
+        dimensions
+            .iter()
             .min_by_key(|&d| (self.zoomlevel_on(d), d as u8))
     }
 
