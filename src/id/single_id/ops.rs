@@ -81,10 +81,9 @@ impl SingleId {
         let mut current = *self;
         while current.z() < other.z() {
             let next_z = current.z() + 1;
-            let children: Vec<_> = current
+            let children = current
                 .spatial_children_at_zoom(next_z)
-                .expect("next_z は current.z() より1段深く、other.z() 以下なので常に有効")
-                .collect();
+                .expect("next_z は current.z() より1段深く、other.z() 以下なので常に有効");
 
             for child in children {
                 if child.spatial_intersection(other).is_some() {
