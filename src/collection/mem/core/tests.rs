@@ -7,7 +7,10 @@ use triomphe::Arc;
 use super::FlexTreeCore;
 use super::node::{Branch, Node, Skip, common_descent};
 use crate::id::relative_flex_id::ShortRelativeFlexId;
-use crate::{FlexId, RangeId, Side, SingleId, id::dimension::Dimension};
+use crate::{
+    FlexId, RangeId, Side, SingleId,
+    id::dimension::{Dimension, DimensionSet},
+};
 
 /// Value と Branch の数。Skip は数えない。
 fn node_count<V>(node: &Node<V>) -> usize {
@@ -26,7 +29,9 @@ fn check_rules<V: PartialEq + Debug>(node: &Node<V>, this: FlexId) -> Result<(),
     match node {
         Node::Value(_) => Ok(()),
         Node::Branch(branch) => check_branch(branch, this),
-        Node::ShortSkipValue(path, _) => check_path(this, path.to_absolute(&this), 0),
+        Node::ShortSkipValue(path, _) => {
+            check_path(this, path.to_absolute(&this), DimensionSet::EMPTY)
+        }
         Node::ShortSkipBranch(path, branch) => {
             let region = path.to_absolute(&this);
             check_path(this, region, branch.split_dimensions)?;
@@ -64,11 +69,12 @@ fn check_branch<V: PartialEq + Debug>(branch: &Branch<V>, this: FlexId) -> Resul
         lower,
         upper,
     } = branch;
-    let expected = dimension.bit() | lower.split_dimensions() | upper.split_dimensions();
+    let expected =
+        DimensionSet::from(*dimension) | lower.split_dimensions() | upper.split_dimensions();
     if *split_dimensions != expected {
         return Err(format!("{this:?}: split_dimensions のキャッシュが古い"));
     }
-    if lower.split_dimensions() & dimension.bit() == 0 && lower == upper {
+    if !lower.split_dimensions().contains(*dimension) && lower == upper {
         return Err(format!("{this:?}: 割る必要のない Branch"));
     }
     if this.coarsest_dimension_in(*split_dimensions) != Some(*dimension) {
@@ -91,7 +97,7 @@ fn check_branch<V: PartialEq + Debug>(branch: &Branch<V>, this: FlexId) -> Resul
 }
 
 /// 領域 `this` から `region` への Skip が規則を守っているか検査する。`split` は先の Node が割っている次元。
-fn check_path(this: FlexId, region: FlexId, split: u8) -> Result<(), String> {
+fn check_path(this: FlexId, region: FlexId, split: DimensionSet) -> Result<(), String> {
     if region == this {
         return Err(format!("{this:?}: 移動しない Skip"));
     }
@@ -100,7 +106,7 @@ fn check_path(this: FlexId, region: FlexId, split: u8) -> Result<(), String> {
     while at != region {
         let finer = region.finer_dimensions_than(&at);
         let d = at.coarsest_dimension_in(finer | split).unwrap();
-        if finer & d.bit() == 0 {
+        if !finer.contains(d) {
             return Err(format!("{at:?}: Skip の途中で中身の次元を先に割るべき"));
         }
         at = at.split_toward(d, &region).unwrap();
@@ -917,14 +923,20 @@ fn values_are_dropped_exactly_once() {
 }
 
 /// `common_descent` を1段ずつ降りて求める素朴な版。行き先 `a` の外へは降りない。
-fn common_descent_stepwise(this: &FlexId, a: (&FlexId, u8), b: (&FlexId, u8)) -> FlexId {
+fn common_descent_stepwise(
+    this: &FlexId,
+    a: (&FlexId, DimensionSet),
+    b: (&FlexId, DimensionSet),
+) -> FlexId {
     let mut zoom = Dimension::ALL.map(|d| this.zoomlevel_on(d));
-    let head = |zoom: &[u8; 4], region: &FlexId, child_split: u8| {
-        let finer = Dimension::mask(|d| region.zoomlevel_on(d) > zoom[d as usize]);
-        (finer != 0).then_some(())?;
-        Dimension::ALL
+    let head = |zoom: &[u8; 4], region: &FlexId, child_split: DimensionSet| {
+        let finer: DimensionSet = Dimension::ALL
             .into_iter()
-            .filter(|&d| (finer | child_split) & d.bit() != 0)
+            .filter(|&d| region.zoomlevel_on(d) > zoom[d as usize])
+            .collect();
+        (finer != DimensionSet::EMPTY).then_some(())?;
+        (finer | child_split)
+            .iter()
             .min_by_key(|&d| (zoom[d as usize], d as u8))
     };
     while let (Some(d), Some(db)) = (head(&zoom, a.0, a.1), head(&zoom, b.0, b.1))
@@ -972,13 +984,20 @@ fn common_descent_matches_stepwise_descent() {
             let pb = random_point_in(&mut next, &around);
             let region_a = coarser(&mut next, &pa, &this);
             let region_b = coarser(&mut next, &pb, &this);
-            let (split_a, split_b) = (next(16) as u8, next(16) as u8);
+            let mut random_set = || -> DimensionSet {
+                let bits = next(16);
+                Dimension::ALL
+                    .into_iter()
+                    .filter(|&d| bits >> d as u8 & 1 != 0)
+                    .collect()
+            };
+            let (split_a, split_b) = (random_set(), random_set());
             let expected =
                 common_descent_stepwise(&this, (&region_a, split_a), (&region_b, split_b));
             let got = common_descent(&this, (&region_a, split_a), (&region_b, split_b));
             assert_eq!(
                 got, expected,
-                "this={this} a={region_a}/{split_a:04b} b={region_b}/{split_b:04b}"
+                "this={this} a={region_a}/{split_a:?} b={region_b}/{split_b:?}"
             );
         }
     }

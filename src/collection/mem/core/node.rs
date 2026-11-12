@@ -2,7 +2,7 @@ use super::view::{Target, View};
 use crate::{
     FlexId, Side,
     id::{
-        dimension::Dimension,
+        dimension::{Dimension, DimensionSet},
         relative_flex_id::{RelativeFlexId, ShortRelativeFlexId},
     },
 };
@@ -40,8 +40,8 @@ impl<V: Clone> Clone for Node<V> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Branch<V> {
     pub(super) dimension: Dimension,
-    /// 自身と子孫が割っている次元のビットマスク。自身の `dimension` とlowerとupperの集合を合わせたもの。
-    pub(super) split_dimensions: u8,
+    /// 自身と子孫が割っている次元の集合。自身の `dimension` とlowerとupperの集合を合わせたもの。
+    pub(super) split_dimensions: DimensionSet,
     /// 自身と子孫で Branch が縦に何段続くかの最大。Node を辿るスタックの大きさに使う。
     pub(super) height: u8,
     /// 子孫に含まれる、値を持つ[FlexId]の数。
@@ -53,8 +53,8 @@ pub(crate) struct Branch<V> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Skip<V> {
     pub(super) path: RelativeFlexId,
-    /// 自身と子孫が割っている次元のビットマスク。行き先が狭い次元（`path` の深くなっている次元）と `child` の集合を合わせたもの。
-    pub(super) split_dimensions: u8,
+    /// 自身と子孫が割っている次元の集合。行き先が狭い次元（`path` の深くなっている次元）と `child` の集合を合わせたもの。
+    pub(super) split_dimensions: DimensionSet,
     pub(super) child: Node<V>,
 }
 
@@ -87,10 +87,10 @@ impl<V> Node<V> {
         }
     }
 
-    /// 自身と子孫が割っている次元の集合のビットマスク。ビットマスクは[`Dimension::bit`]のOR。
-    pub(super) fn split_dimensions(&self) -> u8 {
+    /// 自身と子孫が割っている次元の集合。
+    pub(super) fn split_dimensions(&self) -> DimensionSet {
         match self {
-            Node::Value(_) => 0,
+            Node::Value(_) => DimensionSet::EMPTY,
             Node::Branch(branch) => branch.split_dimensions,
             Node::LongSkip(skip) => skip.split_dimensions,
             Node::ShortSkipValue(path, _) => path.deeper_dimensions(),
@@ -100,14 +100,14 @@ impl<V> Node<V> {
         }
     }
 
-    /// Skip なら、行き先が狭い次元の集合（[`Dimension::bit`] の OR）。Skip でなければ 0。
-    fn path_dimensions(&self) -> u8 {
+    /// Skip なら、行き先が狭い次元の集合。Skip でなければ空。
+    fn path_dimensions(&self) -> DimensionSet {
         match self {
             Node::LongSkip(skip) => skip.path.deeper_dimensions(),
             Node::ShortSkipValue(path, _) | Node::ShortSkipBranch(path, _) => {
                 path.deeper_dimensions()
             }
-            Node::Value(_) | Node::Branch(_) => 0,
+            Node::Value(_) | Node::Branch(_) => DimensionSet::EMPTY,
         }
     }
 
@@ -130,12 +130,11 @@ impl<V> Node<V> {
         }
     }
 
-    /// この Node を最初に割る次元の候補（[`Dimension::bit`] の OR）。このうち一番粗い次元で最初に割る。
-    /// Value や空なら 0。
-    pub(super) fn head_dimensions(&self) -> u8 {
+    /// この Node を最初に割る次元の候補。このうち一番粗い次元で最初に割る。Value なら空。
+    pub(super) fn head_dimensions(&self) -> DimensionSet {
         match self {
-            Node::Value(_) => 0,
-            Node::Branch(branch) => branch.dimension.bit(),
+            Node::Value(_) => DimensionSet::EMPTY,
+            Node::Branch(branch) => branch.dimension.into(),
             node => node.split_dimensions(),
         }
     }
@@ -185,7 +184,9 @@ impl<V> Branch<V> {
     fn new(dimension: Dimension, lower: Node<V>, upper: Node<V>) -> Self {
         Branch {
             dimension,
-            split_dimensions: dimension.bit() | lower.split_dimensions() | upper.split_dimensions(),
+            split_dimensions: DimensionSet::from(dimension)
+                | lower.split_dimensions()
+                | upper.split_dimensions(),
             height: 1 + lower.height().max(upper.height()),
             count: lower.count() + upper.count(),
             lower,
@@ -209,7 +210,7 @@ impl<V: PartialEq + Clone> Node<V> {
     fn forms_branch(dimension: Dimension, lower: &Self, upper: &Self) -> bool {
         // Node は領域との相対位置で意味を持つので、子孫が `dimension` で割っている Node を
         // 広い領域へ持ち上げると意味が変わる。左右が同じでも、そのときは割ったままにする。
-        let same = lower.split_dimensions() & dimension.bit() == 0
+        let same = !lower.split_dimensions().contains(dimension)
             && (lower.ptr_eq(upper) || lower == upper);
         !same
     }
@@ -297,7 +298,7 @@ impl<V: PartialEq + Clone> Node<V> {
     ///
     /// `halves` は `this` を `dimension` で割った `[下, 上]` の領域。
     fn split(self, this: &FlexId, dimension: Dimension, halves: &[FlexId; 2]) -> [Option<Self>; 2] {
-        if self.path_dimensions() & dimension.bit() != 0 {
+        if self.path_dimensions().contains(dimension) {
             let (region, _) = self.skip_target(this).unwrap();
             let side = this.side_toward(dimension, &region);
             let rest = Node::rebase(self, this, &halves[side as usize]);
@@ -378,7 +379,9 @@ impl<V: PartialEq + Clone> Node<V> {
             }
         }
         // 結果の FlexTreeCore も粗い次元から割るよう、両方の最初の次元のうち粗い方で割る
-        let a_head = a.as_ref().map_or(0, |n| n.head_dimensions());
+        let a_head = a
+            .as_ref()
+            .map_or(DimensionSet::EMPTY, |n| n.head_dimensions());
         let dimension = this
             .coarsest_dimension_in(a_head | b.head_dimensions(this))
             .expect("Value どうしは rule が答えを決める");
@@ -530,8 +533,8 @@ impl<V: PartialEq + Clone> Node<V> {
 /// `split_a`・`split_b` はそれぞれの先の Node が割っている次元の集合。
 pub(super) fn common_descent(
     this: &FlexId,
-    (region_a, split_a): (&FlexId, u8),
-    (region_b, split_b): (&FlexId, u8),
+    (region_a, split_a): (&FlexId, DimensionSet),
+    (region_b, split_b): (&FlexId, DimensionSet),
 ) -> FlexId {
     let splits = split_a | split_b;
     let mut bound = [0u8; 4];
@@ -545,7 +548,7 @@ pub(super) fn common_descent(
         let agree = deepest - (u64::BITS - (diff as u64).leading_zeros()) as u8;
         bound[d as usize] = agree;
         // ここまで降りても、どちらかがまだこの次元で深いか、先の Node がこの次元で割っているなら止まる
-        blocks[d as usize] = za > agree || zb > agree || splits & d.bit() != 0;
+        blocks[d as usize] = za > agree || zb > agree || splits.contains(d);
     }
     let stop = Dimension::ALL
         .into_iter()

@@ -1,7 +1,7 @@
 use crate::{
     Error, FlexId, SpatialIdError,
     id::{
-        dimension::Dimension,
+        dimension::{Dimension, DimensionSet},
         zoom_level::{TZoomLevel, ZoomLevel},
     },
 };
@@ -38,9 +38,12 @@ impl RelativeFlexId {
         self.0.zoomlevel_on(dimension)
     }
 
-    /// 祖先より深くなっている次元の集合（[`Dimension::bit`] の OR）。
-    pub fn deeper_dimensions(&self) -> u8 {
-        Dimension::mask(|d| self.depth_on(d) > 0)
+    /// 祖先より深くなっている次元の集合。
+    pub fn deeper_dimensions(&self) -> DimensionSet {
+        Dimension::ALL
+            .into_iter()
+            .filter(|&d| self.depth_on(d) > 0)
+            .collect()
     }
 
     /// `ancestor` を原点として、[FlexId] を復元する。
@@ -96,10 +99,14 @@ impl ShortRelativeFlexId {
         [0, 3, 6].map(|shift| (self.0 >> shift) as u8 & 0b111)
     }
 
-    /// 祖先より深くなっている次元の集合（[`Dimension::bit`] の OR）。
-    pub fn deeper_dimensions(self) -> u8 {
-        let [zf, zx, zy] = self.zooms();
-        u8::from(zf != 0) | u8::from(zx != 0) << 1 | u8::from(zy != 0) << 2
+    /// 祖先より深くなっている次元の集合。
+    pub fn deeper_dimensions(self) -> DimensionSet {
+        [Dimension::F, Dimension::X, Dimension::Y]
+            .into_iter()
+            .zip(self.zooms())
+            .filter(|&(_, zoom)| zoom != 0)
+            .map(|(d, _)| d)
+            .collect()
     }
 
     /// `ancestor` を原点として、[FlexId] を復元する。

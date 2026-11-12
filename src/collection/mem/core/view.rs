@@ -1,5 +1,8 @@
 use super::node::{Branch, Node};
-use crate::{FlexId, Side, id::dimension::Dimension};
+use crate::{
+    FlexId, Side,
+    id::dimension::{Dimension, DimensionSet},
+};
 use core::ptr;
 use triomphe::Arc;
 
@@ -47,9 +50,9 @@ impl<'a, V> Target<'a, V> {
         }
     }
 
-    pub(super) fn split_dimensions(self) -> u8 {
+    pub(super) fn split_dimensions(self) -> DimensionSet {
         match self {
-            Target::Value(_) => 0,
+            Target::Value(_) => DimensionSet::EMPTY,
             Target::Branch(branch) => branch.split_dimensions,
         }
     }
@@ -140,11 +143,11 @@ impl<'a, V> View<'a, V> {
         }
     }
 
-    /// 最初に割る次元の候補（[`Dimension::bit`] の OR）。Value や空なら 0。
-    pub(super) fn head_dimensions(&self, this: &FlexId) -> u8 {
+    /// 最初に割る次元の候補。Value や空なら空。
+    pub(super) fn head_dimensions(&self, this: &FlexId) -> DimensionSet {
         match self {
-            View::Empty | View::Value(_) => 0,
-            View::Branch(branch) => branch.dimension.bit(),
+            View::Empty | View::Value(_) => DimensionSet::EMPTY,
+            View::Branch(branch) => branch.dimension.into(),
             View::Skip { region, child } => {
                 region.finer_dimensions_than(this) | child.split_dimensions()
             }
@@ -170,7 +173,7 @@ impl<'a, V> View<'a, V> {
             View::Skip { region, child } => (region, child),
             _ => return [*self, *self],
         };
-        if region.finer_dimensions_than(this) & dimension.bit() != 0 {
+        if region.finer_dimensions_than(this).contains(dimension) {
             let side = this.side_toward(dimension, &region);
             let rest = View::at(&halves[side as usize], region, child);
             return match side {
