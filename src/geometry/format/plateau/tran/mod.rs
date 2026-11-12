@@ -31,9 +31,9 @@ use alloc::vec::Vec;
 use core::str::FromStr;
 use std::io::BufRead;
 
-use super::Feature;
 use super::geometry::{LodRings, Surfaces};
 use super::parser::Attribute;
+use super::{Element, Feature};
 use crate::{CoverSingleIds, Error, Polygon, SingleId, SpatialIdMap};
 
 /// 交通の XML ファイル（`*_tran_*.gml`）全体。
@@ -47,8 +47,8 @@ pub struct TranFile {
 impl TranFile {
     /// XML を読み込む。XML として読めない場合だけエラーを返す。
     ///
-    /// 形状は面を持つ LOD のうち最も高いものを使う。`TrafficArea` などの子地物の面は親の地物に含め、
-    /// 属性は親の地物のものだけを読む。
+    /// 形状は面を持つ LOD のうち最も高いものを使い、`TrafficArea` などの子地物の面は親の地物に含める。
+    /// 子地物の属性は、親の [`TranAttribute::element`] の子要素として残る。
     pub fn from_reader<R: BufRead>(reader: R) -> Result<Self, Error> {
         Ok(Self {
             transportations: Transportation::read_all(reader)?,
@@ -78,6 +78,8 @@ pub struct TranAttribute {
     pub class: Option<TranClass>,
     pub function: Option<TranFunction>,
     pub usage: Option<TranUsage>,
+    /// 地物の要素の木。上のフィールドに読まない属性や、`TrafficArea` などの子地物の属性も含む。
+    pub element: Element,
 }
 
 /// 道路の区分（`tran:class`）。
@@ -155,38 +157,21 @@ impl TranUsage {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum Field {
-    Class,
-    Function,
-    Usage,
+impl Attribute for TranAttribute {
+    const FEATURES: &'static [&'static str] = &["Road", "Railway", "Square", "Track"];
 }
 
-impl Attribute for TranAttribute {
-    type Field = Field;
-
-    const FEATURES: &'static [&'static [u8]] = &[b"Road", b"Railway", b"Square", b"Track"];
-    const PARTS: &'static [&'static [u8]] = &[b"TrafficArea", b"AuxiliaryTrafficArea"];
-
-    fn field(local_name: &[u8]) -> Option<Field> {
-        Some(match local_name {
-            b"class" => Field::Class,
-            b"function" => Field::Function,
-            b"usage" => Field::Usage,
-            _ => return None,
-        })
-    }
-
-    fn set(&mut self, field: Field, text: &str) {
-        match field {
-            Field::Class => self.class = Some(TranClass::from_text(text)),
-            Field::Function => self.function = Some(TranFunction::from_text(text)),
-            Field::Usage => self.usage = Some(TranUsage::from_text(text)),
+impl From<Element> for TranAttribute {
+    /// 子地物（`TrafficArea` など）の属性に引きずられないよう、地物の直下の要素だけから読む。
+    fn from(element: Element) -> Self {
+        let text = |name| element.get(&[name]).map(|e| e.text.as_str());
+        Self {
+            gml_id: element.attribute("id").unwrap_or_default().into(),
+            class: text("class").map(TranClass::from_text),
+            function: text("function").map(TranFunction::from_text),
+            usage: text("usage").map(TranUsage::from_text),
+            element,
         }
-    }
-
-    fn set_gml_id(&mut self, id: String) {
-        self.gml_id = id;
     }
 }
 

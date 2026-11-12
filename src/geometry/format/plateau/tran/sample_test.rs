@@ -7,10 +7,29 @@ use std::path::Path;
 use insta::glob;
 
 use super::super::test::{counts_snapshot, ids_snapshot};
-use super::TranFile;
+use super::{TranAttribute as Attribute, TranClass, TranFile, TranFunction, TranUsage};
 use crate::CoverSingleIds;
 
 const Z: u8 = 24;
+
+/// 型付きのフィールドだけ。スナップショットを [`Attribute`] の `Debug` と同じ形にするため、同じ名前にする。
+#[derive(Debug)]
+#[allow(dead_code)]
+struct TranAttribute<'a> {
+    gml_id: &'a str,
+    class: &'a Option<TranClass>,
+    function: &'a Option<TranFunction>,
+    usage: &'a Option<TranUsage>,
+}
+
+fn typed(a: &Attribute) -> TranAttribute<'_> {
+    TranAttribute {
+        gml_id: &a.gml_id,
+        class: &a.class,
+        function: &a.function,
+        usage: &a.usage,
+    }
+}
 
 fn tran(path: &Path) -> TranFile {
     TranFile::from_reader(BufReader::new(File::open(path).unwrap())).unwrap()
@@ -31,6 +50,7 @@ fn tran_single_with_attr() {
         insta::assert_snapshot!(counts_snapshot(
             file.transportations.iter().map(|t| &t.attribute),
             file.cover_single_ids_with_value(Z).unwrap(),
+            typed,
         ));
     });
 }

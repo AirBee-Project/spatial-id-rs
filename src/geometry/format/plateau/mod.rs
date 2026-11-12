@@ -1,6 +1,7 @@
 //! [PLATEAU](https://www.mlit.go.jp/plateau/) の CityGML（EPSG:6697）。
 
 pub mod bldg;
+mod element;
 mod geometry;
 mod parser;
 #[cfg(test)]
@@ -11,6 +12,7 @@ use alloc::vec::Vec;
 use std::io::BufRead;
 
 use crate::{Error, SingleId, SpatialId, SpatialIdMap};
+pub use element::Element;
 use geometry::LodRings;
 use parser::{Attribute, Parser};
 

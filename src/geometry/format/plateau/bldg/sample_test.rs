@@ -9,10 +9,37 @@ use hashbrown::HashSet;
 use insta::glob;
 
 use super::super::test::{counts_snapshot, ids_snapshot};
-use super::BldgFile;
+use super::{BldgAttribute as Attribute, BldgFile, BldgUsage};
 use crate::{CoverRangeIds, CoverSingleIds, SingleId};
 
 const Z: u8 = 23;
+
+/// 型付きのフィールドだけ。スナップショットを [`Attribute`] の `Debug` と同じ形にするため、同じ名前にする。
+#[derive(Debug)]
+#[allow(dead_code)]
+struct BldgAttribute<'a> {
+    gml_id: &'a str,
+    uro_building_id: &'a str,
+    uro_city_code: &'a str,
+    class_code: &'a str,
+    measured_height: Option<f64>,
+    lod1_height_type: Option<i32>,
+    uro_prefecture_code: Option<&'a str>,
+    usage: Option<BldgUsage>,
+}
+
+fn typed(a: &Attribute) -> BldgAttribute<'_> {
+    BldgAttribute {
+        gml_id: &a.gml_id,
+        uro_building_id: &a.uro_building_id,
+        uro_city_code: &a.uro_city_code,
+        class_code: &a.class_code,
+        measured_height: a.measured_height,
+        lod1_height_type: a.lod1_height_type,
+        uro_prefecture_code: a.uro_prefecture_code.as_deref(),
+        usage: a.usage,
+    }
+}
 
 fn bldg(path: &Path) -> BldgFile {
     BldgFile::from_reader(BufReader::new(File::open(path).unwrap())).unwrap()
@@ -55,6 +82,7 @@ fn bldg_single_with_attr() {
         insta::assert_snapshot!(counts_snapshot(
             file.buildings.iter().map(|b| &b.attribute),
             file.cover_single_ids_with_value(Z).unwrap(),
+            typed,
         ));
     });
 }
@@ -66,6 +94,7 @@ fn bldg_range_with_attr() {
         insta::assert_snapshot!(counts_snapshot(
             file.buildings.iter().map(|b| &b.attribute),
             file.cover_range_ids_with_value(Z).unwrap(),
+            typed,
         ));
     });
 }

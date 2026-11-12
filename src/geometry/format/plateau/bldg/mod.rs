@@ -30,9 +30,9 @@ use alloc::vec::Vec;
 use core::str::FromStr;
 use std::io::BufRead;
 
-use super::Feature;
 use super::geometry::{LodRings, Surfaces};
 use super::parser::Attribute;
+use super::{Element, Feature};
 use crate::{
     CoverRangeIds, CoverSingleIds, Error, Polygon, RangeId, SingleId, Solid, SpatialIdMap,
 };
@@ -106,6 +106,8 @@ pub struct BldgAttribute {
     pub lod1_height_type: Option<i32>,
     pub uro_prefecture_code: Option<String>,
     pub usage: Option<BldgUsage>,
+    /// 建築物の要素の木。上のフィールドに読まない属性や、子地物の属性も含む。
+    pub element: Element,
 }
 
 /// PLATEAU の建築物の用途（`bldg:usage` のコード）。
@@ -174,50 +176,41 @@ impl BldgUsage {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum Field {
-    BuildingId,
-    City,
-    Class,
-    MeasuredHeight,
-    Lod1HeightType,
-    Prefecture,
-    Usage,
+impl Attribute for BldgAttribute {
+    const FEATURES: &'static [&'static str] = &["Building"];
 }
 
-impl Attribute for BldgAttribute {
-    type Field = Field;
-
-    const FEATURES: &'static [&'static [u8]] = &[b"Building"];
-    const PARTS: &'static [&'static [u8]] = &[b"BuildingPart"];
-
-    fn field(local_name: &[u8]) -> Option<Field> {
-        Some(match local_name {
-            b"buildingID" => Field::BuildingId,
-            b"city" => Field::City,
-            b"class" => Field::Class,
-            b"measuredHeight" => Field::MeasuredHeight,
-            b"lod1HeightType" => Field::Lod1HeightType,
-            b"prefecture" => Field::Prefecture,
-            b"usage" => Field::Usage,
-            _ => return None,
-        })
-    }
-
-    fn set(&mut self, field: Field, text: &str) {
-        match field {
-            Field::BuildingId => self.uro_building_id = text.into(),
-            Field::City => self.uro_city_code = text.into(),
-            Field::Class => self.class_code = text.into(),
-            Field::MeasuredHeight => self.measured_height = text.parse().ok(),
-            Field::Lod1HeightType => self.lod1_height_type = text.parse().ok(),
-            Field::Prefecture => self.uro_prefecture_code = Some(text.into()),
-            Field::Usage => self.usage = text.parse().ok().map(BldgUsage::from_code),
+impl From<Element> for BldgAttribute {
+    /// 子地物（`BuildingPart`）の属性に引きずられないよう、決まった位置の要素だけから読む。
+    fn from(element: Element) -> Self {
+        let text = |path: &[&str]| element.get(path).map(|e| e.text.as_str());
+        let id = |name| text(&["buildingIDAttribute", "BuildingIDAttribute", name]);
+        Self {
+            gml_id: element.attribute("id").unwrap_or_default().into(),
+            uro_building_id: id("buildingID").unwrap_or_default().into(),
+            uro_city_code: id("city").unwrap_or_default().into(),
+            class_code: text(&["class"]).unwrap_or_default().into(),
+            measured_height: text(&["measuredHeight"]).and_then(|t| t.parse().ok()),
+            // i-UR のバージョンで、品質属性を囲む要素の名前が違う。
+            lod1_height_type: text(&[
+                "buildingDataQualityAttribute",
+                "BuildingDataQualityAttribute",
+                "lod1HeightType",
+            ])
+            .or_else(|| {
+                text(&[
+                    "bldgDataQualityAttribute",
+                    "DataQualityAttribute",
+                    "lod1HeightType",
+                ])
+            })
+            .and_then(|t| t.parse().ok()),
+            uro_prefecture_code: id("prefecture").map(Into::into),
+            usage: text(&["usage"])
+                .and_then(|t| t.parse().ok())
+                .map(BldgUsage::from_code),
+            element,
         }
-    }
-
-    fn set_gml_id(&mut self, id: String) {
-        self.gml_id = id;
     }
 }
 

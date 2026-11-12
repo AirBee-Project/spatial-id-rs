@@ -184,3 +184,33 @@ fn bldg_file_covers_every_building() {
         sorted_ids(expected.into_iter().map(|(id, _)| id))
     );
 }
+
+#[test]
+fn bldg_keeps_all_attributes_without_geometry() {
+    let extra = r#"<gml:name>A&amp;B &#x3042;</gml:name>
+        <bldg:storeysAboveGround>3</bldg:storeysAboveGround>
+        <uro:largeCustomerFacilityAttribute><uro:LargeCustomerFacilityAttribute>
+            <uro:class codeSpace="lcf">1</uro:class>
+        </uro:LargeCustomerFacilityAttribute></uro:largeCustomerFacilityAttribute>"#;
+    let xml = building("b1", 35.0, &box_faces(35.0, 10.0), "")
+        .replace("<bldg:class", &format!("{extra}<bldg:class"));
+    let file: BldgFile = city_model(&xml).parse().unwrap();
+    let attribute = &file.buildings[0].attribute;
+    let element = &attribute.element;
+
+    assert_eq!(element.local_name(), "Building");
+    assert_eq!(element.attribute("id"), Some("b1"));
+    assert_eq!(element.get(&["name"]).unwrap().text, "A&B あ");
+    assert_eq!(element.get(&["storeysAboveGround"]).unwrap().text, "3");
+    let class = element.get(&["class"]).unwrap();
+    assert_eq!(
+        (class.text.as_str(), class.attribute("codeSpace")),
+        ("3001", Some("x"))
+    );
+    // 同じローカル名の別の要素に、型付きのフィールドが上書きされない。
+    assert_eq!(attribute.class_code, "3001");
+    assert!(element.get(&["largeCustomerFacilityAttribute"]).is_some());
+    // 形状は木に入れない。
+    assert!(element.get(&["lod0FootPrint"]).is_none());
+    assert!(element.get(&["lod1Solid"]).is_none());
+}

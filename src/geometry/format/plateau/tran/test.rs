@@ -73,3 +73,27 @@ fn tran_excludes_holes() {
     let map = file.cover_map_with(24, |a| a.gml_id.clone()).unwrap();
     assert!(map.iter().all(|(_, v)| v == "r1"));
 }
+
+#[test]
+fn tran_keeps_traffic_area_attributes() {
+    let traffic_area = r#"<tran:trafficArea><tran:TrafficArea gml:id="ta">
+        <tran:function codeSpace="ta">2000</tran:function>
+    </tran:TrafficArea></tran:trafficArea>"#;
+    let file: TranFile = city_model(&road(
+        "r1",
+        "<tran:function>1</tran:function>",
+        traffic_area,
+    ))
+    .parse()
+    .unwrap();
+
+    let attribute = &file.transportations[0].attribute;
+    assert_eq!(attribute.function, Some(TranFunction::Other("1".into())));
+    let area = attribute
+        .element
+        .get(&["trafficArea", "TrafficArea"])
+        .unwrap();
+    assert_eq!(area.attribute("id"), Some("ta"));
+    assert_eq!(area.get(&["function"]).unwrap().text, "2000");
+    assert!(attribute.element.get(&["lod1MultiSurface"]).is_none());
+}
