@@ -418,7 +418,7 @@ impl SingleId {
     pub fn spatial_children_at_zoom(
         &self,
         target_z: u8,
-    ) -> Result<impl Iterator<Item = SingleId>, Error> {
+    ) -> Result<impl Iterator<Item = SingleId> + use<>, Error> {
         let target_zoom = ZoomLevel::new(target_z)?;
 
         if target_z < self.z() {
@@ -441,6 +441,9 @@ impl SingleId {
         let f_range = f_start..=f_start + scale_f - 1;
         let x_range = x_start..=x_start + scale_xy - 1;
         let y_range = y_start..=y_start + scale_xy - 1;
+        let i = self.i;
+        #[cfg(feature = "temporal_id")]
+        let t = self.t;
 
         Ok(f_range.flat_map(move |f| {
             let x_range = x_range.clone();
@@ -453,9 +456,9 @@ impl SingleId {
                     x,
                     y,
 
-                    i: self.i,
+                    i,
                     #[cfg(feature = "temporal_id")]
-                    t: self.t,
+                    t,
                 })
             })
         }))
@@ -465,7 +468,7 @@ impl SingleId {
     ///
     /// # バリデーション
     /// - 現在のズームレベルが最大ズームレベル [`ZoomLevel::MAX`] の場合は、[`SpatialIdError::ZOutOfRange`] を返す。
-    pub fn spatial_children(&self) -> Result<impl Iterator<Item = SingleId>, Error> {
+    pub fn spatial_children(&self) -> Result<impl Iterator<Item = SingleId> + use<>, Error> {
         self.spatial_children_at_zoom(self.z() + 1)
     }
 
