@@ -531,34 +531,63 @@ impl<V: PartialEq + Clone> Node<V> {
 /// Skip の長さぶん1段ずつ辿らない。
 ///
 /// `split_a`・`split_b` はそれぞれの先の Node が割っている次元の集合。
+#[inline]
 pub(super) fn common_descent(
     this: &FlexId,
     (region_a, split_a): (&FlexId, DimensionSet),
     (region_b, split_b): (&FlexId, DimensionSet),
 ) -> FlexId {
     let splits = split_a | split_b;
-    let mut bound = [0u8; 4];
-    let mut blocks = [false; 4];
-    for d in Dimension::ALL {
-        let (za, zb) = (region_a.zoomlevel_on(d), region_b.zoomlevel_on(d));
+
+    #[inline(always)]
+    fn agree_u32(za: u8, ia: u32, zb: u8, ib: u32) -> u8 {
         let deepest = za.min(zb);
-        let diff =
-            (region_a.index_on(d) >> (za - deepest)) ^ (region_b.index_on(d) >> (zb - deepest));
-        // 一番上の食い違うビットより上だけが一致している
-        let agree = deepest - (u64::BITS - (diff as u64).leading_zeros()) as u8;
-        bound[d as usize] = agree;
-        // ここまで降りても、どちらかがまだこの次元で深いか、先の Node がこの次元で割っているなら止まる
-        blocks[d as usize] = za > agree || zb > agree || splits.contains(d);
+        let diff = (ia >> (za - deepest)) ^ (ib >> (zb - deepest));
+        deepest - (u32::BITS - diff.leading_zeros()) as u8
     }
-    let stop = Dimension::ALL
-        .into_iter()
-        .filter(|&d| blocks[d as usize])
-        .min_by_key(|&d| (bound[d as usize], d));
+
+    let (fa, fb) = (region_a.f_zoomlevel(), region_b.f_zoomlevel());
+    let f_agree = {
+        let deepest = fa.min(fb);
+        let diff = ((region_a.f_index() >> (fa - deepest)) ^ (region_b.f_index() >> (fb - deepest)))
+            as u32;
+        deepest - (u32::BITS - diff.leading_zeros()) as u8
+    };
+    let (xa, xb) = (region_a.x_zoomlevel(), region_b.x_zoomlevel());
+    let x_agree = agree_u32(xa, region_a.x_index(), xb, region_b.x_index());
+    let (ya, yb) = (region_a.y_zoomlevel(), region_b.y_zoomlevel());
+    let y_agree = agree_u32(ya, region_a.y_index(), yb, region_b.y_index());
+    let (ta, tb) = (region_a.t_zoomlevel(), region_b.t_zoomlevel());
+    let t_agree = {
+        let deepest = ta.min(tb);
+        let diff = (region_a.t_index() >> (ta - deepest)) ^ (region_b.t_index() >> (tb - deepest));
+        deepest - (u64::BITS - diff.leading_zeros()) as u8
+    };
+
+    let bound = [f_agree, x_agree, y_agree, t_agree];
+    let blocks = [
+        fa > f_agree || fb > f_agree || splits.contains(Dimension::F),
+        xa > x_agree || xb > x_agree || splits.contains(Dimension::X),
+        ya > y_agree || yb > y_agree || splits.contains(Dimension::Y),
+        ta > t_agree || tb > t_agree || splits.contains(Dimension::T),
+    ];
+
+    let mut stop_bound = u8::MAX;
+    let mut stop_dim = Dimension::F;
+    for d in Dimension::ALL {
+        let i = d as usize;
+        if blocks[i] && bound[i] < stop_bound {
+            stop_bound = bound[i];
+            stop_dim = d;
+        }
+    }
+
     let zoom = Dimension::ALL.map(|d| {
-        let reach = match stop {
-            None => bound[d as usize],
+        let reach = if stop_bound == u8::MAX {
+            bound[d as usize]
+        } else {
             // 止まる次元より前の次元は、同じ深さの番を1段ぶん先に済ませている
-            Some(s) => bound[d as usize].min(bound[s as usize] + u8::from(d < s)),
+            bound[d as usize].min(stop_bound + u8::from(d < stop_dim))
         };
         this.zoomlevel_on(d).max(reach)
     });

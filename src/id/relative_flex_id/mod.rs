@@ -1,7 +1,7 @@
 use crate::{
     Error, FlexId, SpatialIdError,
     id::{
-        dimension::{Dimension, DimensionSet},
+        dimension::DimensionSet,
         zoom_level::{TZoomLevel, ZoomLevel},
     },
 };
@@ -13,20 +13,23 @@ pub(crate) struct RelativeFlexId(FlexId);
 impl FlexId {
     /// `ancestor` を原点とした[RelativeFlexId]を返す。
     /// `ancestor`が完全に自身を包含していなければ [`SpatialIdError::NotAncestor`] を返す。
+    #[inline]
     pub(crate) fn relative_to(&self, ancestor: &FlexId) -> Result<RelativeFlexId, Error> {
         if !ancestor.contains(self) {
             return Err(SpatialIdError::NotAncestor.into());
         }
         // 各次元で、祖先からの深さと、その深さぶんの下位ビットを求める
-        let [(fz, f), (xz, x), (yz, y), (tz, t)] =
-            zip_dimensions(self, ancestor, |(z, i), (az, ai)| {
-                let dz = z - az;
-                (dz, i - (ai << dz))
-            });
+        let fz = self.f_zoomlevel() - ancestor.f_zoomlevel();
+        let xz = self.x_zoomlevel() - ancestor.x_zoomlevel();
+        let yz = self.y_zoomlevel() - ancestor.y_zoomlevel();
+        let f = self.f_index() & ((1_i32 << fz) - 1);
+        let x = self.x_index() & ((1_u32 << xz) - 1);
+        let y = self.y_index() & ((1_u32 << yz) - 1);
+        let tz = self.t_zoomlevel() - ancestor.t_zoomlevel();
+        let t = self.t_index() & ((1_u64 << tz) - 1);
         // SAFETY: 祖先に含まれるので、深さは自身のズーム以下、下位ビットは `0..2^深さ` に収まる
         let relative = unsafe {
-            FlexId::new_unchecked(fz, f as i32, xz, x as u32, yz, y as u32)
-                .time_with_segment_unchecked(tz, t as u64)
+            FlexId::new_unchecked(fz, f, xz, x, yz, y).time_with_segment_unchecked(tz, t)
         };
         Ok(RelativeFlexId(relative))
     }
@@ -34,38 +37,52 @@ impl FlexId {
 
 impl RelativeFlexId {
     /// 祖先から `dimension`において何段深いかを返す。
-    pub fn depth_on(self, dimension: Dimension) -> u8 {
+    #[cfg(test)]
+    #[inline]
+    pub fn depth_on(self, dimension: crate::id::dimension::Dimension) -> u8 {
         self.0.zoomlevel_on(dimension)
     }
 
     /// 祖先より深くなっている次元の集合。
+    #[inline]
     pub fn deeper_dimensions(&self) -> DimensionSet {
-        Dimension::ALL
-            .into_iter()
-            .filter(|&d| self.depth_on(d) > 0)
-            .collect()
+        DimensionSet::from_bits(
+            u8::from(self.0.f_zoomlevel() > 0)
+                | (u8::from(self.0.x_zoomlevel() > 0) << 1)
+                | (u8::from(self.0.y_zoomlevel() > 0) << 2)
+                | (u8::from(self.0.t_zoomlevel() > 0) << 3),
+        )
     }
 
     /// `ancestor` を原点として、[FlexId] を復元する。
     /// どれかの次元で最大ズームを超えるなら [`SpatialIdError::ZOutOfRange`] を返す。
+    #[inline]
     pub fn to_absolute(self, ancestor: &FlexId) -> Result<FlexId, Error> {
-        for (((az, _), (rz, _)), max) in dimensions(ancestor)
-            .into_iter()
-            .zip(dimensions(&self.0))
-            .zip(MAX_ZOOM)
-        {
-            if az + rz > max {
-                return Err(SpatialIdError::ZOutOfRange { z: az + rz }.into());
-            }
+        let r = &self.0;
+        let fz = ancestor.f_zoomlevel() + r.f_zoomlevel();
+        if fz > ZoomLevel::MAX.get() {
+            return Err(SpatialIdError::ZOutOfRange { z: fz }.into());
         }
-        let [(fz, f), (xz, x), (yz, y), (tz, t)] =
-            zip_dimensions(ancestor, &self.0, |(az, ai), (rz, ri)| {
-                (az + rz, (ai << rz) + ri)
-            });
+        let xz = ancestor.x_zoomlevel() + r.x_zoomlevel();
+        if xz > ZoomLevel::MAX.get() {
+            return Err(SpatialIdError::ZOutOfRange { z: xz }.into());
+        }
+        let yz = ancestor.y_zoomlevel() + r.y_zoomlevel();
+        if yz > ZoomLevel::MAX.get() {
+            return Err(SpatialIdError::ZOutOfRange { z: yz }.into());
+        }
+        let tz = ancestor.t_zoomlevel() + r.t_zoomlevel();
+        if tz > TZoomLevel::MAX.get() {
+            return Err(SpatialIdError::ZOutOfRange { z: tz }.into());
+        }
+
+        let f = (ancestor.f_index() << r.f_zoomlevel()) | r.f_index();
+        let x = (ancestor.x_index() << r.x_zoomlevel()) | r.x_index();
+        let y = (ancestor.y_index() << r.y_zoomlevel()) | r.y_index();
+        let t = (ancestor.t_index() << r.t_zoomlevel()) | r.t_index();
         // SAFETY: ズームは上限以下。インデックスは祖先の区間を `2^深さ` 等分したうちの1つなので、そのズームの範囲に収まる
         let absolute = unsafe {
-            FlexId::new_unchecked(fz, f as i32, xz, x as u32, yz, y as u32)
-                .time_with_segment_unchecked(tz, t as u64)
+            FlexId::new_unchecked(fz, f, xz, x, yz, y).time_with_segment_unchecked(tz, t)
         };
         Ok(absolute)
     }
@@ -82,6 +99,7 @@ impl ShortRelativeFlexId {
     pub const MAX_STEPS: u8 = 7;
 
     /// `relative` が T 方向に深いか、深さの合計が [`Self::MAX_STEPS`] 段を超えるなら [`None`]。
+    #[inline]
     pub fn new(relative: RelativeFlexId) -> Option<ShortRelativeFlexId> {
         let id = relative.0;
         let (zf, zx, zy) = (id.f_zoomlevel(), id.x_zoomlevel(), id.y_zoomlevel());
@@ -95,30 +113,37 @@ impl ShortRelativeFlexId {
         ))
     }
 
+    #[inline]
     fn zooms(self) -> [u8; 3] {
-        [0, 3, 6].map(|shift| (self.0 >> shift) as u8 & 0b111)
+        [
+            (self.0 & 0b111) as u8,
+            ((self.0 >> 3) & 0b111) as u8,
+            ((self.0 >> 6) & 0b111) as u8,
+        ]
     }
 
     /// 祖先より深くなっている次元の集合。
+    #[inline]
     pub fn deeper_dimensions(self) -> DimensionSet {
-        [Dimension::F, Dimension::X, Dimension::Y]
-            .into_iter()
-            .zip(self.zooms())
-            .filter(|&(_, zoom)| zoom != 0)
-            .map(|(d, _)| d)
-            .collect()
+        let raw = self.0;
+        DimensionSet::from_bits(
+            u8::from((raw & 0b111) != 0)
+                | (u8::from(((raw >> 3) & 0b111) != 0) << 1)
+                | (u8::from(((raw >> 6) & 0b111) != 0) << 2),
+        )
     }
 
     /// `ancestor` を原点として、[FlexId] を復元する。
     ///
     /// `ancestor` から数段深いだけなので、最大ズームを超えないことは呼び出し側（FlexTreeCore の Node）が保証する。
+    #[inline]
     pub fn to_absolute(self, ancestor: &FlexId) -> FlexId {
         let [zf, zx, zy] = self.zooms();
         let bits = u32::from(self.0 >> 9);
         let low = |shift: u8, zoom: u8| (bits >> shift) & ((1 << zoom) - 1);
-        let f = (ancestor.f_index() << zf) + low(0, zf) as i32;
-        let x = (ancestor.x_index() << zx) + low(zf, zx);
-        let y = (ancestor.y_index() << zy) + low(zf + zx, zy);
+        let f = (ancestor.f_index() << zf) | low(0, zf) as i32;
+        let x = (ancestor.x_index() << zx) | low(zf, zx);
+        let y = (ancestor.y_index() << zy) | low(zf + zx, zy);
         // SAFETY: Node の行き先は最大ズーム以下。インデックスは祖先の区間を `2^深さ` 等分したうちの1つなので、そのズームの範囲に収まる
         unsafe {
             FlexId::new_unchecked(
@@ -134,39 +159,10 @@ impl ShortRelativeFlexId {
     }
 }
 
-/// F / X / Y / T の各次元の最大ズーム。
-const MAX_ZOOM: [u8; 4] = [
-    ZoomLevel::MAX.get(),
-    ZoomLevel::MAX.get(),
-    ZoomLevel::MAX.get(),
-    TZoomLevel::MAX.get(),
-];
-
-/// F / X / Y / T の各次元の `(ズーム, インデックス)`。
-type Dimensions = [(u8, i64); 4];
-
-fn dimensions(id: &FlexId) -> Dimensions {
-    [
-        (id.f_zoomlevel(), id.f_index() as i64),
-        (id.x_zoomlevel(), id.x_index() as i64),
-        (id.y_zoomlevel(), id.y_index() as i64),
-        (id.t_zoomlevel(), id.t_index() as i64),
-    ]
-}
-
-/// 2つの ID の各次元を `f` で組み合わせる。
-fn zip_dimensions(
-    a: &FlexId,
-    b: &FlexId,
-    f: impl Fn((u8, i64), (u8, i64)) -> (u8, i64),
-) -> Dimensions {
-    let (a, b) = (dimensions(a), dimensions(b));
-    core::array::from_fn(|i| f(a[i], b[i]))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::id::dimension::Dimension;
     /// 自身を包含しない ID を祖先に渡すとエラーになる。
     #[test]
     fn relative_to_non_ancestor_is_error() {
