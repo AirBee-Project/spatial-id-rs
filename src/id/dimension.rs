@@ -18,6 +18,16 @@ impl Dimension {
 
 /// [`Dimension`] の集合。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(
+    feature = "disk",
+    derive(
+        zerocopy::FromBytes,
+        zerocopy::IntoBytes,
+        zerocopy::Immutable,
+        zerocopy::KnownLayout,
+        zerocopy::Unaligned
+    )
+)]
 #[repr(transparent)]
 pub(crate) struct DimensionSet(u8);
 
