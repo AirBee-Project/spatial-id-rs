@@ -29,7 +29,7 @@ impl Interval {
     /// （`2^35` 秒 = 34,359,738,368 秒、約1089年）。[`new`](Self::new) はこれを超える値を拒む。
     pub const MAX_SECONDS: u64 = 1u64 << Self::MAX_POW;
 
-    /// 最も粗い時間単位を表す二進層の指数。時間軸の最大ズームレベル。
+    /// 全時間の秒数（`2^MAX_POW`）を決める2の冪乗の指数であり、時間軸の最大ズームレベルでもある。
     pub const MAX_POW: u8 = 35;
 
     /// 全時間（`2^35` 秒）。時間を指定していない ID はこの値を持つ。
@@ -107,10 +107,10 @@ impl Interval {
 
     /// この [`Interval`] の秒数が2の冪乗であるかを判定する。
     ///
-    /// 時間付き ID を生成する際、時間間隔が2の冪秒であれば、木構造の中で必ず1つの時間Segment
+    /// 時間付き ID を生成する際、時間間隔が2の冪乗の秒数であれば、木構造の中で必ず1つの `TimeSegment`
     /// （[`FlexId`](crate::FlexId)）に収まるため、パフォーマンスが最適化される。
-    /// 非2冪の秒数（例: 30分 = 1800秒）を指定した場合、このメソッドは `false` を返し、
-    /// 内部で最大十数個のSegmentに分解されるため処理コストが比例して増大する。
+    /// 2の冪乗でない秒数（例: 30分 = 1800秒）を指定した場合、このメソッドは `false` を返し、
+    /// 内部で最大十数個の `TimeSegment` に分解されるため処理コストが比例して増大する。
     pub const fn is_power_of_two(self) -> bool {
         #[cfg(feature = "temporal_id")]
         {
@@ -123,7 +123,7 @@ impl Interval {
         }
     }
 
-    /// この単位で、Unix 時刻（秒）が属するSegmentのインデックス `{t}` を返す。
+    /// この単位で、Unix 時刻（秒）が属する時間区間のインデックス `{t}` を返す。
     ///
     /// 仕様書 2.5.3 (3) の `t = floor(u / i)`。
     ///
@@ -141,7 +141,7 @@ impl Interval {
 
     /// `{i}` と `{t}` の範囲（両端含む）が占める絶対秒区間 `[start, end)` を、検証して返す。
     ///
-    /// 単一Segmentの型（[`SingleId`](crate::SingleId) / [`FlexId`](crate::FlexId)）は
+    /// 単一の時間区間を持つ型（[`SingleId`](crate::SingleId) / [`FlexId`](crate::FlexId)）は
     /// `t_min == t_max` で呼ぶ。仕様は `{i}` に任意の秒数を認めるが、区間の終端が
     /// [`Interval::MAX_SECONDS`] を超えてはならない。
     pub(crate) fn validated_span(&self, t_min: u64, t_max: u64) -> Result<TimeSpan, Error> {
@@ -251,8 +251,8 @@ mod tests {
 /// 3型（[`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) / [`FlexId`](crate::FlexId)）
 /// で、時間 API の名前・引数・戻り値の形が揃っていることを固定する。
 ///
-/// 型ごとに「表せる時間の形」は違う（1Segment / 範囲 / 2分岐Segment1個）が、**入口の名前と失敗の
-/// 仕方は同じ**であるべき。片方だけに生えた補助コンストラクタや、[`Option`] と [`Result`] の
+/// 型ごとに「表せる時間の形」は違う（単一の `{i}/{t}` / 範囲 / `TimeSegment` 1個）が、**入口の名前と失敗の
+/// 仕方は同じ**であるべき。特定の型だけに追加された補助コンストラクタや、[`Option`] と [`Result`] の
 /// 混在を防ぐための回帰テストである。
 #[cfg(all(test, feature = "temporal_id"))]
 mod api_symmetry {
@@ -331,7 +331,7 @@ mod api_symmetry {
         assert_eq!(range.time_relabel(1800).unwrap().t(), [0, 3]);
         assert!(range.time_relabel(Interval::DAY).is_err());
 
-        // `FlexId` には `time_relabel` を持たせない。Segmentが秒区間を一意に決めるので、
+        // `FlexId` には `time_relabel` を持たせない。`TimeSegment` が秒区間を一意に決めるので、
         // 「同じ区間を別の単位で」は定義上ありえず、成功しても必ず元と同じ値になる
         // （常に no-op か Err にしかならないAPIは、対称性のためだけに置く価値がない）。
     }
