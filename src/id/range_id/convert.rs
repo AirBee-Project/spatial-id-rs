@@ -3,12 +3,12 @@ use core::iter::Chain;
 use crate::time::span::TimeSegments;
 use crate::{FlexId, RangeId, SingleId, id::zoom_level::ZoomLevel};
 
-/// XYにおけるセグメントの最適配置関数
+/// XY軸の範囲を最小限の2の冪ブロックへ最適分割する関数
 pub fn split_xy(z: u8, range: [u32; 2]) -> impl Iterator<Item = (u8, u32)> {
     SegmentIter::xy(z, range).map(xy_segment)
 }
 
-/// Fにおけるセグメントの最適配置関数
+/// F軸の範囲を最小限の2の冪ブロックへ最適分割する関数
 pub fn split_f(z: u8, range: [i32; 2]) -> impl Iterator<Item = (u8, i32)> {
     SegmentIter::f(z, range).map(f_segment)
 }
@@ -17,7 +17,7 @@ fn xy_segment((z, dim): (u8, i64)) -> (u8, u32) {
     (z, dim as u32)
 }
 
-/// [`SegmentIter::f`] の Segment を、F の元のインデックスに戻す。
+/// [`SegmentIter::f`] が出力した F のインデックスを、元の F のインデックスに戻す。
 fn f_segment((z, dim): (u8, i64)) -> (u8, i32) {
     (z, (dim - (1i64 << z)) as i32)
 }
@@ -36,7 +36,7 @@ impl From<&SingleId> for RangeId {
             x: [id.x(), id.x()],
             y: [id.y(), id.y()],
 
-            // 単一Segmentは範囲の退化した形なので常に変換できる。
+            // 単一の標準空間IDは範囲の退化した形なので常に変換できる。
             i: id.i(),
             #[cfg(feature = "temporal_id")]
             t: [id.t(), id.t()],
@@ -76,8 +76,8 @@ impl RangeId {
 
 /// [`RangeId`] を FlexTree のノードアドレス（[`FlexId`]）へ展開するイテレータ。
 ///
-/// F・X・Y・時間の各軸の Segment の直積を、F を外側、時間を最も内側にして返す。
-/// 各軸の Segment の列は小さな状態から何度でも同じ順に作れるので、外側の軸が1つ進むたびに内側の軸を
+/// F・X・Y・時間の各軸の 2 分岐区間の直積を、F を外側、時間を最も内側にして返す。
+/// 各軸の列は小さな状態から何度でも同じ順に作れるので、外側の軸が1つ進むたびに内側の軸を
 /// 最初から作り直す。中間の列をためないので、ヒープ確保をしない。
 pub struct RangeIdFlexIds {
     f: SegmentIter,
@@ -87,11 +87,11 @@ pub struct RangeIdFlexIds {
     x: Chain<SegmentIter, SegmentIter>,
     y: SegmentIter,
     t: TimeSegments,
-    /// 今の F の Segment。
+    /// 今の F の 2 分岐区間。
     f_segment: Option<(u8, i32)>,
-    /// 今の F・X の Segment。
+    /// 今の F・X の組。
     fx_segment: Option<(u8, i32, u8, u32)>,
-    /// 今の F・X・Y の Segment からなる空間部分。
+    /// 今の F・X・Y からなる空間部分。
     spatial: Option<FlexId>,
 }
 
@@ -113,7 +113,7 @@ impl Iterator for RangeIdFlexIds {
             }
             if let Some((f_z, f_i, x_z, x_i)) = self.fx_segment {
                 if let Some((y_z, y_i)) = self.y.next().map(xy_segment) {
-                    // SAFETY: 各軸の Segment は、検証済みの RangeId の範囲を分割したもの
+                    // SAFETY: 各軸の 2 分岐区間は、検証済みの RangeId の範囲を分割したもの
                     self.spatial =
                         Some(unsafe { FlexId::new_unchecked(f_z, f_i, x_z, x_i, y_z, y_i) });
                     self.t = self.t_start.clone();
@@ -147,8 +147,8 @@ impl RangeId {
                 .chain(SegmentIter::xy(z, [0, self.x[1]]))
         };
         let y_start = SegmentIter::xy(z, self.y);
-        // 時間は `Interval` が2の冪とは限らないので、2分岐Segmentへ分解してから掛け合わせる
-        // （時間を使っていなければ全時間の1Segmentだけになる）
+        // 時間は `Interval` が2の冪とは限らないので、`TimeSegment` へ分解してから掛け合わせる
+        // （時間を使っていなければ全時間の1個だけになる）
         let t_start = self.time_segments();
         RangeIdFlexIds {
             f: SegmentIter::f(z, self.f),
@@ -165,7 +165,7 @@ impl RangeId {
     }
 }
 
-/// 区間木的にセグメントを最適配置するイテレータ。
+/// 区間木的に、範囲を最小個数の2の冪乗区間へ分割して列挙するイテレータ。
 ///
 /// `l`/`r`は`i32`ではなく`i64`で保持する。[`split_f`]がFのインデックスへ`2^z`のオフセットを
 /// 加えるため、`z = [`ZoomLevel::MAX`](crate::ZoomLevel::MAX)`（30）かつFが最大値のときに`2^31 - 1`（[`i32::MAX`]）へ達し、
@@ -194,7 +194,7 @@ impl SegmentIter {
     }
 
     /// F のズーム `z` の範囲 `range` を分ける。負のインデックスを扱えるよう `2^z` ずらして持つので、
-    /// 返す Segment は [`f_segment`] で元のインデックスに戻す。
+    /// 返すインデックスは [`f_segment`] で元の値に戻す。
     fn f(z: u8, [l, r]: [i32; 2]) -> SegmentIter {
         let diff = 1i64 << z;
         SegmentIter {
@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(got, [(z, f_min)]);
     }
 
-    /// [`RangeIdFlexIds`] は、各軸の Segment の列の直積（F が外側、時間が最も内側）と同じ列を同じ順に返す。
+    /// [`RangeIdFlexIds`] は、各軸の2分岐区間の列の直積（F が外側、時間が最も内側）と同じ列を同じ順に返す。
     #[test]
     fn range_id_segments_match_product_of_axis_segments() {
         let mut state = 0x2545_f491_4f6c_dd1du64;

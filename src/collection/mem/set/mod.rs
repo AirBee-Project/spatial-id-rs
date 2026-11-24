@@ -170,11 +170,11 @@ impl SpatialIdSet {
 
     /// 時間方向に結合した [`RangeId`] として読み出す。**ズームレベルは変えない**。
     ///
-    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1Segmentになる。
+    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1区間になる。
     /// [`AllowedIntervals`] を渡すと、その候補のうち**区間を割り切る最も粗いもの**で表す
-    /// （＝候補の中でSegment数が最小）。[`AllowedIntervals`] は必ず全区間を表せる候補を含むので失敗しない。
+    /// （＝候補の中で区間数が最小）。[`AllowedIntervals`] は必ず全区間を表せる候補を含むので失敗しない。
     ///
-    /// [`iter`](Self::iter) が返す生の [`FlexId`] は木の2分岐Segmentそのもの
+    /// [`iter`](Self::iter) が返す生の [`FlexId`] は時間軸が `TimeSegment` に分解されたまま
     /// （`_8/182185424` のような断片）なので、人間が読む用途にはこちらを使う。
     ///
     /// ```
@@ -186,10 +186,10 @@ impl SpatialIdSet {
     /// set.insert(SingleId::new(12, 0, 3638, 1614).unwrap().time_with(Interval::HOUR, 0).unwrap());
     /// set.insert(SingleId::new(12, 0, 3638, 1614).unwrap().time_with(Interval::HOUR, 1).unwrap());
     ///
-    /// // 既定（gcd）では 2 時間ぶんが「7200 秒 × 1 TimeSegment」になる。
+    /// // 既定（gcd）では 2 時間ぶんが「7200 秒 × 1 区間」になる。
     /// assert_eq!(set.reconstructed_time_ranges(None).next().unwrap().to_string(), "12/0/3638/1614_7200/0");
     ///
-    /// // 暦の単位に正規化すると「3600 秒 × 2 TimeSegment」になる。
+    /// // 暦の単位に正規化すると「3600 秒 × 2 区間」になる。
     /// let got = set.reconstructed_time_ranges(Some(AllowedIntervals::calendar())).next().unwrap();
     /// assert_eq!(got.to_string(), "12/0/3638/1614_3600/0:1");
     /// # }

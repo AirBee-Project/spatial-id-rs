@@ -101,7 +101,7 @@ impl AllowedIntervals {
     /// # {
     /// # use spatial_id::time::{AllowedIntervals, Interval};
     /// let intervals = AllowedIntervals::calendar();
-    /// // 2時間ぶんは「1時間 × 2Segment」として表される（`gcd` なら `7200秒 × 1Segment`）。
+    /// // 2時間ぶんは「1時間 × 2区間」として表される（`gcd` なら `7200秒 × 1区間`）。
     /// assert_eq!(intervals.coarsest_dividing(0, 7200), Interval::HOUR);
     /// // 暦で割り切れない区間は秒まで落ちる。
     /// assert_eq!(intervals.coarsest_dividing(30, 90), Interval::SECOND);
@@ -125,8 +125,8 @@ impl AllowedIntervals {
     /// 絶対秒区間 `[start, end)` を表せる候補のうち、**最も粗いもの**を返す。
     ///
     /// 単位 `u` でこの区間を表せる条件は `start % u == 0 && end % u == 0` である
-    /// （`t = [start/u, end/u - 1]` になる）。粗いほどSegment数
-    /// （`t_max - t_min + 1`）が少なくなるので、これが候補の中でのSegment数最小を与える。
+    /// （`t = [start/u, end/u - 1]` になる）。粗いほど区間数
+    /// （`t_max - t_min + 1`）が少なくなるので、これが候補の中での区間数最小を与える。
     ///
     /// `Interval::SECOND` が必ず候補にあるため、**この関数は必ず値を返す**
     /// （`temporal_id` feature 無効時は全時間しか存在せず、[`WHOLE`](Interval::WHOLE) が返る）。
@@ -203,12 +203,12 @@ mod tests {
         );
     }
 
-    /// 全時間は `WHOLE` で1Segmentに収まる。
+    /// 全時間は `WHOLE` で1区間に収まる。
     ///
     /// 暦の単位はどれも `2^35` を割り切らないので、`WHOLE` を必須にしていないと
-    /// 時間なしの ID が `_1/0:34359738367`（343億Segment）になってしまう。
+    /// 時間なしの ID が `_1/0:34359738367`（343億区間）になってしまう。
     #[test]
-    fn whole_time_stays_a_single_segment() {
+    fn whole_time_stays_a_single_interval() {
         let intervals = AllowedIntervals::calendar();
         assert_eq!(
             intervals.coarsest_dividing(0, Interval::MAX_SECONDS),
@@ -230,7 +230,7 @@ mod tests {
         let intervals = AllowedIntervals::calendar();
         // ちょうど1日
         assert_eq!(intervals.coarsest_dividing(86_400, 172_800), Interval::DAY);
-        // 2時間ぶん（`gcd` なら 7200 秒だが、候補にないので 1 時間 × 2 TimeSegment）
+        // 2時間ぶん（`gcd` なら 7200 秒だが、候補にないので 1 時間 × 2 区間）
         assert_eq!(intervals.coarsest_dividing(0, 7_200), Interval::HOUR);
         // 30分ぶん
         assert_eq!(intervals.coarsest_dividing(0, 1_800), Interval::MINUTE);
@@ -244,7 +244,7 @@ mod tests {
         let half_hour = Interval::new(1_800).unwrap();
         let intervals = AllowedIntervals::new([half_hour]);
         assert_eq!(intervals.coarsest_dividing(1_800, 3_600), half_hour);
-        // 候補に無い 3600 は選ばれず、1800 × 2 Segmentになる。
+        // 候補に無い 3600 は選ばれず、1800 × 2 区間になる。
         assert_eq!(intervals.coarsest_dividing(0, 3_600), half_hour);
     }
 }
@@ -276,14 +276,14 @@ mod collection_api {
             set.insert(id);
         }
 
-        // 既定は gcd なので「7200 秒 × 1 TimeSegment」。
+        // 既定は gcd なので「7200 秒 × 1 区間」。
         let natural: Vec<_> = set
             .reconstructed_time_ranges(None)
             .map(|r| r.to_string())
             .collect();
         assert_eq!(natural, ["12/0/3638/1614_7200/0"]);
 
-        // 暦に正規化すると「3600 秒 × 2 TimeSegment」。
+        // 暦に正規化すると「3600 秒 × 2 区間」。
         let calendar: Vec<_> = set
             .reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
             .map(|r| r.to_string())
@@ -362,7 +362,7 @@ mod collection_api {
         assert_eq!(got, [("12/0/3638/1614_3600/0:1".into(), 7u32)]);
     }
 
-    /// `flat_single_ids` 側でも単位を選べる。暦にすると2Segmentなので2件へ展開される。
+    /// `flat_single_ids` 側でも単位を選べる。暦にすると2区間なので2件へ展開される。
     #[test]
     fn flat_single_ids_honours_the_unit() {
         let mut set = SpatialIdSet::new();
@@ -370,10 +370,10 @@ mod collection_api {
             set.insert(id);
         }
 
-        // 既定（gcd, 7200秒 × 1Segment）は1件。
+        // 既定（gcd, 7200秒 × 1区間）は1件。
         assert_eq!(set.flat_single_ids(None).count(), 1);
 
-        // 暦（3600秒 × 2Segment）は2件へ展開される。
+        // 暦（3600秒 × 2区間）は2件へ展開される。
         let calendar: Vec<_> = set
             .flat_single_ids(Some(AllowedIntervals::calendar()))
             .map(|s| s.to_string())
@@ -384,7 +384,7 @@ mod collection_api {
     /// 時間を持たない ID は、候補集合を渡しても全時間のまま。
     ///
     /// 暦の単位はどれも `2^35` を割り切らないので、`WHOLE` が候補に無いと
-    /// `_1/0:34359738367`（343億Segment）に化ける。
+    /// `_1/0:34359738367`（343億区間）に化ける。
     #[test]
     fn whole_time_ids_are_untouched() {
         let mut set = SpatialIdSet::new();

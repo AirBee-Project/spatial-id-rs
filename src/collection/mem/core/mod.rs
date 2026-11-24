@@ -202,12 +202,12 @@ impl<V> FlexTreeCore<V> {
 }
 
 impl<V: PartialEq> FlexTreeCore<V> {
-    /// 時間方向に隣接する同値のSegmentを結合した [`RangeId`] と値を返す。**ズームレベルは変えない**。
+    /// 時間方向に隣接する同値の [`FlexId`] を結合した [`RangeId`] と値を返す。**ズームレベルは変えない**。
     ///
-    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1Segmentになる。
+    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1区間になる。
     /// [`AllowedIntervals`] を渡すと、その候補のうち区間を割り切る最も粗い単位で表す。
     ///
-    /// [`iter`](Self::iter) が返す [FlexId] は時間を2の冪秒のSegmentとして持つので、
+    /// [`iter`](Self::iter) が返す [FlexId] は時間を2の冪秒の `TimeSegment` として持つので、
     /// `1800` 秒のような単位で入れた ID も、こちらなら元の表記で取り出せる。
     pub fn reconstructed_time_ranges<'a>(
         &'a self,
@@ -233,7 +233,7 @@ impl<V: PartialEq> FlexTreeCore<V> {
                 } else {
                     range
                         .spatial_children_at_zoom(max_z)
-                        .expect("全体の最大ズームレベルは各Segmentのズーム以上")
+                        .expect("全体の最大ズームレベルは各RangeIdのズーム以上")
                 };
                 range.single_ids().map(move |id| (id, value))
             })

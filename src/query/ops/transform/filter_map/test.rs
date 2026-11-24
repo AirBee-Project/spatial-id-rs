@@ -2,14 +2,14 @@ use alloc::string::{String, ToString};
 
 use crate::{SingleId, Source, SpatialIdMap};
 
-fn time_segment(x: u32) -> SingleId {
+fn single_at_x(x: u32) -> SingleId {
     SingleId::new(20, 0, x, 200).unwrap()
 }
 
 fn int_table() -> SpatialIdMap<i32> {
     let mut t = SpatialIdMap::new();
-    t.insert(time_segment(10), 1);
-    t.insert(time_segment(11), 15);
+    t.insert(single_at_x(10), 1);
+    t.insert(single_at_x(11), 15);
     t
 }
 
@@ -36,7 +36,7 @@ fn map_sees_the_flex_id() {
 #[test]
 fn filter_sees_the_flex_id_and_value() {
     let mut table = int_table();
-    table.insert(time_segment(12), 20);
+    table.insert(single_at_x(12), 20);
 
     let out: SpatialIdMap<i32> = table
         .query()

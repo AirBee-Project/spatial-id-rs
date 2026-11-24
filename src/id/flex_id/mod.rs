@@ -22,7 +22,7 @@ pub(crate) enum ZOrderRel {
     Equal,
     /// 最初に食い違う位置で両方が割られており、左辺が上側（奥）、右辺が下側（手前）にある。互いに重ならない。
     Greater,
-    /// 最初に食い違う位置で片方だけが割られている（包含関係にあるか、異方性により FlexId の PartialOrd で比較できない）。
+    /// 最初に食い違う位置で片方だけが割られている（包含関係にあるか、軸ごとに細かさが異なって包含し合わず FlexId の PartialOrd で比較できない）。
     Overlap {
         /// 最初に食い違う位置の直前まで一致している共通の祖先領域。両方の [`FlexId`] を含む。
         enclosing: FlexId,
@@ -99,7 +99,7 @@ impl FlexId {
     pub fn y_zoomlevel(&self) -> u8 {
         self.y_zoomlevel.get()
     }
-    /// 時間軸のズームレベル。1Segmentは `2^(35 - t_zoomlevel)` 秒。
+    /// 時間軸のズームレベル。1つの `TimeSegment` は `2^(35 - t_zoomlevel)` 秒。
     ///
     /// `temporal_id` feature 無効時は常に `0`（全時間）。
     pub fn t_zoomlevel(&self) -> u8 {
@@ -139,9 +139,9 @@ impl FlexId {
     pub fn y_index(&self) -> u32 {
         self.y_index
     }
-    /// この [`FlexId`] の時間インデックス `{t}`。[`t_zoomlevel`](Self::t_zoomlevel) が決める Segment 幅を単位とする。
+    /// この [`FlexId`] の時間インデックス `{t}`。[`t_zoomlevel`](Self::t_zoomlevel) が決める `TimeSegment` 幅を単位とする。
     ///
-    /// [`t_zoomlevel`](Self::t_zoomlevel) と対で読めば、木の2分岐Segment `(zoom, index)` そのもの。
+    /// [`t_zoomlevel`](Self::t_zoomlevel) と対で読めば、木の `TimeSegment` `(zoom, index)` そのもの。
     /// `temporal_id` feature 無効時は常に `0`（全時間）。
     pub fn t_index(&self) -> u64 {
         #[cfg(feature = "temporal_id")]
@@ -156,17 +156,17 @@ impl FlexId {
     }
 
     /// この [`FlexId`] が占める絶対秒区間 `[start, end)` を返す。
-    /// 時間Segment（4軸目）を設定した自身を返す（ビルダー形式）。
+    /// 時間軸の `TimeSegment`（4軸目）を設定した自身を返す（ビルダー形式）。
     ///
     /// 引数は空間3軸と同じ「**ズームレベル＋インデックス**」で、[`new`](Self::new) の
     /// `f_zoomlevel` / `f_index` と同じく [`Into<u8>`](Into) を受ける
-    /// （[`TZoomLevel`] をそのまま渡すこともできる）。1Segmentは `2^(35 - t_zoomlevel)` 秒で、
+    /// （[`TZoomLevel`] をそのまま渡すこともできる）。1つの `TimeSegment` は `2^(35 - t_zoomlevel)` 秒で、
     /// [`t_zoomlevel`](Self::t_zoomlevel) / [`t_index`](Self::t_index) で読むのと同じ形である。
     ///
     /// # [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) の [`time_with`](crate::SingleId::time_with) との違い
     ///
     /// あちらは仕様の `{i}/{t}`、つまり**秒数**＋インデックスを取る。[`FlexId`] は木の
-    /// ノードアドレスであり2分岐Segment1個しか持てないため、**ズーム**で受ける。
+    /// ノードアドレスであり `TimeSegment` を1個しか持てないため、**ズーム**で受ける。
     ///
     /// ```text
     /// # use spatial_id::SpatialId;
@@ -180,7 +180,7 @@ impl FlexId {
     ///
     /// 任意秒数の間隔（`1800` など）を [`FlexId`] の集合として扱いたい場合は
     /// [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) に付けてから
-    /// [`SingleId::flex_ids`](crate::SingleId::flex_ids) などで展開する（必要な数のSegmentへ自動的に分解される）。
+    /// [`SingleId::flex_ids`](crate::SingleId::flex_ids) などで展開する（必要な数の `TimeSegment` へ自動的に分解される）。
     ///
     /// # バリデーション
     /// - `t_zoomlevel` が `35` を超える場合は [`crate::SpatialIdError::ZOutOfRange`] を返す。
@@ -192,7 +192,7 @@ impl FlexId {
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::{FlexId, time::TZoomLevel};
-    /// // ズーム25のSegmentは 2^(35-25) = 1024 秒幅。
+    /// // ズーム25の TimeSegment は 2^(35-25) = 1024 秒幅。
     /// let id = FlexId::new(5, 3, 2, 3, 10, 1).unwrap().time_with_segment(25, 7).unwrap();
     /// assert_eq!((id.t_zoomlevel(), id.t_index()), (25, 7));
     /// assert_eq!(id.seconds_range(), (7 * 1024, 8 * 1024));
@@ -247,7 +247,7 @@ impl FlexId {
         unsafe { self.time_with_segment_unchecked(0, 0) }
     }
 
-    /// 検証を行わずに時間Segment（4軸目）を設定した自身を返す。
+    /// 検証を行わずに `TimeSegment`（4軸目）を設定した自身を返す。
     ///
     /// # Safety
     ///
@@ -271,7 +271,7 @@ impl FlexId {
         {
             debug_assert!(
                 zoom == 0 && index == 0,
-                "temporal_id 無効時に時間Segment ({zoom}, {index}) を設定しようとした"
+                "temporal_id 無効時に TimeSegment ({zoom}, {index}) を設定しようとした"
             );
             let _ = (zoom, index);
         }

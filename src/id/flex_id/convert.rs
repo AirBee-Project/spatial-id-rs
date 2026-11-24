@@ -37,16 +37,16 @@ impl From<&FlexId> for RangeId {
         )
         .unwrap();
         TimeSpan::new(start, end)
-            .expect("Segmentの秒区間は空でない")
+            .expect("TimeSegmentの秒区間は空でない")
             .apply_to(spatial)
-            .expect("Segmentの秒区間は常に有効")
+            .expect("TimeSegmentの秒区間は常に有効")
     }
 }
 
 // `From<SingleId> for FlexId` は実装しない。[`SingleId`]は仕様通り任意の秒数の時間間隔を
-// 持てる一方、[`FlexId`]はFlexTreeのノードアドレスとして2の冪秒のSegment1個しか持てないため、
+// 持てる一方、[`FlexId`]はFlexTreeのノードアドレスとして2の冪秒の`TimeSegment`1個しか持てないため、
 // 両者は1対1に対応しないからである（例: 30分間隔は最大10個の[`FlexId`]へ分解される）。
-// 変換には`flex_ids`を使う（`SingleId::flex_ids`が必要な数のSegmentへ分解する）。
+// 変換には`flex_ids`を使う（`SingleId::flex_ids`が必要な数の`FlexId`へ分解する）。
 
 /// 木の内部 API が [`FlexId`] の列を受け取れるよう、自身だけを返す。
 impl IntoIterator for FlexId {

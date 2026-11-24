@@ -1,6 +1,6 @@
 use core::ops::BitOr;
 
-/// 時空間IDの次元。F/X/Yは空間3軸（各最大ズーム30）、Tは時間軸の生の2分岐Segment
+/// 時空間IDの次元。F/X/Yは空間3軸（各最大ズーム30）、Tは時間軸の `TimeSegment`
 /// （最大ズーム[`TZoomLevel::MAX`](crate::time::TZoomLevel::MAX)=35）。並び順（F→X→Y→T）は木が次元を選ぶときの規約で、
 /// 他に意味は無い。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

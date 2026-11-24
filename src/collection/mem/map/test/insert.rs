@@ -53,7 +53,7 @@ mod tests {
         );
     }
 
-    /// RangeId の挿入結果が flat_single_ids() で単一Segmentに展開されることを検証する。
+    /// RangeId の挿入結果が flat_single_ids() で [`SingleId`] に展開されることを検証する。
     #[test]
     fn insert_range_is_reflected_in_flat_single_ids() {
         let range = RangeId::new(3, [0, 1], [1, 1], [2, 2]).unwrap();

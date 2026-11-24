@@ -9,12 +9,12 @@ pub(crate) struct TimeSegment {
 }
 
 impl TimeSegment {
-    /// 新しい時間Segmentを生成する。
+    /// 新しい `TimeSegment` を生成する。
     pub const fn new(zoom: TZoomLevel, index: u64) -> Self {
         Self { zoom, index }
     }
 
-    /// このSegmentのズームレベル（深さ）。
+    /// この `TimeSegment` のズームレベル（深さ）。
     pub const fn zoom(&self) -> TZoomLevel {
         self.zoom
     }
@@ -24,9 +24,9 @@ impl TimeSegment {
         self.index
     }
 
-    /// このSegmentが表す絶対秒区間 `[start, end)` を返す。
+    /// この `TimeSegment` が表す絶対秒区間 `[start, end)` を返す。
     ///
-    /// 1Segmentの幅は `2^(TZoomLevel::MAX - zoom)` 秒。
+    /// 1つの `TimeSegment` の幅は `2^(TZoomLevel::MAX - zoom)` 秒。
     pub const fn time_span(&self) -> TimeSpan {
         let width = self.zoom.segment_seconds();
         let start = self.index * width;

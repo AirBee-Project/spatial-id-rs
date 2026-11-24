@@ -230,9 +230,9 @@ where
         self.inner.max_zoomlevel()
     }
 
-    /// 時間方向に隣接する同値のSegmentを結合した [`RangeId`] と値を返す。**ズームレベルは変えない**。
+    /// 時間方向に隣接する同値の [`FlexId`] を結合した [`RangeId`] と値を返す。**ズームレベルは変えない**。
     ///
-    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1Segmentになる。
+    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1区間になる。
     /// [`AllowedIntervals`] を渡すと、その候補のうち区間を割り切る最も粗い単位で表す。
     pub fn reconstructed_time_ranges<'a>(
         &'a self,

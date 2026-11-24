@@ -108,9 +108,9 @@ impl FlexId {
     /// 2つの [`FlexId`] の重なっている領域（Intersection）を計算して返す。
     /// 重なりがない場合は [`None`] を返す。
     ///
-    /// どの軸も「浅い側のSegmentが深い側を含むか」で判定する。四分木（八分木）／2進トライでは
-    /// 異なるズームのSegmentは入れ子か素のどちらかしかないので、重なる場合の交差は必ず
-    /// 深い側のSegmentそのものになる。
+    /// どの軸も「浅い側の区間が深い側を含むか」で判定する。四分木（八分木）／2進トライでは
+    /// 異なるズームの区間は入れ子か素のどちらかしかないので、重なる場合の交差は必ず
+    /// 深い側の区間そのものになる。
     #[inline]
     pub fn intersection(&self, other: &FlexId) -> Option<FlexId> {
         let (f_zoomlevel, f_index) = if self.f_zoomlevel >= other.f_zoomlevel {
