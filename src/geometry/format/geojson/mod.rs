@@ -3,15 +3,11 @@ use alloc::vec::Vec;
 use hashbrown::HashSet;
 
 use crate::{
-    Coordinate, CoverSingleIds, Epsilon, Error, GeometryError, Line, Point, Polygon, SingleId,
-    SpatialIdMap,
+    Coordinate, CoverSingleIds, Error, GeometryError, Line, Point, Polygon, SingleId, SpatialIdMap,
 };
 
-mod projected_ring;
 #[cfg(test)]
 mod test;
-
-use projected_ring::ProjectedRing;
 
 /// GeoJSON の全ジオメトリが覆う空間IDを求める。
 ///
@@ -257,39 +253,30 @@ impl CoverSingleIds for Geometry {
 ///
 /// 穴が外周の内側に収まっていない場合は [`GeometryError::HoleOutsideExterior`] を返す。
 fn cover_polygon(rings: &[Vec<Position>], z: u8) -> Result<HashSet<SingleId>, Error> {
-    let mut polygons = rings
-        .iter()
-        .map(|ring| {
-            let coords = ring
-                .iter()
-                .map(Coordinate::try_from)
-                .collect::<Result<Vec<_>, _>>()?;
-            Polygon::new(coords)
-        })
-        .collect::<Result<Vec<_>, Error>>()?
-        .into_iter();
-
-    let Some(exterior) = polygons.next() else {
+    let Some((ext_ring, hole_rings)) = rings.split_first() else {
         return Ok(HashSet::new());
     };
-    if exterior.vertices().is_empty() {
+
+    let to_coords = |ring: &[Position]| -> Result<Vec<Coordinate>, Error> {
+        ring.iter().map(Coordinate::try_from).collect()
+    };
+
+    let exterior = to_coords(ext_ring)?;
+    if exterior.is_empty() {
         return Ok(HashSet::new());
     }
+    let interiors = hole_rings
+        .iter()
+        .map(|ring| to_coords(ring))
+        .collect::<Result<Vec<_>, _>>()?;
 
-    let mut ids: HashSet<SingleId> = exterior.cover_single_ids(z)?.collect();
-    let mut projected = None;
-    for (index, hole) in polygons.enumerate() {
-        let vertices = hole.vertices();
-        let Some(&first) = vertices.first() else {
-            continue;
-        };
-        let projected = projected.get_or_insert_with(|| ProjectedRing::new(exterior.vertices()));
-        if !projected.contains_ring(vertices, Epsilon::DEFAULT.as_meters()) {
-            return Err(GeometryError::HoleOutsideExterior { index }.into());
-        }
+    let polygon = Polygon::with_interiors(exterior, interiors)?;
 
-        let mut closed = vertices.clone();
-        closed.push(first);
+    let mut ids: HashSet<SingleId> = polygon.cover_single_ids(z)?.collect();
+    for hole_coords in polygon.interiors() {
+        let hole = Polygon::new(hole_coords.clone())?;
+        let mut closed = hole.vertices().to_vec();
+        closed.push(closed[0]);
         let boundary: HashSet<SingleId> = Line::cover_polyline(&closed, z)?.collect();
         for id in hole.cover_single_ids(z)? {
             if !boundary.contains(&id) {

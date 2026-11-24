@@ -77,8 +77,11 @@ pub enum GeometryError {
     /// Polygon のリングが自己交差していることを示す。
     PolygonSelfIntersecting,
 
-    /// GeoJSON の Polygon の穴が外周の内側に収まっていないことを示す。`index` は内周リングの位置（0 始まり）。
+    /// Polygon の穴が外周の内側に収まっていないことを示す。`index` は内周リングの位置（0 始まり）。
     HoleOutsideExterior { index: usize },
+
+    /// Polygon の穴同士が交差または重なっていることを示す。`first` と `second` は内周リングの位置（0 始まり）。
+    HoleOverlap { first: usize, second: usize },
 }
 
 /// [`SpatialId`](crate::SpatialId) 関連で発生するエラー。
@@ -252,6 +255,13 @@ impl fmt::Display for GeometryError {
             }
             GeometryError::HoleOutsideExterior { index } => {
                 write!(f, "Polygon hole {} is not inside the exterior ring", index)
+            }
+            GeometryError::HoleOverlap { first, second } => {
+                write!(
+                    f,
+                    "Polygon holes {} and {} intersect or overlap",
+                    first, second
+                )
             }
         }
     }

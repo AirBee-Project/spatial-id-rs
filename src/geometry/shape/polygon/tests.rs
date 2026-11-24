@@ -82,6 +82,15 @@ mod validation {
         Coordinate::new(lat, lon, alt).unwrap()
     }
 
+    fn unit_square() -> Vec<Coordinate> {
+        vec![
+            c(35.0, 139.0, 0.0),
+            c(35.0, 139.01, 0.0),
+            c(35.01, 139.01, 0.0),
+            c(35.01, 139.0, 0.0),
+        ]
+    }
+
     #[test]
     fn rejects_too_few_vertices() {
         assert_eq!(
@@ -181,6 +190,138 @@ mod validation {
         ])
         .unwrap();
         assert_eq!(poly.vertices().len(), 5);
+        assert!(poly.interiors().is_empty());
+    }
+
+    #[test]
+    fn accepts_valid_polygon_with_multiple_holes_and_3d_tilted_wall() {
+        let hole1 = vec![
+            c(35.002, 139.002, 0.0),
+            c(35.004, 139.002, 0.0),
+            c(35.004, 139.004, 0.0),
+            c(35.002, 139.004, 0.0),
+        ];
+        // 巻き順を正規化するため、外周と同じ巻き順の穴も許容する。
+        let hole2 = vec![
+            c(35.006, 139.006, 0.0),
+            c(35.006, 139.008, 0.0),
+            c(35.008, 139.008, 0.0),
+            c(35.008, 139.006, 0.0),
+        ];
+        let poly = Polygon::with_interiors(unit_square(), vec![hole1, hole2]).unwrap();
+        assert_eq!(poly.interiors().len(), 2);
+
+        let wall_ext = vec![
+            c(35.0, 139.0, 0.0),
+            c(35.0, 139.001, 0.0),
+            c(35.0, 139.001, 20.0),
+            c(35.0, 139.0, 20.0),
+        ];
+        let window_hole = vec![
+            c(35.0, 139.0002, 5.0),
+            c(35.0, 139.0008, 5.0),
+            c(35.0, 139.0008, 15.0),
+            c(35.0, 139.0002, 15.0),
+        ];
+        let wall = Polygon::with_interiors(wall_ext, vec![window_hole]).unwrap();
+        assert_eq!(wall.interiors().len(), 1);
+    }
+
+    #[test]
+    fn rejects_hole_outside_or_crossing_exterior() {
+        let outside_hole = vec![
+            c(35.02, 139.02, 0.0),
+            c(35.02, 139.03, 0.0),
+            c(35.03, 139.03, 0.0),
+            c(35.03, 139.02, 0.0),
+        ];
+        assert_eq!(
+            Polygon::with_interiors(unit_square(), vec![outside_hole]).unwrap_err(),
+            Error::Geometry(GeometryError::HoleOutsideExterior { index: 0 })
+        );
+
+        // 全頂点が外周頂点上にあっても、辺が外周の外を横切るケースを検出する。
+        let concave_ext = vec![
+            c(35.0, 139.0, 0.0),
+            c(35.0, 139.01, 0.0),
+            c(35.004, 139.004, 0.0),
+            c(35.01, 139.01, 0.0),
+            c(35.01, 139.0, 0.0),
+        ];
+        let crossing_hole = vec![
+            c(35.0, 139.01, 0.0),
+            c(35.01, 139.01, 0.0),
+            c(35.004, 139.004, 0.0),
+        ];
+        assert_eq!(
+            Polygon::with_interiors(concave_ext, vec![crossing_hole]).unwrap_err(),
+            Error::Geometry(GeometryError::HoleOutsideExterior { index: 0 })
+        );
+    }
+
+    #[test]
+    fn rejects_hole_matching_exterior_zero_net_area() {
+        let err = Polygon::with_interiors(unit_square(), vec![unit_square()]).unwrap_err();
+        assert_eq!(err, Error::Geometry(GeometryError::PolygonZeroArea));
+    }
+
+    #[test]
+    fn validates_hole_overlap_vs_single_vertex_touch() {
+        let h1 = vec![
+            c(35.002, 139.002, 0.0),
+            c(35.002, 139.005, 0.0),
+            c(35.005, 139.005, 0.0),
+            c(35.005, 139.002, 0.0),
+        ];
+        let h_touch_vertex = vec![
+            c(35.005, 139.005, 0.0),
+            c(35.005, 139.008, 0.0),
+            c(35.008, 139.008, 0.0),
+            c(35.008, 139.005, 0.0),
+        ];
+        assert!(Polygon::with_interiors(unit_square(), vec![h1.clone(), h_touch_vertex]).is_ok());
+
+        let h_share_edge = vec![
+            c(35.005, 139.002, 0.0),
+            c(35.005, 139.005, 0.0),
+            c(35.008, 139.005, 0.0),
+            c(35.008, 139.002, 0.0),
+        ];
+        assert_eq!(
+            Polygon::with_interiors(unit_square(), vec![h1.clone(), h_share_edge]).unwrap_err(),
+            Error::Geometry(GeometryError::HoleOverlap {
+                first: 0,
+                second: 1
+            })
+        );
+
+        let h_cross = vec![
+            c(35.003, 139.003, 0.0),
+            c(35.003, 139.007, 0.0),
+            c(35.007, 139.007, 0.0),
+            c(35.007, 139.003, 0.0),
+        ];
+        assert_eq!(
+            Polygon::with_interiors(unit_square(), vec![h1.clone(), h_cross]).unwrap_err(),
+            Error::Geometry(GeometryError::HoleOverlap {
+                first: 0,
+                second: 1
+            })
+        );
+
+        let h_nested = vec![
+            c(35.0025, 139.0025, 0.0),
+            c(35.0025, 139.0045, 0.0),
+            c(35.0045, 139.0045, 0.0),
+            c(35.0045, 139.0025, 0.0),
+        ];
+        assert_eq!(
+            Polygon::with_interiors(unit_square(), vec![h1, h_nested]).unwrap_err(),
+            Error::Geometry(GeometryError::HoleOverlap {
+                first: 0,
+                second: 1
+            })
+        );
     }
 
     #[test]
