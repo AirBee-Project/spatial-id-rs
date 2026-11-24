@@ -312,9 +312,12 @@ impl<V: Clone> IntoIterator for SpatialIdMap<V> {
 /// `(SpatialId, V)` 列から作る。[`SingleId`] / [`RangeId`] / [`FlexId`] のいずれも渡せる。
 impl<S: SpatialId, V: PartialEq + Clone> FromIterator<(S, V)> for SpatialIdMap<V> {
     fn from_iter<T: IntoIterator<Item = (S, V)>>(iter: T) -> Self {
-        let mut map = Self::new();
-        map.extend(iter);
-        map
+        Self {
+            inner: iter
+                .into_iter()
+                .flat_map(|(id, value)| id.flex_ids().map(move |flex_id| (flex_id, value.clone())))
+                .collect(),
+        }
     }
 }
 
