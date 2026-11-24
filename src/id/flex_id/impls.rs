@@ -236,7 +236,7 @@ impl FromStr for FlexId {
                     part.split_once('/').ok_or_else(|| parse_error(s))?;
                 let t_zoomlevel = t_zoom_text.parse::<u8>().map_err(|_| parse_error(s))?;
                 let t_index = t_index_text.parse::<u64>().map_err(|_| parse_error(s))?;
-                // 文字列は `{i}/{t}` ではなく「ズーム/インデックス」なので、Segmentの入口を使う。
+                // 文字列は `{i}/{t}` ではなく「ズーム/インデックス」なので、TimeSegment指定の入口を使う。
                 FlexId::new(
                     f_zoomlevel,
                     f_index,

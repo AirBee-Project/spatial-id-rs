@@ -18,10 +18,10 @@ pub fn scale_range_u32(start: u32, end: u32, scale: u32) -> [u32; 2] {
 
 /// 経度 (longitude) を返す（実数 x 対応）
 ///
-/// x: 水平方向のタイル/Segment座標（連続値）  
+/// x: 水平方向のタイル/空間ID座標（連続値）  
 /// z: ズームレベル  
 ///
-/// Segment番号 x の左端なら x、中心なら x+0.5 を渡せる。
+/// インデックス x の左端なら x、中心なら x+0.5 を渡せる。
 pub fn longitude(x: f64, z: u8) -> f64 {
     let n = libm::pow(2_f64, (z as i32) as f64);
     2.0 * Coordinate::LON_ABS_MAX * (x / n) - Coordinate::LON_ABS_MAX
@@ -29,7 +29,7 @@ pub fn longitude(x: f64, z: u8) -> f64 {
 
 /// 緯度 (latitude) を返す（Web Mercator の逆変換, 実数 y 対応）
 ///
-/// y: 垂直方向のタイル/Segment座標（連続値）  
+/// y: 垂直方向のタイル/空間ID座標（連続値）  
 /// z: ズームレベル  
 ///
 /// 公式: lat = atan( sinh( π * (1 - 2*y/n) ) )

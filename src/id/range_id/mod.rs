@@ -112,7 +112,7 @@ impl RangeId {
 
     /// この [`RangeId`] の時間インデックス範囲 `[min, max]`（両端含む）を返す。
     ///
-    /// `temporal_id` feature 無効時は常に `[0, 0]`（全時間の唯一のSegment）。
+    /// `temporal_id` feature 無効時は常に `[0, 0]`（全時間を表す唯一の値）。
     pub fn t(&self) -> [u64; 2] {
         #[cfg(feature = "temporal_id")]
         {
@@ -127,21 +127,21 @@ impl RangeId {
 
     /// 時間を設定した自身を返す（ビルダー形式）。
     ///
-    /// [`SingleId::time_with`](crate::SingleId::time_with)が単一Segmentしか受け取らないのに対し、
+    /// [`SingleId::time_with`](crate::SingleId::time_with)が単一の `{i}/{t}` しか受け取らないのに対し、
     /// こちらは空間と同じく**範囲**を受け取る。`t` は `[min, max]` の `[u64; 2]`、または
     /// 両端が等しい単一の `u64` のどちらでも渡せる（f/x/y 引数と同じ考え方）。
     ///
-    /// FlexTreeが必要とする2の冪秒のSegmentへの分解は、木へ挿入する段階
+    /// FlexTreeが必要とする、2の冪乗の秒数を持つ `TimeSegment` への分解は、木へ挿入する段階
     /// （[`flex_ids`](crate::SpatialId::flex_ids)による[`FlexId`](crate::FlexId)への展開）で自動的に行われる。
     ///
     ///
     /// ## 動作コスト
     ///
-    /// 木構造（[`SpatialIdSet`](crate::collection::SpatialIdSet) など）へ挿入する際、時間間隔が2の冪秒であれば必ず1つの時間Segment
-    /// （[`FlexId`](crate::FlexId)）に収まる。しかし非2冪の秒数（例: 1800秒）を指定した場合、
-    /// 内部で最大十数個のSegmentに分解されるため、**挿入コストと木の葉の数が比例して増大**する。
+    /// 木構造（[`SpatialIdSet`](crate::collection::SpatialIdSet) など）へ挿入する際、時間間隔が2の冪乗の秒数であれば必ず1つの `TimeSegment`
+    /// （[`FlexId`](crate::FlexId)）に収まる。しかし2の冪乗でない秒数（例: 1800秒）を指定した場合、
+    /// 内部で最大十数個の `TimeSegment` に分解されるため、**挿入コストと木の葉の数が比例して増大**する。
     /// パフォーマンスが重視される用途では、1800秒や3600秒の代わりに、**1024秒**や**4096秒**
-    /// などの2の冪秒を利用することを強く推奨する（挿入処理が約10倍高速化される）。
+    /// などの2の冪乗の秒数を利用することを強く推奨する（挿入処理が約10倍高速化される）。
     ///
     /// ```
     /// # use spatial_id::SpatialId;
@@ -237,7 +237,7 @@ impl RangeId {
         self
     }
 
-    /// この [`RangeId`] の時間を、FlexTree が使う2分岐Segmentの列へ分解する。クレート内部専用。
+    /// この [`RangeId`] の時間を、FlexTree が使う `TimeSegment` の列へ分解する。クレート内部専用。
     pub(crate) fn time_segments(&self) -> span::TimeSegments {
         span::TimeSpan::of(self).into_segments()
     }
