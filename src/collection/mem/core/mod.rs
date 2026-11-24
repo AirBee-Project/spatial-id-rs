@@ -305,7 +305,7 @@ impl<V: PartialEq + Clone> FlexTreeCore<V> {
             Node::merge(&root_id, root, View::skip(&root_id, id, &whole), &rule);
         }
 
-        // 抜き取った部分は互いに重ならないので、和で順に植え直すだけでよい
+        // 抜き取った部分は互いに重ならないため、順に和集合として追加するだけでよい
         let mut removed = Self::default();
         for (region, node) in cut.into_inner() {
             let (root, root_id) = removed.root_for(&region);

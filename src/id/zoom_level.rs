@@ -1,7 +1,7 @@
 use crate::{SpatialIdError, error::Error};
 use core::fmt;
 
-/// ズームレベルを表す型の土台。
+/// 上限値 `LIMIT` を持つズームレベルの共通型。
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Zoom<const LIMIT: u8>(u8);

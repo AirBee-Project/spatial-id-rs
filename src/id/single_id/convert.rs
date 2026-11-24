@@ -4,7 +4,7 @@ use crate::{FlexId, SingleId, time::span::TimeSegments};
 ///
 /// 空間部分は常に単一なので、`TimeSegment` ごとに「同じ空間部の `FlexId`＋その `TimeSegment`」を
 /// 返すだけで済む。**ヒープ確保をしない**（`Box<dyn Iterator>` も中間 [`Vec`](alloc::vec::Vec) も使わない）
-/// のが要点で、挿入はこの経路を1件につき1回通るため固定費がそのまま効く。
+/// のが要点で、挿入はこの経路を1件につき1回通るため固定コストがそのまま処理時間に影響する。
 ///
 /// 時間を使わない場合（および時間がちょうど1つの `TimeSegment` に収まる場合）は要素が1つだけになり、
 /// 時間軸の無かった頃の [`core::iter::once`] と同じコストになる。

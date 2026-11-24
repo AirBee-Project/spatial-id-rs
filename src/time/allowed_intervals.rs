@@ -24,9 +24,9 @@ use alloc::vec::Vec;
 pub struct AllowedIntervals {
     /// 秒数の降順。重複なし。先頭から見て最初に割り切れたものが「最も粗い」。
     ///
-    /// [`Vec`]ではなく[`Cow`]なのは、[`calendar`](Self::calendar)を`static`として
-    /// 用意して`&'static`で貸し出すためである。所有版（[`new`](Self::new)）は
-    /// [`Cow::Owned`]、組み込みの候補集合は[`Cow::Borrowed`]になる。
+    /// [`Vec`] ではなく [`Cow`] を使うのは、[`calendar`](Self::calendar) を `static` に定義して
+    /// `&'static` の参照を返すためである。[`new`](Self::new) で生成した値は
+    /// [`Cow::Owned`]、組み込みの候補集合は [`Cow::Borrowed`] になる。
     intervals: Cow<'static, [Interval]>,
 }
 
@@ -187,7 +187,7 @@ mod tests {
 
     /// [`CALENDAR`] は `new` を通さない `static` なので、降順・重複なしの不変条件を
     /// ここで固定する。`coarsest_dividing` は「先頭から最初に割り切れたもの」を返すため、
-    /// 順序が崩れると最も粗い単位が選ばれなくなる。
+    /// 降順で並ばなくなると最も粗い単位が選ばれなくなる。
     #[test]
     fn calendar_is_sorted_descending_without_duplicates() {
         let seconds: Vec<u64> = AllowedIntervals::calendar()

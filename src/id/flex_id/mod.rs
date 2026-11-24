@@ -772,8 +772,8 @@ impl FlexId {
 
 /// `temporal_id` feature 無効時に時間軸ぶんのメモリが本当に消えていることを固定する。
 ///
-/// `t_zoomlevel` / `t_index` を `cfg` で落とし忘れると、時間を使わない利用者が
-/// [`FlexId`] 1個あたり8バイト（＋木の走査スタックぶん）を払い続けることになる。
+/// `t_zoomlevel` / `t_index` を `cfg` で除外し忘れると、時間を使わない場合でも
+/// [`FlexId`] 1個あたり8バイト（および走査スタックのメモリ領域）を余分に消費する。
 /// 有効時の24バイトは `3軸(4+4+4) + ズーム3 + Tズーム1 + パディング + t_index(8)`。
 #[cfg(not(feature = "temporal_id"))]
 const _: () = assert!(
