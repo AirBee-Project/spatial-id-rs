@@ -201,7 +201,7 @@ where
         self.inner.remove_overlapping(target.flex_ids()).into_iter()
     }
 
-    /// 指定した単体の空間 ID と面で接している空間IDと値への参照を重複なく返す。入力された空間 ID 自身と重なる要素は除外する。
+    /// 指定した空間IDと面で接している空間IDと値への参照を重複なく返す。入力された空間ID自身と重なる要素は除外する。
     pub fn spatial_face_neighbors<T: SpatialId>(
         &self,
         target: T,

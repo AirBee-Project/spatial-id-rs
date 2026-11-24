@@ -84,6 +84,13 @@
 - **命名規則**: 「空間解像度」「解像度」「精度」とは書かず、**ズームレベル** と書く。時間方向の細かさは **`Interval`** と書く。
 - **コード例**: `{z}/{f}/{x}/{y}` の `z`
 
+## 13. 標準空間ID
+
+- **定義**: IPA「4次元時空間情報利活用のための空間IDガイドライン（1.2版）」第 2.4 項で定義される基本の空間ID（`{z}/{f}/{x}/{y}`）。拡張仕様（ローカル空間ID・時空間ID・極地空間ID）や、クレート独自の型（`RangeId`・`FlexId`）と対比するときに用いる。
+- **特徴**: `SingleId` が対応する（`temporal_id` feature 有効時に時間情報を設定した場合は、同ガイドライン第 2.5.3 項の拡張仕様「時空間ID」`{z}/{f}/{x}/{y}_{i}/{t}` に対応する）。
+- **命名規則**: `SingleId` が表す規格上の空間IDを指すときは、「1つの空間ID」「単体の空間ID」「標準的な時空間ID」とは書かず、**標準空間ID** と書く。「空間ID」「標準空間ID」は半角スペースを入れずに書く。`SingleId`・`RangeId`・`FlexId` の総称や空間ボクセル一般を指すときは「空間ID」と書く。
+- **コード例**: `SingleId`
+
 ## 共通の規則
 
-型として存在する名前（`FlexId`・`FlexTreeCore`・`Node`・`Value`・`Branch`・`LongSkip`・`ShortSkipValue`・`ShortSkipBranch` など）は、ドキュメントやコメントでも日本語に訳さず、型名のまま書く。
+型として存在する名前（`SingleId`・`RangeId`・`FlexId`・`FlexTreeCore`・`Node`・`Value`・`Branch`・`LongSkip`・`ShortSkipValue`・`ShortSkipBranch` など）は、ドキュメントやコメントでも日本語に訳さず、型名のまま書く。

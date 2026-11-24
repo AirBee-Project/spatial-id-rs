@@ -52,9 +52,9 @@ Cylinder ==>|"N角形として近似"| Solid
 
 ```
 
-3次元空間上の空間ID以外の図形を表す型。図形から空間 ID を返す Trait は `CoverSingleIds` / `CoverRangeIds` である。
+3次元空間上の空間ID以外の図形を表す型。図形から空間IDを返す Trait は `CoverSingleIds` / `CoverRangeIds` である。
 
-図形から空間 ID を返すメソッドは `CoverSingleIds` / `CoverRangeIds` として実装される。
+図形から空間IDを返すメソッドは `CoverSingleIds` / `CoverRangeIds` として実装される。
 
 `CoverRangeIds` の実装は、`CoverSingleIds` の出力を単純に `RangeId` へ変換して返すラッパー実装であってはならない。実装内部で `RangeId` を直接構築する処理を持ち、(最適でなくても) `RangeId` の表現を活かした出力を行うこと。
 

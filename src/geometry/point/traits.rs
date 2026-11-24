@@ -4,7 +4,7 @@ use crate::{Ecef, Error, FractionalId, RangeId, SingleId, geometry::Epsilon};
 pub trait Point: Into<Ecef> + Copy {
     /// この点を、指定されたズームレベルの [`SingleId`] に変換する。
     ///
-    /// 高度・経度・緯度が空間 ID の範囲の上端ちょうどにある点は、最後のインデックス値に丸められる。
+    /// 高度・経度・緯度が空間IDの範囲の上端ちょうどにある点は、最後のインデックス値に丸められる。
     /// ズームレベルが範囲外の場合は [`Error`] を返す。
     ///
     /// # Examples

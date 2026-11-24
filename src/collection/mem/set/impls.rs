@@ -19,7 +19,7 @@ impl<S: SpatialId> Extend<S> for SpatialIdSet {
     }
 }
 
-/// 空間 ID 列から [`SpatialIdSet`] を並列に構築する（`feature = "rayon"`）。
+/// 空間ID列から [`SpatialIdSet`] を並列に構築する（`feature = "rayon"`）。
 ///
 /// [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) / [`FlexId`](crate::FlexId) のいずれの
 /// [`SpatialId`] 型でも受け取れる。集合なので結果は挿入順・チャンク境界に依らず
@@ -56,7 +56,7 @@ where
     }
 }
 
-/// 既存の [`SpatialIdSet`] へ空間 ID 列を並列にマージする（`feature = "rayon"`）。
+/// 既存の [`SpatialIdSet`] へ空間ID列を並列にマージする（`feature = "rayon"`）。
 #[cfg(feature = "rayon")]
 impl<S> rayon::iter::ParallelExtend<S> for SpatialIdSet
 where

@@ -98,7 +98,7 @@ pub enum SpatialIdError {
 
     /// 時間間隔 `i` に 0 を指定した場合のエラー。
     TIntervalError { i: u64 },
-    /// 文字列表現を空間 ID として解釈できないことを示す。
+    /// 文字列表現を空間IDとして解釈できないことを示す。
     ParseSpatialIdFormat { kind: &'static str, input: String },
 
     /// 祖先として渡された ID が、対象の ID を包含していないことを示す。
