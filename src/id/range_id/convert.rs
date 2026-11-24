@@ -3,12 +3,12 @@ use core::iter::Chain;
 use crate::time::span::TimeSegments;
 use crate::{FlexId, RangeId, SingleId, id::zoom_level::ZoomLevel};
 
-/// XY軸の範囲を最小限の2の冪ブロックへ最適分割する関数
+/// XY軸の範囲を最小限の2の冪乗ブロックへ最適分割する関数
 pub fn split_xy(z: u8, range: [u32; 2]) -> impl Iterator<Item = (u8, u32)> {
     SegmentIter::xy(z, range).map(xy_segment)
 }
 
-/// F軸の範囲を最小限の2の冪ブロックへ最適分割する関数
+/// F軸の範囲を最小限の2の冪乗ブロックへ最適分割する関数
 pub fn split_f(z: u8, range: [i32; 2]) -> impl Iterator<Item = (u8, i32)> {
     SegmentIter::f(z, range).map(f_segment)
 }
@@ -147,7 +147,7 @@ impl RangeId {
                 .chain(SegmentIter::xy(z, [0, self.x[1]]))
         };
         let y_start = SegmentIter::xy(z, self.y);
-        // 時間は `Interval` が2の冪とは限らないので、`TimeSegment` へ分解してから掛け合わせる
+        // 時間は `Interval` が2の冪乗とは限らないので、`TimeSegment` へ分解してから掛け合わせる
         // （時間を使っていなければ全時間の1個だけになる）
         let t_start = self.time_segments();
         RangeIdFlexIds {

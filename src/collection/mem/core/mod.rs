@@ -207,7 +207,7 @@ impl<V: PartialEq> FlexTreeCore<V> {
     /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1区間になる。
     /// [`AllowedIntervals`] を渡すと、その候補のうち区間を割り切る最も粗い単位で表す。
     ///
-    /// [`iter`](Self::iter) が返す [FlexId] は時間を2の冪秒の `TimeSegment` として持つので、
+    /// [`iter`](Self::iter) が返す [FlexId] は時間を2の冪乗の秒数を持つ `TimeSegment` として持つので、
     /// `1800` 秒のような単位で入れた ID も、こちらなら元の表記で取り出せる。
     pub fn reconstructed_time_ranges<'a>(
         &'a self,

@@ -233,7 +233,7 @@ impl FlexId {
     #[inline]
     pub fn intersects_range(&self, range: &crate::RangeId) -> bool {
         // 時間軸だけは「共通ズームでの整数範囲」に落とせない（`RangeId` の `Interval` は
-        // 2の冪とは限らない）ので、絶対秒区間の重なりで判定する。
+        // 2の冪乗とは限らない）ので、絶対秒区間の重なりで判定する。
         // `temporal_id` 無効時は双方とも全時間で必ず重なるため、判定ごと消す。
         #[cfg(feature = "temporal_id")]
         {

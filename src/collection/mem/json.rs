@@ -249,7 +249,7 @@ struct PlainDataEntry {
 ///
 /// 値は出現順で重複排除して `value` に列挙し、各空間IDは `ref` でその添字を参照する。
 ///
-/// `iter` は時間方向に結合済みのもの（`range_ids`）を渡す。木は時間を2の冪秒の `TimeSegment` で持つため、
+/// `iter` は時間方向に結合済みのもの（`range_ids`）を渡す。木は時間を2の冪乗の秒数を持つ `TimeSegment` で持つため、
 /// 結合しないと `i: 1800` のような単位が断片化した `i: 1` の羅列になってしまう。
 pub(crate) fn serialize_with_values<'a, V, S>(
     iter: impl Iterator<Item = (RangeId, &'a V)>,
@@ -389,7 +389,7 @@ mod tests {
 
     /// コレクションを経由した JSON 往復で、**時空間領域が完全に保存される**。
     ///
-    /// 木は時間を2の冪秒の `TimeSegment` で持つため、`1800` 秒のような単位は挿入時に複数の `TimeSegment` へ分解される
+    /// 木は時間を2の冪乗の秒数を持つ `TimeSegment` で持つため、`1800` 秒のような単位は挿入時に複数の `TimeSegment` へ分解される
     /// （この例では5個）。書き出し側で時間方向の結合を通すことで1件へ戻る。
     ///
     /// ただし `{i}` は暦の単位（[`AllowedIntervals::calendar`](crate::time::AllowedIntervals::calendar)）へ正規化されるので、
