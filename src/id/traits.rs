@@ -118,11 +118,11 @@ pub trait SpatialId:
         None
     }
 
-    /// この空間 ID を、FlexTree のノードアドレスである [`FlexId`] に分解して返す。
+    /// この空間IDを、FlexTree のノードアドレスである [`FlexId`] に分解して返す。
     ///
-    /// 全要素を合わせて元の空間 ID の領域をちょうど覆う。
+    /// 全要素を合わせて元の空間IDの領域をちょうど覆う。
     fn flex_ids(self) -> impl Iterator<Item = FlexId>;
 
-    /// この空間 ID を構成する [`SingleId`] のイテレータを返す。
+    /// この空間IDを構成する [`SingleId`] のイテレータを返す。
     fn single_ids(self) -> impl Iterator<Item = SingleId>;
 }

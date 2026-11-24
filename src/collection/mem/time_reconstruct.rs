@@ -177,7 +177,7 @@ mod tests {
         (*flex_id).time_cleared()
     }
 
-    /// 仕様書 1.5.3 の例（`1800/809712`）が、分解 → 結合を経て元の表記へ戻る。
+    /// 仕様書 2.5.3 の例（`1800/809712`）が、分解 → 結合を経て元の表記へ戻る。
     #[test]
     fn round_trips_the_spec_example() {
         let original = SingleId::new(12, 0, 3638, 1614)

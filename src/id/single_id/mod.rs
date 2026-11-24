@@ -12,11 +12,12 @@ use crate::{
     Interval, SpatialId, SpatialIdError, error::Error, id::zoom_level::ZoomLevel, time::span,
 };
 
-/// 標準的な時空間IDを表す型。
+/// 標準空間IDを表す型。
 ///
-/// [Ouranos 4D 時空間ID仕様](https://www.ipa.go.jp/)の Spatio-temporal ID
-/// `{z}/{f}/{x}/{y}_{i}/{t}` に一対一で対応する。空間部分が[`ZoomLevel`]でのf/x/y、
-/// 時間部分が時間間隔 `i`（[`Interval`]）と**単一**インデックス `t` である。
+/// [4次元時空間情報基盤 ガイドライン（IPA）](https://www.ipa.go.jp/digital/architecture/guidelines/4dspatio-temporal-guideline.html)
+/// で定義された標準空間ID `{z}/{f}/{x}/{y}`（`temporal_id` feature で時間を指定した場合は
+/// 拡張仕様の時空間ID `{z}/{f}/{x}/{y}_{i}/{t}`）に一対一で対応する。
+/// 空間部分が [`ZoomLevel`] での `f`/`x`/`y`、時間部分が時間間隔 `i`（[`Interval`]）と**単一**インデックス `t` である。
 ///
 /// 範囲を扱いたい場合は[`RangeId`](crate::RangeId)を使う。
 ///
@@ -120,7 +121,7 @@ impl SingleId {
 
     /// 時間を設定した自身を返す（ビルダー形式）。
     ///
-    /// [Ouranos 4D 時空間ID仕様](https://www.ipa.go.jp/)の `{i}/{t}` に対応する。`interval` は
+    /// [4次元時空間情報基盤 ガイドライン（IPA）](https://www.ipa.go.jp/digital/architecture/guidelines/4dspatio-temporal-guideline.html)第 2.5.3 項の `{i}/{t}` に対応する。`interval` は
     /// [`Interval`]、または秒数を表す整数（無注釈のリテラルを含む）のどちらでも渡せる。
     ///
     /// ## 動作コスト
@@ -173,7 +174,7 @@ impl SingleId {
 
     /// Unix 時刻（秒）が属する時間Segmentを設定した自身を返す。
     ///
-    /// 仕様書 1.5.3 (3) の `t = floor(u / i)` をこちらで計算するので、呼び出し側で
+    /// 仕様書 2.5.3 (3) の `t = floor(u / i)` をこちらで計算するので、呼び出し側で
     /// インデックスを求める必要がない。
     ///
     /// ## 動作コスト

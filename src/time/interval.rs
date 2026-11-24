@@ -125,7 +125,7 @@ impl Interval {
 
     /// この単位で、Unix 時刻（秒）が属するSegmentのインデックス `{t}` を返す。
     ///
-    /// 仕様書 1.5.3 (3) の `t = floor(u / i)`。
+    /// 仕様書 2.5.3 (3) の `t = floor(u / i)`。
     ///
     /// ```
     /// # use spatial_id::time::Interval;

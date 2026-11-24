@@ -136,7 +136,7 @@ impl SpatialIdSet {
             .map(|(flex_id, _)| flex_id)
     }
 
-    /// 指定した単体の空間 IDと面で接している空間IDを重複なく返す。入力された空間ID自身と重なる空間IDは除外する。
+    /// 指定した空間IDと面で接している空間IDを重複なく返す。入力された空間ID自身と重なる空間IDは除外する。
     pub fn spatial_face_neighbors<S: SpatialId>(
         &self,
         target: S,
@@ -161,7 +161,7 @@ impl SpatialIdSet {
     }
 
     /// 集合の内部にある全ての[FlexId]のうち、最大のズームレベル値を返す。
-    /// 内部に空間 ID が存在しない場合は [`None`] を返す。
+    /// 内部に空間IDが存在しない場合は [`None`] を返す。
     ///
     /// キャッシュを持たず、全ての[FlexId]を走査する（O(n)）。
     pub fn max_zoomlevel(&self) -> Option<ZoomLevel> {
@@ -213,7 +213,7 @@ impl SpatialIdSet {
             .map(|(single_id, _)| single_id)
     }
 
-    /// [SpatialIdSet] 内部の空間 ID をすべて削除する。
+    /// [SpatialIdSet] 内部の空間IDをすべて削除する。
     pub fn clear(&mut self) {
         self.inner.clear();
     }
