@@ -1,7 +1,8 @@
+use crate::collection::core::FlexTreeCore;
 use crate::query::CancellationToken;
 use crate::query::SafeValue;
 use crate::query::{QueryIter, Source};
-use crate::{Error, RangeId, SpatialIdMap, SpatialIdSet};
+use crate::{Error, FlexId, RangeId, SpatialIdMap, SpatialIdSet};
 
 impl Source for SpatialIdSet {
     type Value = ();
@@ -11,11 +12,7 @@ impl Source for SpatialIdSet {
         targets: &[RangeId],
         _token: &CancellationToken,
     ) -> Result<QueryIter<'a, ()>, Error> {
-        Ok(QueryIter::new(
-            self.inner
-                .get_overlapping(targets.iter().cloned())
-                .map(|(id, ())| Ok((id, ()))),
-        ))
+        Ok(read(&self.inner, targets))
     }
 }
 
@@ -30,10 +27,19 @@ where
         targets: &[RangeId],
         _token: &CancellationToken,
     ) -> Result<QueryIter<'a, V>, Error> {
-        Ok(QueryIter::new(
-            self.inner
-                .get_overlapping(targets.iter().cloned())
-                .map(|(id, value)| Ok((id, value.clone()))),
-        ))
+        Ok(read(&self.inner, targets))
+    }
+}
+
+fn read<'a, V: SafeValue + 'static>(
+    tree: &'a FlexTreeCore<V>,
+    targets: &[RangeId],
+) -> QueryIter<'a, V> {
+    let item = |(id, value): (FlexId, &V)| Ok((id, value.clone()));
+    // 全体が対象なら、Node ごとの交差判定を省いて全件を辿る
+    if targets.contains(&RangeId::WHOLE) {
+        QueryIter::new(tree.iter().map(item))
+    } else {
+        QueryIter::new(tree.get_overlapping(targets.iter().copied()).map(item))
     }
 }
