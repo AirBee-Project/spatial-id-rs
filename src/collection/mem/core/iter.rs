@@ -66,6 +66,8 @@ impl<'a, V> Iterator for Iter<'a, V> {
 impl<'a, V> Iter<'a, V> {
     /// 領域 `this` の `branch` の子を、下側から取り出されるように積む。
     fn push_branch(&mut self, this: FlexId, branch: &'a Branch<V>) {
+        // 走査はポインタを辿るキャッシュミスが律速になる。upper は lower 側の部分木を返し終えるまで使わないので、その間に読み込ませておく
+        branch.upper.prefetch();
         let dimension = branch.dimension;
         self.stack.push((
             &branch.upper,
