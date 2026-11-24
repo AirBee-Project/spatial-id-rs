@@ -99,7 +99,7 @@ mod tests {
     }
 
     proptest! {
-        /// 2つの Set の交差演算結果が共通ズームへ正規化した単一Segment集合の積集合と一致することを検証する。
+        /// 2つの Set の交差演算結果が共通ズームへ正規化した SingleId 集合の積集合と一致することを検証する。
         #[ignore]
         #[test]
         fn intersection_matches_between_two_sets(

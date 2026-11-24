@@ -34,7 +34,7 @@ mod tests {
     ///
     /// 木の枝刈り（`Node::overlapping_children_range`）が `target.x()[0]`/`[1]` を
     /// 単純な min/max として扱い、この折り返し規約（[`RangeId::set_x`]と同じ規約）を
-    /// 考慮していなかったため、折り返し範囲を渡すと本来ヒットするはずのSegmentを
+    /// 考慮していなかったため、折り返し範囲を渡すと本来ヒットするはずの空間IDを
     /// 見失うことがあった。
     #[test]
     fn get_range_handles_wrapped_x() {

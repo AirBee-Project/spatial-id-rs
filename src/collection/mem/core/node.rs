@@ -636,12 +636,12 @@ fn update_in_place<T: Clone, E>(
     mem::forget(guard);
     match result {
         Ok(value) => {
-            // SAFETY: 中身は取り出し済みなので、落とさずに上書きする
+            // SAFETY: 中身は移動済みのため、既存の値を drop せずに上書きする
             unsafe { ptr::write(inner, value) };
             Ok(arc)
         }
         Err(other) => {
-            // SAFETY: `ManuallyDrop<T>` は `T` と同じレイアウトなので、同じ確保として解放できる。取り出し済みの中身は落とさない
+            // SAFETY: `ManuallyDrop<T>` は `T` と同じレイアウトなので、元のメモリ確保として解放できる。移動済みの中身は drop しない
             drop(unsafe { Arc::from_raw(Arc::into_raw(arc).cast::<ManuallyDrop<T>>()) });
             Err(other)
         }
