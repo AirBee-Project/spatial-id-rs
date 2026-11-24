@@ -2,9 +2,12 @@ use crate::{SpatialId, SpatialIdSet};
 
 impl<S: SpatialId> FromIterator<S> for SpatialIdSet {
     fn from_iter<T: IntoIterator<Item = S>>(iter: T) -> Self {
-        let mut set = SpatialIdSet::new();
-        set.extend(iter);
-        set
+        Self {
+            inner: iter
+                .into_iter()
+                .flat_map(|id| id.flex_ids().map(|flex_id| (flex_id, ())))
+                .collect(),
+        }
     }
 }
 
