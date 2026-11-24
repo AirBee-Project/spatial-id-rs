@@ -17,7 +17,7 @@ impl Shape for Polygon {
     /// let p0 = Coordinate::new(35.0, 139.0, 10.0).unwrap();
     /// let p1 = Coordinate::new(35.0, 139.001, 10.0).unwrap();
     /// let p2 = Coordinate::new(35.001, 139.0, 10.0).unwrap();
-    /// let polygon = Polygon::new(vec![p0, p1, p2]);
+    /// let polygon = Polygon::new(vec![p0, p1, p2]).unwrap();
     ///
     /// let center = polygon.center();
     /// assert!(center.latitude() > 35.0);
@@ -58,9 +58,9 @@ impl CoverSingleIds for Polygon {
     /// # use spatial_id::geometry::CoverSingleIds;
     /// let p0 = Coordinate::new(35.0, 139.0, 10.0).unwrap();
     /// let p1 = Coordinate::new(35.0003, 139.0, 10.0).unwrap();
-    /// let p2 = Coordinate::new(35.0, 139.0003, 10.0).unwrap();
-    /// let p3 = Coordinate::new(35.0002, 139.0002, 10.3).unwrap();
-    /// let polygon = Polygon::new(vec![p0, p1, p2, p3]);
+    /// let p2 = Coordinate::new(35.0002, 139.0002, 10.3).unwrap();
+    /// let p3 = Coordinate::new(35.0, 139.0003, 10.0).unwrap();
+    /// let polygon = Polygon::new(vec![p0, p1, p2, p3]).unwrap();
     ///
     /// let ids: Vec<_> = polygon.cover_single_ids(20).unwrap().collect();
     /// assert!(ids.len() > 0);

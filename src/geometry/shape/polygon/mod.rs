@@ -1,19 +1,22 @@
 use alloc::vec::Vec;
 
 use crate::geometry::Epsilon;
-use crate::{Coordinate, Point};
+use crate::{Coordinate, Error, GeometryError, Point};
 
 pub mod geometry_relation;
 pub mod impls;
+mod ring_plane;
 
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Clone)]
-/// 3次元空間における多角形（ポリゴン）を表す型。
+use ring_plane::{project_ring_2d, validate_ring};
+
+#[derive(Debug, Clone, PartialEq)]
+/// 3 次元空間における多角形（ポリゴン）を表す型。
 ///
-/// 頂点リスト（[Coordinate] のVec）によって定義される平面的な領域を表現する。
-/// 生成時に頂点の重複排除などが行われ、幾何計算に適した状態に保たれる。
+/// 頂点リスト（[Coordinate] の Vec）で定義される平面的な領域を表す。
+/// 生成時に重複頂点を除き、自己交差と面積を検証するため、常に有効な形状のみが構築される。
 ///
 /// ![多角形][polygon]
 #[doc = doc_image!("polygon", "docs/images/polygon.jpg")]
@@ -22,36 +25,25 @@ pub struct Polygon {
 }
 
 impl Polygon {
-    /// 頂点座標のリストからデフォルト許容誤差（[`Epsilon::DEFAULT`]）を使用して新しい [Polygon] を作成。
+    /// 頂点座標のイテレータからデフォルト許容誤差（[`Epsilon::DEFAULT`]）を使って新しい [Polygon] を作成する。
     ///
-    /// # 処理内容
-    /// - 連続して重複している頂点（デフォルト許容誤差以内の距離）を1つに統合。
-    /// - 始点と終点が重複している場合（閉じたリング）、終点を削除して開いた頂点リストに正規化。
-    /// - 処理によって点の数が3未満だった場合は`Vec<Coordinate>`を空にする。
-    ///
-    /// # 引数
-    /// - `raw_points` - ポリゴンを構成する頂点のリスト。
-    pub fn new(raw_points: Vec<Coordinate>) -> Self {
+    /// # エラー
+    /// - 正規化後の頂点数が 3 未満の場合は [`GeometryError::PolygonTooFewVertices`] を返す。
+    /// - 面積が 0（共線など）の場合は [`GeometryError::PolygonZeroArea`] を返す。
+    /// - リングが自己交差している場合は [`GeometryError::PolygonSelfIntersecting`] を返す。
+    pub fn new(raw_points: impl IntoIterator<Item = Coordinate>) -> Result<Self, Error> {
         Self::with_epsilon(raw_points, Epsilon::DEFAULT)
     }
 
-    /// 頂点座標のリストと指定された許容誤差から新しい [Polygon] を作成。
-    ///
-    /// # 処理内容
-    /// - 連続して重複している頂点（`epsilon` 以内の距離）を1つに統合。
-    /// - 始点と終点が重複している場合（閉じたリング）、終点を削除して開いた頂点リストに正規化。
-    /// - 処理によって点の数が3未満だった場合は`Vec<Coordinate>`を空にする。
-    ///
-    /// # 引数
-    /// - `raw_points` - ポリゴンを構成する頂点のリスト。
-    /// - `epsilon` - 同一点とみなす許容誤差。
-    pub fn with_epsilon(raw_points: Vec<Coordinate>, epsilon: Epsilon) -> Self {
-        if raw_points.is_empty() {
-            return Self { vertices: vec![] };
-        }
-
-        let mut vertices: Vec<Coordinate> = Vec::new();
-        for point in raw_points {
+    /// 頂点座標のイテレータと指定した許容誤差から新しい [Polygon] を作成する。
+    pub fn with_epsilon(
+        raw_points: impl IntoIterator<Item = Coordinate>,
+        epsilon: Epsilon,
+    ) -> Result<Self, Error> {
+        let eps = epsilon.as_meters();
+        let iter = raw_points.into_iter();
+        let mut vertices: Vec<Coordinate> = Vec::with_capacity(iter.size_hint().0);
+        for point in iter {
             if vertices
                 .last()
                 .is_some_and(|last| last.eq_epsilon(&point, epsilon))
@@ -66,10 +58,16 @@ impl Polygon {
         }
 
         if vertices.len() < 3 {
-            return Self { vertices: vec![] };
+            return Err(GeometryError::PolygonTooFewVertices {
+                count: vertices.len(),
+            }
+            .into());
         }
 
-        Self { vertices }
+        let pts_2d = project_ring_2d(&vertices, eps)?;
+        validate_ring(&pts_2d, eps)?;
+
+        Ok(Self { vertices })
     }
 
     /// [Polygon]を構成する点を返す。

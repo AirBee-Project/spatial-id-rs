@@ -67,12 +67,12 @@ fn box_building(
     let tne = coord(ne_lat, ne_lon, alt_high);
     let tnw = coord(ne_lat, sw_lon, alt_high);
     Solid::new(vec![
-        Polygon::new(vec![bsw, bnw, bne, bse]), // 底面
-        Polygon::new(vec![tsw, tse, tne, tnw]), // 上面
-        Polygon::new(vec![bsw, bse, tse, tsw]), // 南面
-        Polygon::new(vec![bse, bne, tne, tse]), // 東面
-        Polygon::new(vec![bne, bnw, tnw, tne]), // 北面
-        Polygon::new(vec![bnw, bsw, tsw, tnw]), // 西面
+        Polygon::new(vec![bsw, bnw, bne, bse]).unwrap(), // 底面
+        Polygon::new(vec![tsw, tse, tne, tnw]).unwrap(), // 上面
+        Polygon::new(vec![bsw, bse, tse, tsw]).unwrap(), // 南面
+        Polygon::new(vec![bse, bne, tne, tse]).unwrap(), // 東面
+        Polygon::new(vec![bne, bnw, tnw, tne]).unwrap(), // 北面
+        Polygon::new(vec![bnw, bsw, tsw, tnw]).unwrap(), // 西面
     ])
     .expect("直方体は水密である")
 }
