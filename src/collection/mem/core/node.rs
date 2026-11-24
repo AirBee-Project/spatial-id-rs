@@ -69,6 +69,24 @@ pub(super) enum Decision {
 }
 
 impl<V> Node<V> {
+    /// 行き先が確保した Branch や Skip なら、その中身をキャッシュに読み込んでおく。
+    #[inline(always)]
+    pub(super) fn prefetch(&self) {
+        let ptr: *const u8 = match self {
+            Node::Branch(branch) | Node::ShortSkipBranch(_, branch) => Arc::as_ptr(branch).cast(),
+            Node::LongSkip(skip) => Arc::as_ptr(skip).cast(),
+            Node::Value(_) | Node::ShortSkipValue(..) => return,
+        };
+        #[cfg(target_arch = "x86_64")]
+        // SAFETY: プリフェッチは読み込みの予告だけで、アドレスの参照外しをしない
+        unsafe {
+            use core::arch::x86_64::{_MM_HINT_T0, _mm_prefetch};
+            _mm_prefetch::<_MM_HINT_T0>(ptr.cast());
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        let _ = ptr;
+    }
+
     /// 子孫に含まれる、値を持つ[FlexId]の数。
     pub(super) fn count(&self) -> u32 {
         match self {
