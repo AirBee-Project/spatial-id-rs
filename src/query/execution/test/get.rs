@@ -116,7 +116,7 @@ fn get_returns_only_existing_values() {
 
 /// `get` は時間軸でも絞り込む。
 ///
-/// 木の走査は時間Segmentの2分割境界で枝刈りするが、ターゲットの秒区間とSegment境界は一致するとは
+/// 木の走査は `TimeSegment` の2分割境界で枝刈りするが、ターゲットの秒区間と `TimeSegment` 境界は一致するとは
 /// 限らないので、はみ出した葉が残りうる。最終フィルタ（[`FlexId::intersects_range`]）が
 /// 時間を見ていないと、同じFlexIdの**別時刻の値**がそのまま返ってしまう。
 #[cfg(feature = "temporal_id")]
@@ -125,7 +125,7 @@ fn get_filters_by_time() {
     use crate::{Interval, SingleId, SpatialIdMap};
     use alloc::collections::BTreeSet;
 
-    let time_segment = |t: u64| {
+    let hour_id = |t: u64| {
         SingleId::new(10, 0, 5, 5)
             .unwrap()
             .time_with(Interval::HOUR, t)
@@ -133,10 +133,10 @@ fn get_filters_by_time() {
     };
 
     let mut table: SpatialIdMap<i32> = SpatialIdMap::new();
-    table.insert(time_segment(0), 1); // [0, 3600)
-    table.insert(time_segment(10), 2); // [36000, 39600)
+    table.insert(hour_id(0), 1); // [0, 3600)
+    table.insert(hour_id(10), 2); // [36000, 39600)
 
-    for (target, expected) in [(time_segment(0), 1), (time_segment(10), 2)] {
+    for (target, expected) in [(hour_id(0), 1), (hour_id(10), 2)] {
         let values: BTreeSet<i32> = table
             .clone()
             .query()

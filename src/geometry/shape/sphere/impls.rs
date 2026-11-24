@@ -74,7 +74,7 @@ impl CoverSingleIds for Sphere {
     }
 }
 
-/// ズームレベル `z` における、水平方向（X/Y、値は同じ）のボクセル1辺の長さ`[m]`。
+/// ズームレベル `z` における、水平方向（X/Y、値は同じ）の `SingleId` 1辺の長さ`[m]`。
 ///
 /// 赤道周長 `2πa` をズームレベルで等分した値。
 fn voxel_length_xy(z: u8) -> f64 {

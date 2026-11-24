@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 fn zoom_out_average_8_children() {
     let mut table = SpatialIdMap::<i32>::new();
 
-    // Z=20 の同じ親（Z=19）に属する8つのボクセルを配置
+    // Z=20 の同じ親（Z=19）に属する8つの SingleId を配置
     // 親IDは (z: 19, f: 0, x: 0, y: 0) になるように、子IDの x, y は 0 または 1 にする
     let id_000 = SingleId::new(20, 0, 0, 0).unwrap();
     let id_001 = SingleId::new(20, 0, 0, 1).unwrap();
@@ -46,7 +46,7 @@ fn zoom_out_average_8_children() {
 fn zoom_out_max_partial_children() {
     let mut table = SpatialIdMap::<i32>::new();
 
-    // 親が同じ 3つのボクセルだけ配置
+    // 親が同じ 3つの SingleId だけ配置
     let id_000 = SingleId::new(20, 0, 0, 0).unwrap();
     let id_011 = SingleId::new(20, 0, 1, 1).unwrap();
     let id_111 = SingleId::new(20, 1, 1, 1).unwrap();

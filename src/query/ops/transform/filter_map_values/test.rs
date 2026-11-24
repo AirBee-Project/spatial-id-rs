@@ -2,14 +2,14 @@ use alloc::string::{String, ToString};
 
 use crate::{SingleId, Source, SpatialIdMap};
 
-fn time_segment(x: u32) -> SingleId {
+fn single_at_x(x: u32) -> SingleId {
     SingleId::new(20, 0, x, 200).unwrap()
 }
 
 fn int_table() -> SpatialIdMap<i32> {
     let mut t = SpatialIdMap::new();
-    t.insert(time_segment(10), 1);
-    t.insert(time_segment(11), 15);
+    t.insert(single_at_x(10), 1);
+    t.insert(single_at_x(11), 15);
     t
 }
 
@@ -83,14 +83,14 @@ fn map_values_via_partial_get() {
     let query = int_table().query().map_values(|v: i32| v > 10);
 
     let got: alloc::vec::Vec<bool> = query
-        .get(time_segment(11))
+        .get(single_at_x(11))
         .map(Result::unwrap)
         .map(|(_, v)| v)
         .collect();
     assert_eq!(got, alloc::vec![true]);
 
     let got: alloc::vec::Vec<bool> = query
-        .get(time_segment(10))
+        .get(single_at_x(10))
         .map(Result::unwrap)
         .map(|(_, v)| v)
         .collect();

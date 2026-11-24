@@ -27,7 +27,7 @@ fn tetrahedron(p0: Coordinate, p1: Coordinate, p2: Coordinate, p3: Coordinate) -
 mod cover_single_ids {
     use super::*;
 
-    /// 小さな四面体（辺 ~111m）の内部ボクセルを変換する
+    /// 小さな四面体（辺 ~111m）の内部を含む `SingleId` へ変換する
     #[test]
     fn small_tetrahedron_at_z16() {
         let p0 = Coordinate::new(35.000, 139.000, 10.0).unwrap();

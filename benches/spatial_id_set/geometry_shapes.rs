@@ -85,11 +85,11 @@ fn bench_sphere(c: &mut Criterion) {
     let center = coord(BASE_LAT, BASE_LON, 0.0);
 
     // (半径[m], ズームレベル, ラベル)
-    // 半径とズームは生成されるボクSegment数が非自明になるよう選択:
-    //   r=30m  z=20 → ボクSegmentサイズ ~38m → 軸方向 ~2–8 ボクSegment
-    //   r=100m z=18 → ボクSegmentサイズ ~153m → 軸方向 ~1.3 ボクSegment
-    //   r=100m z=20 → ボクSegmentサイズ ~38m  → 軸方向 ~5 ボクSegment
-    //   r=300m z=18 → z=18 で軸方向 ~4 ボクSegment
+    // 半径とズームは生成される SingleId（標準空間ID）数が非自明になるよう選択:
+    //   r=30m  z=20 → SingleId の1辺 ~38m → 軸方向 ~2–8 個
+    //   r=100m z=18 → SingleId の1辺 ~153m → 軸方向 ~1.3 個
+    //   r=100m z=20 → SingleId の1辺 ~38m  → 軸方向 ~5 個
+    //   r=300m z=18 → z=18 で軸方向 ~4 個
     let cases: &[(f64, u8, &str)] = &[
         (30.0, 20, "dome_r30m_z20"),
         (100.0, 18, "dome_r100m_z18"),
@@ -199,7 +199,7 @@ fn bench_building(c: &mut Criterion) {
 /// 6 棟の直方体ビルを 1 つの SpatialIdSet に挿入して 3×2 都市ブロックを構築する。
 ///
 /// ビル中心間隔は約 44m、フットプリント約 33m のため路地が約 11m 残る。
-/// 高さは 30〜80m で変化させてビルごとのボクSegment数に差をつける。
+/// 高さは 30〜80m で変化させてビルごとの SingleId 数に差をつける。
 fn make_urban_block(z: u8) -> SpatialIdSet {
     const STEP: f64 = 0.0004; // ビル中心間 ~44m
     const HALF: f64 = 0.00015; // ビルフットプリントの半幅 ~17m
