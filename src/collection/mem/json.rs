@@ -414,7 +414,7 @@ mod tests {
         );
 
         let json = serde_json::to_string(&table).unwrap();
-        // 暦に無い 1800 秒は分へ落ちる。断片（`"i":8` など）にはならない。
+        // 暦に無い 1800 秒は分（60秒）単位で表される。断片（`"i":8` など）にはならない。
         assert!(json.contains("\"i\":60"), "i が暦単位でない: {json}");
         assert!(
             json.contains("\"t\":[24291360,24291389]"),

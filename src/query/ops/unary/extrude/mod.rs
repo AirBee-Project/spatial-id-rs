@@ -60,7 +60,7 @@ where
     }
 
     fn run<'a>(&'a self, input: QueryIter<'a, V>) -> Result<QueryIter<'a, V>, Error> {
-        // 引き延ばす軸を (0, 0) に潰して先に集約することで、展開後の分割数倍のソートとマージを省く
+        // 引き延ばす軸を (0, 0) に潰して先に集約することで、展開後の分割数ぶんのソートとマージを省く
         let mut projected: Vec<(FlexId, V)> = Vec::new();
         for item in input {
             let (id, v) = item?;

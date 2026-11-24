@@ -36,7 +36,7 @@ impl From<&SingleId> for RangeId {
             x: [id.x(), id.x()],
             y: [id.y(), id.y()],
 
-            // 単一の標準空間IDは範囲の退化した形なので常に変換できる。
+            // 単一の標準空間IDは両端が同じ範囲として表せるため、常に変換できる。
             i: id.i(),
             #[cfg(feature = "temporal_id")]
             t: [id.t(), id.t()],

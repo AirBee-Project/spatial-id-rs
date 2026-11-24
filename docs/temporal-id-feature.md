@@ -113,7 +113,7 @@ FlexTree は時間を「2の冪乗の秒数を持つ `TimeSegment`」として�
    `1800` / `7200` / `300` のような任意秒数もそのまま戻る。
 
 さらに、`RangeId` / `SingleId` を書き出す経路（`flat_single_ids` と JSON 直列化）では、
-書き出す前に**`FlexId` と値が同じで時間が隣接する `TimeSegment` を結合**する
+書き出す前に **`FlexId` と値が同じで時間が隣接する `TimeSegment` を結合** する
 （`flex_tree::time_reconstruct::reconstruct_temporal`）。これにより、分解された5個の `TimeSegment` が元の
 `[start, end)` に戻り、上記2の `gcd` によって `1800/809712` がそのまま復元される。
 

@@ -81,7 +81,7 @@ impl AllowedIntervals {
     ///
     /// `temporal_id` feature が無効なビルドでは、暦の定数（[`Interval::DAY`] など）
     /// 自体が存在しないため、この関数も**存在しない**（[`Interval::HOUR`] などと同じ扱い）。
-    /// `{WHOLE}` だけの集合へ黙って縮退させることはしない。無効時でも候補集合が欲しい場合は
+    /// `{WHOLE}` だけの集合を暗黙に返すことはしない。無効時でも候補集合が欲しい場合は
     /// [`AllowedIntervals::default`] を使う（`{WHOLE}` を明示的に返す）。
     ///
     /// # なぜ `&'static` を返すのか
@@ -90,10 +90,10 @@ impl AllowedIntervals {
     /// **一時値のまま直接渡せる**ようにするためである。所有値を返していた頃は
     ///
     /// ```text
-    /// let ids = set.reconstructed_time_ranges(Some(&AllowedIntervals::calendar()));  // 一時値が文末で死ぬ
+    /// let ids = set.reconstructed_time_ranges(Some(&AllowedIntervals::calendar()));  // 一時値のライフタイムが文末で切れる
     /// ```
     ///
-    /// が書けず、コレクションごとに `range_ids_calendar()` のような別名を生やして
+    /// が書けず、コレクションごとに `range_ids_calendar()` のような専用メソッドを追加して
     /// 内側で `collect` する必要があった（＝遅延評価が失われていた）。
     ///
     /// ```
@@ -103,7 +103,7 @@ impl AllowedIntervals {
     /// let intervals = AllowedIntervals::calendar();
     /// // 2時間ぶんは「1時間 × 2区間」として表される（`gcd` なら `7200秒 × 1区間`）。
     /// assert_eq!(intervals.coarsest_dividing(0, 7200), Interval::HOUR);
-    /// // 暦で割り切れない区間は秒まで落ちる。
+    /// // 暦で割り切れない区間は秒単位で表される。
     /// assert_eq!(intervals.coarsest_dividing(30, 90), Interval::SECOND);
     /// # }
     /// ```
@@ -234,7 +234,7 @@ mod tests {
         assert_eq!(intervals.coarsest_dividing(0, 7_200), Interval::HOUR);
         // 30分ぶん
         assert_eq!(intervals.coarsest_dividing(0, 1_800), Interval::MINUTE);
-        // 暦で表せない端数は秒まで落ちる
+        // 暦で表せない端数は秒単位が選ばれる
         assert_eq!(intervals.coarsest_dividing(30, 90), Interval::SECOND);
     }
 
@@ -384,7 +384,7 @@ mod collection_api {
     /// 時間を持たない ID は、候補集合を渡しても全時間のまま。
     ///
     /// 暦の単位はどれも `2^35` を割り切らないので、`WHOLE` が候補に無いと
-    /// `_1/0:34359738367`（343億区間）に化ける。
+    /// `_1/0:34359738367`（343億区間）になってしまう。
     #[test]
     fn whole_time_ids_are_untouched() {
         let mut set = SpatialIdSet::new();
@@ -402,7 +402,7 @@ mod collection_api {
         }
     }
 
-    /// 仕様書の例（1800秒）は、既定なら往復し、暦に正規化すると分（60秒）へ落ちる。
+    /// 仕様書の例（1800秒）は、既定ならそのまま復元され、暦に正規化すると分（60秒）単位になる。
     #[test]
     fn spec_example_under_each_policy() {
         let original = SingleId::new(12, 0, 3638, 1614)

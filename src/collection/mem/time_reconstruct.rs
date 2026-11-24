@@ -246,10 +246,10 @@ mod tests {
         assert_eq!(merged.len(), 1);
         assert_eq!((merged[0].0.i().seconds(), merged[0].0.t()), (3600, [0, 1]));
 
-        // 候補が区間を割り切れないときは、必ず含まれる SECOND まで落ちる。
-        // 候補集合が貧しいと区間数が爆発することを示す例でもある
+        // いずれの候補も区間を割り切れないときは、必ず候補に含まれる SECOND が選ばれる。
+        // 適切な粒度の候補が足りないと細かく分割され、区間数が大幅に増えることを示す例でもある
         // （1時間 = 3600 区間）。実用では `AllowedIntervals::calendar()` のように
-        // 粒度の階段を用意しておくこと。
+        // 複数の粒度を用意しておくこと。
         let mut entries: Vec<(FlexId, u8)> = Vec::new();
         entries.extend(
             SingleId::new(12, 0, 3638, 1614)
