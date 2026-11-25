@@ -869,7 +869,7 @@ std::thread_local! {
     static LIVE_TRACKED: core::cell::Cell<isize> = const { core::cell::Cell::new(0) };
 }
 
-/// 生きている数を数える値。Node を確保し直さずに書き換えても、二重に解放せず、漏らしもしないことを確かめる。
+/// 生存中のインスタンス数を数える型。Node を再確保せずに書き換えても、二重解放や解放漏れが起きないことを検証する。
 #[derive(Debug, PartialEq)]
 struct Tracked(u64);
 
@@ -922,7 +922,7 @@ fn values_are_dropped_exactly_once() {
     assert_eq!(LIVE_TRACKED.with(core::cell::Cell::get), 0);
 }
 
-/// `common_descent` を1段ずつ降りて求める素朴な版。行き先 `a` の外へは降りない。
+/// `common_descent` を1段ずつ辿って求める単純な参照実装。行き先 `a` の外へは辿らない。
 fn common_descent_stepwise(
     this: &FlexId,
     a: (&FlexId, DimensionSet),

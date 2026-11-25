@@ -39,7 +39,7 @@ mod tests {
         );
     }
 
-    /// 削除は呼び出した時点で済み、どちらの版でも同じ内容が取り除かれる。
+    /// 削除は呼び出した時点で完了し、`remove` と `remove_flex_ids` のどちらでも同じ内容が取り除かれる。
     #[test]
     fn remove_variants_remove_the_same_content() {
         let target = RangeId::new(5, [0, 2], [2, 5], [2, 3]).unwrap();

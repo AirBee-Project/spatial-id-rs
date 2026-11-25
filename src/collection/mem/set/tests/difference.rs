@@ -96,7 +96,7 @@ mod tests {
     }
 
     proptest! {
-        /// 2つの Set の差集合演算結果が共通ズームへ正規化した単一Segment集合の差集合と一致することを検証する。
+        /// 2つの Set の差集合演算結果が共通ズームへ正規化した SingleId 集合の差集合と一致することを検証する。
         #[ignore]
         #[test]
         fn difference_matches_between_two_sets(

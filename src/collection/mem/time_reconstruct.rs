@@ -14,7 +14,7 @@ fn spatial_key_u128(id: &FlexId) -> u128 {
         | (id.y_index() as u128)
 }
 
-/// 時間方向に隣接するSegmentを遅延評価で結合するイテレータ。
+/// 時間方向に隣接する [`FlexId`] を遅延評価で結合するイテレータ。
 pub struct TimeReconstructor<'a, I, V>
 where
     I: Iterator<Item = (FlexId, V)>,
@@ -71,11 +71,11 @@ where
     }
 }
 
-/// 時間方向に隣接するSegmentを結合し、[`RangeId`] の列として返す。
+/// 時間方向に隣接する [`FlexId`] を結合し、[`RangeId`] の列として返す。
 ///
 /// `allowed_intervals` に[`AllowedIntervals`]を渡すと、結合後の秒区間を**その候補のうち最も粗い単位**で
-/// 表し直す（Segment数が候補の中で最小になる）。[`None`] の場合は「その区間を表せる最も粗い単位」
-/// （`gcd(開始秒, 幅)`）になり、Segment数は常に1になる。
+/// 表し直す（区間数が候補の中で最小になる）。[`None`] の場合は「その区間を表せる最も粗い単位」
+/// （`gcd(開始秒, 幅)`）になり、区間数は常に1になる。
 ///
 /// [`AllowedIntervals`] は必ず全区間を表せる候補を含むので、**この関数は失敗しない**。
 ///
@@ -99,14 +99,14 @@ where
 
 /// `rows` を時間方向に結合した [`RangeId`] として読み出す。
 ///
-/// FlexId の Z-order 列では、同じ空間の時間Segmentが連続するとは限らない。時間で分割された
-/// Segmentがあるときだけ `(空間, 開始秒)` 順に並べ直してから結合し、無ければ集めずに流す。
+/// FlexId の Z-order 列では、同じ空間の `TimeSegment` が連続するとは限らない。時間で分割された
+/// 要素があるときだけ `(空間, 開始秒)` 順に並べ直してから結合し、無ければ集めずに流す。
 pub(crate) fn reconstruct<'a, V: PartialEq + 'a>(
     rows: impl Iterator<Item = (FlexId, V)> + 'a,
     has_temporal_split: bool,
     allowed_intervals: Option<&'a AllowedIntervals>,
 ) -> impl Iterator<Item = (RangeId, V)> + 'a {
-    // WHY: FlexId の Z-order 列では空間領域で先に分割された場合、時間Segmentが交互に現れて連続しない。
+    // WHY: FlexId の Z-order 列では空間領域で先に分割された場合、`TimeSegment` が交互に現れて連続しない。
     // 連続した時間ブロックへ結合するためには、(空間, 開始秒) の順にソートする必要がある。
     // そのため、時間方向の分割がある場合のみ O(N) のメモリを確保して全要素を Vec に集め、ソートしてから結合する。
     let (sorted, lazy) = if has_temporal_split {
@@ -137,9 +137,9 @@ fn finish<V>(
     let range = TimeSpan::new(start, end)
         .expect("結合した秒区間は空でない")
         .apply_to(RangeId::from(key))
-        .expect("結合した秒区間は元のSegmentの和なので常に有効");
+        .expect("結合した秒区間は元のTimeSegmentの和なので常に有効");
 
-    // 候補集合が指定されていれば、その中で最も粗い（＝Segment数が最小の）単位へ表し直す。
+    // 候補集合が指定されていれば、その中で最も粗い（＝区間数が最小の）単位へ表し直す。
     // `AllowedIntervals` は必ず全区間を表せる候補を含むので、この `time_relabel` は失敗しない。
     let range = match allowed_intervals {
         None => range,
@@ -185,73 +185,73 @@ mod tests {
             .time_with(1800, 809712)
             .unwrap();
 
-        let time_segments: Vec<_> = original.flex_ids().map(|id| (id, 1u8)).collect();
+        let entries: Vec<_> = original.flex_ids().map(|id| (id, 1u8)).collect();
         assert!(
-            time_segments.len() > 1,
-            "1800秒は複数の2分岐Segmentへ分解されるはず"
+            entries.len() > 1,
+            "1800秒は複数のTimeSegmentへ分解されるはず"
         );
 
-        let merged = reconstruct_temporal_vec(time_segments, None);
+        let merged = reconstruct_temporal_vec(entries, None);
         assert_eq!(merged.len(), 1, "結合されて1件になるはず");
         assert_eq!(merged[0].0.to_string(), "12/0/3638/1614_1800/809712");
     }
 
-    /// 値が違うSegmentは結合しない。
+    /// 値が違う要素は結合しない。
     #[test]
     fn does_not_merge_across_different_values() {
         let base = SingleId::new(12, 0, 3638, 1614).unwrap();
         let a = base.time_with(Interval::HOUR, 0).unwrap();
         let b = base.time_with(Interval::HOUR, 1).unwrap();
 
-        let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
-        time_segments.extend(a.flex_ids().map(|id| (id, 1u8)));
-        time_segments.extend(b.flex_ids().map(|id| (id, 2u8)));
+        let mut entries: Vec<(FlexId, u8)> = Vec::new();
+        entries.extend(a.flex_ids().map(|id| (id, 1u8)));
+        entries.extend(b.flex_ids().map(|id| (id, 2u8)));
 
-        let merged = reconstruct_temporal_vec(time_segments, None);
+        let merged = reconstruct_temporal_vec(entries, None);
         assert_eq!(merged.len(), 2);
         assert_eq!(merged[0].0.seconds_range(), (0, 3600));
         assert_eq!(merged[1].0.seconds_range(), (3600, 7200));
     }
 
-    /// 同じ値なら、隣接する2つの時間Segmentは1つに融合する。
+    /// 同じ値なら、隣接する2つの `TimeSegment` は1つに融合する。
     #[test]
     fn merges_adjacent_segments_with_the_same_value() {
         let base = SingleId::new(12, 0, 3638, 1614).unwrap();
         let a = base.time_with(Interval::HOUR, 0).unwrap();
         let b = base.time_with(Interval::HOUR, 1).unwrap();
 
-        let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
-        time_segments.extend(a.flex_ids().map(|id| (id, 7u8)));
-        time_segments.extend(b.flex_ids().map(|id| (id, 7u8)));
+        let mut entries: Vec<(FlexId, u8)> = Vec::new();
+        entries.extend(a.flex_ids().map(|id| (id, 7u8)));
+        entries.extend(b.flex_ids().map(|id| (id, 7u8)));
 
-        let merged = reconstruct_temporal_vec(time_segments, None);
+        let merged = reconstruct_temporal_vec(entries, None);
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].0.seconds_range(), (0, 7200));
-        // gcd(0, 7200) = 7200 なので「2時間」という単位で1Segmentになる。
+        // gcd(0, 7200) = 7200 なので「2時間」という単位で1区間になる。
         assert_eq!((merged[0].0.i().seconds(), merged[0].0.t()), (7200, [0, 0]));
     }
 
-    /// 候補集合を渡すと、その中で最も粗い（＝Segment数が最小の）単位が選ばれる。
+    /// 候補集合を渡すと、その中で最も粗い（＝区間数が最小の）単位が選ばれる。
     #[test]
     fn candidate_set_picks_the_coarsest_unit() {
         let base = SingleId::new(12, 0, 3638, 1614).unwrap();
         let a = base.time_with(Interval::HOUR, 0).unwrap();
         let b = base.time_with(Interval::HOUR, 1).unwrap();
 
-        let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
-        time_segments.extend(a.flex_ids().map(|id| (id, 7u8)));
-        time_segments.extend(b.flex_ids().map(|id| (id, 7u8)));
+        let mut entries: Vec<(FlexId, u8)> = Vec::new();
+        entries.extend(a.flex_ids().map(|id| (id, 7u8)));
+        entries.extend(b.flex_ids().map(|id| (id, 7u8)));
 
-        let merged = reconstruct_temporal_vec(time_segments, Some(AllowedIntervals::calendar()));
+        let merged = reconstruct_temporal_vec(entries, Some(AllowedIntervals::calendar()));
         assert_eq!(merged.len(), 1);
         assert_eq!((merged[0].0.i().seconds(), merged[0].0.t()), (3600, [0, 1]));
 
-        // 候補が区間を割り切れないときは、必ず含まれる SECOND まで落ちる。
-        // 候補集合が貧しいとSegment数が爆発することを示す例でもある
-        // （1時間 = 3600 TimeSegment）。実用では `AllowedIntervals::calendar()` のように
-        // 粒度の階段を用意しておくこと。
-        let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
-        time_segments.extend(
+        // いずれの候補も区間を割り切れないときは、必ず候補に含まれる SECOND が選ばれる。
+        // 適切な粒度の候補が足りないと細かく分割され、区間数が大幅に増えることを示す例でもある
+        // （1時間 = 3600 区間）。実用では `AllowedIntervals::calendar()` のように
+        // 複数の粒度を用意しておくこと。
+        let mut entries: Vec<(FlexId, u8)> = Vec::new();
+        entries.extend(
             SingleId::new(12, 0, 3638, 1614)
                 .unwrap()
                 .time_with(Interval::HOUR, 0)
@@ -260,15 +260,15 @@ mod tests {
                 .map(|id| (id, 7u8)),
         );
         let merged =
-            reconstruct_temporal_vec(time_segments, Some(&AllowedIntervals::new([Interval::DAY])));
+            reconstruct_temporal_vec(entries, Some(&AllowedIntervals::new([Interval::DAY])));
         assert_eq!((merged[0].0.i().seconds(), merged[0].0.t()), (1, [0, 3599]));
         // 秒区間そのものは変わらない。
         assert_eq!(merged[0].0.seconds_range(), (0, 3600));
     }
 
-    /// FlexIdが違えば、時間が連続していても結合しない。
+    /// 空間部分が違えば、時間が連続していても結合しない。
     #[test]
-    fn does_not_merge_across_different_segments() {
+    fn does_not_merge_across_different_spatial_ids() {
         let a = SingleId::new(12, 0, 3638, 1614)
             .unwrap()
             .time_with(Interval::HOUR, 0)
@@ -278,21 +278,21 @@ mod tests {
             .time_with(Interval::HOUR, 1)
             .unwrap();
 
-        let mut time_segments: Vec<(FlexId, u8)> = Vec::new();
-        time_segments.extend(a.flex_ids().map(|id| (id, 7u8)));
-        time_segments.extend(b.flex_ids().map(|id| (id, 7u8)));
+        let mut entries: Vec<(FlexId, u8)> = Vec::new();
+        entries.extend(a.flex_ids().map(|id| (id, 7u8)));
+        entries.extend(b.flex_ids().map(|id| (id, 7u8)));
 
-        assert_eq!(reconstruct_temporal_vec(time_segments, None).len(), 2);
+        assert_eq!(reconstruct_temporal_vec(entries, None).len(), 2);
     }
 
-    /// 時間を使っていない場合は入力と1対1で対応する（全時間Segmentはそのまま）。
+    /// 時間を使っていない場合は入力と1対1で対応する（全時間の要素はそのまま）。
     #[test]
     fn passes_through_when_no_temporal_information() {
-        let time_segments: Vec<(FlexId, u8)> = (0..4u32)
+        let entries: Vec<(FlexId, u8)> = (0..4u32)
             .map(|x| (FlexId::new(3, 0, 3, x, 3, 0).unwrap(), 1u8))
             .collect();
 
-        let merged = reconstruct_temporal_vec(time_segments, None);
+        let merged = reconstruct_temporal_vec(entries, None);
         assert_eq!(merged.len(), 4);
         assert!(merged.iter().all(|(id, _)| id.time_is_whole()));
     }

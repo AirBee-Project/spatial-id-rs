@@ -95,7 +95,7 @@ mod tests {
     }
 
     proptest! {
-        /// 2つの Set の和集合演算結果が共通ズームへ正規化した単一Segment集合の和集合と一致することを検証する。
+        /// 2つの Set の和集合演算結果が共通ズームへ正規化した SingleId 集合の和集合と一致することを検証する。
         #[ignore]
         #[test]
         fn union_matches_between_two_sets(

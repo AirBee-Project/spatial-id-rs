@@ -14,7 +14,7 @@ mod tests {
                 SingleId::new(ZoomLevel::MAX.get(), ZoomLevel::MAX.f_max() - i, 0, 0).unwrap();
             set.insert(single_id);
         }
-        // 10 個は F 方向に隣接（x=y=0 固定）し、異方 collapse で圧縮される
+        // 10 個は F 方向に隣接（x=y=0 固定）し、F 方向の集約（collapse）で圧縮される
         // （被覆は保たれたまま count は減る）。
         assert_eq!(2, set.count());
 
