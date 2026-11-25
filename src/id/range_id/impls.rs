@@ -170,7 +170,7 @@ impl SpatialId for RangeId {
         //Z=25のとき、ちょうど高さが1mとなる
         let one = libm::pow(2_f64, (25 - self.z() as i32) as f64);
 
-        //このRangeIdが表すSegment数を計算（両端含む）
+        //このRangeIdがF方向に占める単位数を計算（両端含む）
         let range = (self.f()[1] - self.f()[0] + 1) as f64;
 
         //かけ合わせて答えを返却
