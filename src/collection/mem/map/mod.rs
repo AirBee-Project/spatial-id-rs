@@ -1,4 +1,5 @@
 use crate::collection::core::{FlexTreeCore, IntoIter};
+use crate::collection::traits::{into_flex_ids, into_range_ids};
 use alloc::collections::BTreeSet;
 use core::iter::Map;
 use core::ops::RangeBounds;
@@ -9,7 +10,7 @@ pub(crate) mod par;
 #[cfg(test)]
 mod test;
 
-use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId, ZoomLevel};
+use crate::{AllowedIntervals, FlexId, IntoSpatialIds, RangeId, SingleId, SpatialId, ZoomLevel};
 
 /// 空間IDごとに値を持つマップ。
 ///
@@ -45,8 +46,8 @@ where
     V: PartialEq + Clone,
 {
     /// 空間に値を挿入する。既に値がある場所は上書きされる。
-    pub fn insert<T: SpatialId>(&mut self, target: T, value: V) {
-        self.inner.insert(target.flex_ids(), value);
+    pub fn insert<T: IntoSpatialIds>(&mut self, target: T, value: V) {
+        self.inner.insert(into_flex_ids(target), value);
     }
 
     #[cfg(feature = "unstable")]
@@ -87,24 +88,21 @@ where
     }
 
     /// まだ値のない場所にだけ挿入する（Upsert）。既に値がある場所はそのまま保つ。
-    pub fn upsert<T: SpatialId>(&mut self, target: T, value: V) {
+    pub fn upsert<T: IntoSpatialIds>(&mut self, target: T, value: V) {
         self.insert_with(target, value, |existing, _| existing.clone());
     }
 
     /// `target` の領域に `value` を挿入する。既に値がある場所は `resolve(既存の値, value)` にする。
     ///
-    pub fn insert_with(&mut self, target: impl SpatialId, value: V, resolve: impl Fn(&V, &V) -> V) {
-        self.inner.insert_with(target.flex_ids(), value, resolve);
-    }
-
-    /// [`insert_with`](Self::insert_with) と同じだが、[`FlexId`] の列を渡せる。列の各領域へ同じ `value` を、複製せずに書き込む。
-    pub fn insert_with_flex_ids(
+    /// `target` 内の複数要素が重なる場合、重なり箇所には要素ごとに順次 `resolve` が適用される。
+    pub fn insert_with(
         &mut self,
-        target: impl IntoIterator<Item = FlexId>,
+        target: impl IntoSpatialIds,
         value: V,
         resolve: impl Fn(&V, &V) -> V,
     ) {
-        self.inner.insert_with(target, value, resolve);
+        self.inner
+            .insert_with(into_flex_ids(target), value, resolve);
     }
 
     /// `other` を重ねる。両方に値がある場所は `resolve(self の値, other の値)` にする。
@@ -134,7 +132,9 @@ where
     }
 
     /// 指定した空間と重なる領域を、指定した空間との共通部分に切り取って値への参照とともに返す。
-    pub fn get<'a, T: SpatialId + 'a>(
+    ///
+    /// `target` の各要素が互いに重ならなければ、返す領域も互いに重ならない。
+    pub fn get<'a, T: IntoSpatialIds + 'a>(
         &'a self,
         target: T,
     ) -> impl Iterator<Item = (RangeId, &'a V)> + 'a {
@@ -143,17 +143,17 @@ where
     }
 
     /// [`get`](Self::get) と同じだが、結果を [`FlexId`] で返す。
-    pub fn get_flex_ids<'a, T: SpatialId + 'a>(
+    pub fn get_flex_ids<'a, T: IntoSpatialIds + 'a>(
         &'a self,
         target: T,
     ) -> impl Iterator<Item = (FlexId, &'a V)> + 'a {
-        self.inner.get(target.flex_ids())
+        self.inner.get(into_flex_ids(target))
     }
 
     /// 指定した空間（target）をツリーからくり抜き、削除された領域とその値を返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターはテーブルを借用しない。
-    pub fn remove<T: SpatialId>(
+    pub fn remove<T: IntoSpatialIds>(
         &mut self,
         target: T,
     ) -> impl Iterator<Item = (RangeId, V)> + use<T, V> {
@@ -162,13 +162,13 @@ where
     }
 
     /// [`remove`](Self::remove) と同じだが、削除した領域を [`FlexId`] で返す。
-    pub fn remove_flex_ids<T: SpatialId>(&mut self, target: T) -> IntoIter<V> {
-        self.inner.remove(target.flex_ids()).into_iter()
+    pub fn remove_flex_ids<T: IntoSpatialIds>(&mut self, target: T) -> IntoIter<V> {
+        self.inner.remove(into_flex_ids(target)).into_iter()
     }
 
     /// [`get`](Self::get) と異なり切り取りを行わず、target と重なった
     /// 空間IDと値をそのまま返す。
-    pub fn get_overlapping<T: SpatialId>(
+    pub fn get_overlapping<T: IntoSpatialIds>(
         &self,
         target: T,
     ) -> impl Iterator<Item = (RangeId, &V)> + '_ {
@@ -177,18 +177,18 @@ where
     }
 
     /// [`get_overlapping`](Self::get_overlapping) と同じだが、結果を [`FlexId`] で返す。
-    pub fn get_overlapping_flex_ids<T: SpatialId>(
+    pub fn get_overlapping_flex_ids<T: IntoSpatialIds>(
         &self,
         target: T,
     ) -> impl Iterator<Item = (FlexId, &V)> + '_ {
-        self.inner.get_overlapping([target])
+        self.inner.get_overlapping(into_range_ids(target))
     }
 
     /// [`remove`](Self::remove) と異なり切り取りを行わず、target と重なった
     /// 空間IDと値をそのまま取り除いて返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターはテーブルを借用しない。
-    pub fn remove_overlapping<T: SpatialId>(
+    pub fn remove_overlapping<T: IntoSpatialIds>(
         &mut self,
         target: T,
     ) -> impl Iterator<Item = (RangeId, V)> + use<T, V> {
@@ -197,8 +197,10 @@ where
     }
 
     /// [`remove_overlapping`](Self::remove_overlapping) と同じだが、削除した領域を [`FlexId`] で返す。
-    pub fn remove_overlapping_flex_ids<T: SpatialId>(&mut self, target: T) -> IntoIter<V> {
-        self.inner.remove_overlapping(target.flex_ids()).into_iter()
+    pub fn remove_overlapping_flex_ids<T: IntoSpatialIds>(&mut self, target: T) -> IntoIter<V> {
+        self.inner
+            .remove_overlapping(into_flex_ids(target))
+            .into_iter()
     }
 
     /// 指定した空間IDと面で接している空間IDと値への参照を重複なく返す。入力された空間ID自身と重なる要素は除外する。

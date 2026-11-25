@@ -1,5 +1,6 @@
 use crate::collection::core::{FlexTreeCore, IntoIter};
-use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId, ZoomLevel};
+use crate::collection::traits::{into_flex_ids, into_range_ids};
+use crate::{AllowedIntervals, FlexId, IntoSpatialIds, RangeId, SingleId, SpatialId, ZoomLevel};
 use core::iter::Map;
 pub(crate) mod convert;
 pub(crate) mod impls;
@@ -38,7 +39,7 @@ impl SpatialIdSet {
         SpatialIdSet::default()
     }
 
-    /// 集合に対して空間IDを挿入する。[SpatialId] Traitが実装されていれば挿入ができる。
+    /// 集合に対して空間IDを挿入する。[`IntoSpatialIds`] を実装する単一の空間IDや列などを渡せる。
     /// 挿入した際に重なりがある空間IDが既に存在する場合は自動的に重なりを解消する。
     ///
     /// # Examples
@@ -61,56 +62,67 @@ impl SpatialIdSet {
     /// let flex = FlexId::new(23, 0, 24, 7451089, 23, 3303245).unwrap();
     /// set.insert(flex);
     /// ```
-    pub fn insert<S: SpatialId>(&mut self, target: S) {
-        self.inner.insert(target.flex_ids(), ());
+    pub fn insert<S: IntoSpatialIds>(&mut self, target: S) {
+        self.inner.insert(into_flex_ids(target), ());
     }
 
     /// 集合から指定した空間IDと重なる空間IDを切り出して返す。
-    pub fn get<'a, S: SpatialId + 'a>(&'a self, target: S) -> impl Iterator<Item = RangeId> + 'a {
+    ///
+    /// `target` の各要素が互いに重ならなければ、返す領域も互いに重ならない。
+    pub fn get<'a, S: IntoSpatialIds + 'a>(
+        &'a self,
+        target: S,
+    ) -> impl Iterator<Item = RangeId> + 'a {
         self.get_flex_ids(target).map(RangeId::from)
     }
 
     /// [`get`](Self::get) と同じだが、結果を [`FlexId`] で返す。
-    pub fn get_flex_ids<'a, S: SpatialId + 'a>(
+    pub fn get_flex_ids<'a, S: IntoSpatialIds + 'a>(
         &'a self,
         target: S,
     ) -> impl Iterator<Item = FlexId> + 'a {
         self.inner
-            .get(target.flex_ids())
+            .get(into_flex_ids(target))
             .map(|(flex_id, _)| flex_id)
     }
 
     /// 集合から指定した空間IDと重なる空間IDを切り出して削除する。削除した部分の空間IDを返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターは集合を借用しない。
-    pub fn remove<S: SpatialId>(&mut self, target: S) -> impl Iterator<Item = RangeId> + use<S> {
+    pub fn remove<S: IntoSpatialIds>(
+        &mut self,
+        target: S,
+    ) -> impl Iterator<Item = RangeId> + use<S> {
         self.remove_flex_ids(target).map(RangeId::from)
     }
 
     /// [`remove`](Self::remove) と同じだが、削除した部分を [`FlexId`] で返す。
-    pub fn remove_flex_ids<S: SpatialId>(
+    pub fn remove_flex_ids<S: IntoSpatialIds>(
         &mut self,
         target: S,
     ) -> impl Iterator<Item = FlexId> + use<S> {
         self.inner
-            .remove(target.flex_ids())
+            .remove(into_flex_ids(target))
             .into_iter()
             .map(|(flex_id, _)| flex_id)
     }
 
     /// 指定した空間IDと接触していたすべての空間IDを返す。
     /// [`get`](Self::get) と異なり切り取りを行わず、target と重なった空間IDをそのまま返す。
-    pub fn get_overlapping<S: SpatialId>(&self, target: S) -> impl Iterator<Item = RangeId> + '_ {
+    pub fn get_overlapping<S: IntoSpatialIds>(
+        &self,
+        target: S,
+    ) -> impl Iterator<Item = RangeId> + '_ {
         self.get_overlapping_flex_ids(target).map(RangeId::from)
     }
 
     /// [`get_overlapping`](Self::get_overlapping) と同じだが、結果を [`FlexId`] で返す。
-    pub fn get_overlapping_flex_ids<S: SpatialId>(
+    pub fn get_overlapping_flex_ids<S: IntoSpatialIds>(
         &self,
         target: S,
     ) -> impl Iterator<Item = FlexId> + '_ {
         self.inner
-            .get_overlapping([target])
+            .get_overlapping(into_range_ids(target))
             .map(|(flex_id, _)| flex_id)
     }
 
@@ -118,7 +130,7 @@ impl SpatialIdSet {
     /// [`remove`](Self::remove) と異なり切り取りを行わず、target と重なった空間IDをそのまま返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターは集合を借用しない。
-    pub fn remove_overlapping<S: SpatialId>(
+    pub fn remove_overlapping<S: IntoSpatialIds>(
         &mut self,
         target: S,
     ) -> impl Iterator<Item = RangeId> + use<S> {
@@ -126,12 +138,12 @@ impl SpatialIdSet {
     }
 
     /// [`remove_overlapping`](Self::remove_overlapping) と同じだが、削除した空間IDを [`FlexId`] で返す。
-    pub fn remove_overlapping_flex_ids<S: SpatialId>(
+    pub fn remove_overlapping_flex_ids<S: IntoSpatialIds>(
         &mut self,
         target: S,
     ) -> impl Iterator<Item = FlexId> + use<S> {
         self.inner
-            .remove_overlapping(target.flex_ids())
+            .remove_overlapping(into_flex_ids(target))
             .into_iter()
             .map(|(flex_id, _)| flex_id)
     }

@@ -15,7 +15,16 @@ mod private {
 
 /// [SingleId]、[RangeId]、[FlexId] に共通するTrait。
 pub trait SpatialId:
-    private::Sealed + Into<RangeId> + Debug + Display + Clone + Copy + Eq + Hash + FromStr
+    private::Sealed
+    + crate::IntoSpatialIds
+    + Into<RangeId>
+    + Debug
+    + Display
+    + Clone
+    + Copy
+    + Eq
+    + Hash
+    + FromStr
 {
     /// F 方向に指定インデックスだけ移動する。
     fn move_f(&mut self, by: i32) -> Result<(), Error>;

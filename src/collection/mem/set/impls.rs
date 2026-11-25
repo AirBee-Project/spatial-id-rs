@@ -13,9 +13,7 @@ impl<S: SpatialId> FromIterator<S> for SpatialIdSet {
 
 impl<S: SpatialId> Extend<S> for SpatialIdSet {
     fn extend<T: IntoIterator<Item = S>>(&mut self, iter: T) {
-        for item in iter {
-            self.insert(item);
-        }
+        self.insert(iter);
     }
 }
 

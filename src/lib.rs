@@ -43,7 +43,7 @@ pub(crate) use error::{GeometryError, QueryError};
 
 // クレート内部では、公開パスを書かずに短く参照する
 #[allow(unused_imports)]
-pub(crate) use collection::{SpatialIdMap, SpatialIdSet};
+pub(crate) use collection::{IntoSpatialIds, SpatialIdMap, SpatialIdSet};
 #[allow(unused_imports)]
 pub(crate) use geometry::constants::{WGS84_A, WGS84_E2, WGS84_F};
 #[allow(unused_imports)]

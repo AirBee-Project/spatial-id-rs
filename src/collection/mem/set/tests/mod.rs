@@ -12,6 +12,7 @@ pub(crate) mod flex;
 pub(crate) mod insert;
 pub(crate) mod intersection;
 pub(crate) mod merge_probe;
+pub(crate) mod targets;
 pub(crate) mod union;
 
 #[cfg(test)]

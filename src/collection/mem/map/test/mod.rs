@@ -5,6 +5,7 @@ pub(crate) mod insert;
 pub(crate) mod par;
 pub(crate) mod query;
 pub(crate) mod remove;
+pub(crate) mod targets;
 pub(crate) mod upsert;
 
 #[cfg(test)]
