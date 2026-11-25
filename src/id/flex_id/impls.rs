@@ -160,9 +160,16 @@ impl SpatialId for FlexId {
     }
 
     fn seconds_range(&self) -> (u64, u64) {
-        let zoom = crate::id::zoom_level::TZoomLevel::new(self.t_zoomlevel()).unwrap();
-        let time_span = crate::time::segment::TimeSegment::new(zoom, self.t_index()).time_span();
-        (time_span.start(), time_span.end())
+        #[cfg(feature = "temporal_id")]
+        {
+            let time_span =
+                crate::time::segment::TimeSegment::new(self.t_zoomlevel, self.t_index).time_span();
+            (time_span.start(), time_span.end())
+        }
+        #[cfg(not(feature = "temporal_id"))]
+        {
+            (0, crate::Interval::MAX_SECONDS)
+        }
     }
 
     fn time_cleared(self) -> Self {

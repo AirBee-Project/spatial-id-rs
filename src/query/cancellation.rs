@@ -39,6 +39,11 @@ impl CancellationToken {
         }
     }
 
+    #[inline]
+    pub(crate) fn is_never(&self) -> bool {
+        matches!(self.0, Inner::Never)
+    }
+
     pub fn is_cancelled(&self) -> bool {
         match &self.0 {
             Inner::Never => false,

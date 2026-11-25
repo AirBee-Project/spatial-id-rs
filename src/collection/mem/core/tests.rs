@@ -455,11 +455,30 @@ fn iterators_match_recursive_walk_and_round_trip() {
 
             assert_eq!(tree.iter().collect::<Vec<_>>(), expected);
             assert_eq!((&tree).into_iter().collect::<Vec<_>>(), expected);
+            let mut partial_ref = tree.iter();
+            let mut partial_ref_items = Vec::new();
+            if let Some(first) = partial_ref.next() {
+                partial_ref_items.push(first);
+            }
+            partial_ref_items = partial_ref.fold(partial_ref_items, |mut acc, item| {
+                acc.push(item);
+                acc
+            });
+            assert_eq!(partial_ref_items, expected);
+
             let owned: Vec<(FlexId, u64)> = expected.iter().map(|&(id, v)| (id, *v)).collect();
 
             // 他の FlexTreeCore と Node を共有している場合（値をクローンする経路）
             let shared = tree.clone();
             assert_eq!(shared.into_iter().collect::<Vec<_>>(), owned);
+            let shared_fold = tree.clone();
+            assert_eq!(
+                shared_fold.into_iter().fold(Vec::new(), |mut acc, item| {
+                    acc.push(item);
+                    acc
+                }),
+                owned
+            );
 
             let rebuilt: FlexTreeCore<u64> = owned.iter().copied().collect();
             assert_eq!(rebuilt, tree);
@@ -468,7 +487,16 @@ fn iterators_match_recursive_walk_and_round_trip() {
             assert_eq!(extended, tree);
 
             // どこにも共有されていない場合（値をムーブする経路）
-            assert_eq!(tree.into_iter().collect::<Vec<_>>(), owned);
+            let mut partial_owned = tree.into_iter();
+            let mut partial_owned_items = Vec::new();
+            if let Some(first) = partial_owned.next() {
+                partial_owned_items.push(first);
+            }
+            partial_owned_items = partial_owned.fold(partial_owned_items, |mut acc, item| {
+                acc.push(item);
+                acc
+            });
+            assert_eq!(partial_owned_items, owned);
         }
     }
 }
@@ -480,9 +508,16 @@ fn empty_tree_iterators_are_fused() {
     let mut iter = tree.iter();
     assert_eq!(iter.next(), None);
     assert_eq!(iter.next(), None);
+    assert_eq!(tree.iter().fold(0usize, |n, _| n + 1), 0);
     let mut owned = tree.into_iter();
     assert_eq!(owned.next(), None);
     assert_eq!(owned.next(), None);
+    assert_eq!(
+        FlexTreeCore::<u64>::default()
+            .into_iter()
+            .fold(0usize, |n, _| n + 1),
+        0
+    );
 }
 
 /// 書き込みの履歴。`None` は削除。

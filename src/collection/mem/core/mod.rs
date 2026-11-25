@@ -1,4 +1,5 @@
 use crate::collection::time_reconstruct;
+use crate::id::flex_id::ops::PreparedRange;
 use crate::{AllowedIntervals, FlexId, RangeId, Side, SingleId, SpatialId, ZoomLevel};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
@@ -113,8 +114,21 @@ impl<V> FlexTreeCore<V> {
         &'a self,
         target: impl IntoIterator<Item = impl Into<RangeId>>,
     ) -> impl Iterator<Item = (FlexId, &'a V)> + 'a {
-        let targets: Vec<RangeId> = target.into_iter().map(Into::into).collect();
-        self.overlapping(move |region| targets.iter().any(|t| region.intersects_range(t)))
+        let mut iter = target.into_iter().map(|t| PreparedRange::new(t.into()));
+        let targets = match iter.next() {
+            None => OverlapTargets::Empty,
+            Some(first) => match iter.next() {
+                None => OverlapTargets::One(first),
+                Some(second) => {
+                    let mut rest = Vec::with_capacity(iter.size_hint().0 + 2);
+                    rest.push(first);
+                    rest.push(second);
+                    rest.extend(iter);
+                    OverlapTargets::Many(rest)
+                }
+            },
+        };
+        self.overlapping(move |region| targets.matches(region))
     }
 
     /// `target` と面で接している領域と値を返す。`target` 自身と重なる領域は除く。
@@ -150,37 +164,85 @@ impl<V> FlexTreeCore<V> {
         &'a self,
         overlaps: impl Fn(&FlexId) -> bool + 'a,
     ) -> impl Iterator<Item = (FlexId, &'a V)> + 'a {
-        let mut stack = self.new_stack();
+        let lower = self
+            .lower_root
+            .as_ref()
+            .filter(|_| overlaps(&FlexId::LOWER_MAX));
+        let upper = self
+            .upper_root
+            .as_ref()
+            .filter(|_| overlaps(&FlexId::UPPER_MAX));
+        let mut stack = if lower.is_some() || upper.is_some() {
+            let mut s = Vec::with_capacity(usize::from(self.max_height()) + 1);
+            if let Some(lower) = lower {
+                s.push((lower, FlexId::LOWER_MAX));
+            }
+            if let Some(upper) = upper {
+                s.push((upper, FlexId::UPPER_MAX));
+            }
+            s
+        } else {
+            Vec::new()
+        };
         from_fn(move || {
-            while let Some((node, this)) = stack.pop() {
-                if !overlaps(&this) {
-                    continue;
-                }
-                match node {
-                    Node::Value(value) => return Some((this, value)),
-                    Node::ShortSkipValue(path, value) => {
-                        let region = path.to_absolute(&this);
-                        if overlaps(&region) {
-                            return Some((region, value));
+            while let Some((mut node, mut this)) = stack.pop() {
+                loop {
+                    match node {
+                        Node::Value(value) => return Some((this, value)),
+                        Node::ShortSkipValue(path, value) => {
+                            let region = path.to_absolute(&this);
+                            if overlaps(&region) {
+                                return Some((region, value));
+                            }
+                            break;
+                        }
+                        Node::Branch(branch) => {
+                            let Some(next) =
+                                push_overlapping_branch(&mut stack, branch, this, &overlaps)
+                            else {
+                                break;
+                            };
+                            (node, this) = next;
+                        }
+                        Node::ShortSkipBranch(path, branch) => {
+                            let region = path.to_absolute(&this);
+                            if !overlaps(&region) {
+                                break;
+                            }
+                            let Some(next) =
+                                push_overlapping_branch(&mut stack, branch, region, &overlaps)
+                            else {
+                                break;
+                            };
+                            (node, this) = next;
+                        }
+                        Node::LongSkip(skip) => {
+                            let region = skip.path.to_absolute(&this).unwrap();
+                            if !overlaps(&region) {
+                                break;
+                            }
+                            node = &skip.child;
+                            this = region;
                         }
                     }
-                    node => stack.extend(node.children(this).rev()),
                 }
             }
             None
         })
     }
 
+    pub(super) fn max_height(&self) -> u8 {
+        self.upper_root
+            .as_ref()
+            .map_or(0, |r| r.height())
+            .max(self.lower_root.as_ref().map_or(0, |r| r.height()))
+    }
+
     /// 上下のルートを積んだ、[Node] を辿るためのスタックを返す。
     fn new_stack(&self) -> Vec<(&Node<V>, FlexId)> {
         // 辿っている経路の各 Branch につき未処理の子が1つ積まれ、もう一方のルートと今の子の分が加わる。
         // スタックは高さ + 2 を超えないので、最後まで再確保しない。
-        let height = self
-            .upper_root
-            .as_ref()
-            .map_or(0, |r| r.height())
-            .max(self.lower_root.as_ref().map_or(0, |r| r.height()));
-        let mut stack = Vec::with_capacity(usize::from(height) + 2);
+        let mut stack = Vec::with_capacity(usize::from(self.max_height()) + 2);
         // 後に積んだものから取り出すので、上側のルートを後に積む
         if let Some(lower) = &self.lower_root {
             stack.push((lower, FlexId::LOWER_MAX));
@@ -433,6 +495,41 @@ impl<V: Ord + Clone> FlexTreeCore<V> {
     pub fn filter_values(&self, values: &BTreeSet<V>) -> Self {
         self.filter(&|_| Decision::Descend, &|_, value| values.contains(value))
     }
+}
+
+enum OverlapTargets {
+    Empty,
+    One(PreparedRange),
+    Many(Vec<PreparedRange>),
+}
+
+impl OverlapTargets {
+    #[inline(always)]
+    fn matches(&self, region: &FlexId) -> bool {
+        match self {
+            Self::Empty => false,
+            Self::One(t) => t.intersects(region),
+            Self::Many(ts) => ts.iter().any(|t| t.intersects(region)),
+        }
+    }
+}
+
+/// `branch` の上側が `overlaps` を満たすならプリフェッチして `stack` へ積み、下側が `overlaps` を満たすなら返す。
+#[inline(always)]
+fn push_overlapping_branch<'a, V>(
+    stack: &mut Vec<(&'a Node<V>, FlexId)>,
+    branch: &'a node::Branch<V>,
+    this: FlexId,
+    overlaps: &impl Fn(&FlexId) -> bool,
+) -> Option<(&'a Node<V>, FlexId)> {
+    let dimension = branch.dimension;
+    let upper_id = this.split_on(dimension, Side::Upper).unwrap();
+    if overlaps(&upper_id) {
+        branch.upper.prefetch();
+        stack.push((&branch.upper, upper_id));
+    }
+    let lower_id = this.split_on(dimension, Side::Lower).unwrap();
+    overlaps(&lower_id).then_some((&branch.lower, lower_id))
 }
 
 /// 領域 `this` の `branch` の子のうち `t` と重なるものを、下側から取り出されるように積む。
