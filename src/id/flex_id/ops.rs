@@ -186,6 +186,46 @@ impl FlexId {
         })
     }
 
+    /// 2つの [`FlexId`] が重なっていることを前提に、共通部分の [`FlexId`] を返す。
+    #[inline]
+    pub(crate) fn intersection_intersecting(&self, other: &FlexId) -> FlexId {
+        debug_assert!(self.intersects(other));
+        let (f_zoomlevel, f_index) = if self.f_zoomlevel >= other.f_zoomlevel {
+            (self.f_zoomlevel, self.f_index)
+        } else {
+            (other.f_zoomlevel, other.f_index)
+        };
+        let (x_zoomlevel, x_index) = if self.x_zoomlevel >= other.x_zoomlevel {
+            (self.x_zoomlevel, self.x_index)
+        } else {
+            (other.x_zoomlevel, other.x_index)
+        };
+        let (y_zoomlevel, y_index) = if self.y_zoomlevel >= other.y_zoomlevel {
+            (self.y_zoomlevel, self.y_index)
+        } else {
+            (other.y_zoomlevel, other.y_index)
+        };
+        #[cfg(feature = "temporal_id")]
+        let (t_zoomlevel, t_index) = if self.t_zoomlevel >= other.t_zoomlevel {
+            (self.t_zoomlevel, self.t_index)
+        } else {
+            (other.t_zoomlevel, other.t_index)
+        };
+
+        FlexId {
+            f_zoomlevel,
+            f_index,
+            x_zoomlevel,
+            x_index,
+            y_zoomlevel,
+            y_index,
+            #[cfg(feature = "temporal_id")]
+            t_zoomlevel,
+            #[cfg(feature = "temporal_id")]
+            t_index,
+        }
+    }
+
     /// `self` が `other` を完全に包含するか判定する。
     ///
     /// ```

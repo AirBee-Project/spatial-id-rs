@@ -160,8 +160,7 @@ impl<V> Node<V> {
     /// 領域 `this` のこの Node の子とその領域を、下側から順に返す。Value・ShortSkipValue や空なら何も返さない。
     ///
     /// ShortSkipBranch は、行き先の Branch の子を返す。
-    // 展開されないと、`get` の1段ごとに呼び出しが挟まり、`get` が4割ほど遅くなる
-    #[inline(always)]
+    #[cfg(test)]
     pub(super) fn children(
         &self,
         this: FlexId,

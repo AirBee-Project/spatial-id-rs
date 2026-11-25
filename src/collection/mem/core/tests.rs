@@ -1055,3 +1055,47 @@ fn get_single_target_matches_clipped_iteration() {
         }
     }
 }
+
+/// `get` は複数ターゲットが両半球・スキップ・粗密混在をまたいでも切り取り順を保ち、枯渇後も `None` を返し続ける。
+#[test]
+fn get_multi_target_reuses_stack_across_hemispheres_and_fuses() {
+    let empty = FlexTreeCore::<u64>::default();
+    let mut empty_get = empty.get([FlexId::UPPER_MAX, FlexId::LOWER_MAX]);
+    assert_eq!(empty_get.next(), None);
+    assert_eq!(empty_get.next(), None);
+
+    let deep_upper = FlexId::new(10, 5, 20, 7, 20, 9).unwrap();
+    let miss_upper = FlexId::new(10, 6, 20, 7, 20, 9).unwrap();
+    let deep_lower = FlexId::new(10, -5, 20, 3, 20, 4).unwrap();
+    let mid_upper_a = FlexId::new(2, 0, 2, 0, 2, 0).unwrap();
+    let mid_upper_b = FlexId::new(2, 1, 2, 1, 2, 1).unwrap();
+
+    let mut tree = FlexTreeCore::default();
+    tree.insert(deep_upper, 1u64);
+    tree.insert(deep_lower, 2);
+    tree.insert(mid_upper_a, 3);
+    tree.insert(mid_upper_b, 4);
+    assert_rules(&tree);
+
+    let targets = [
+        FlexId::UPPER_MAX,
+        miss_upper,
+        deep_lower,
+        mid_upper_a,
+        deep_upper,
+        FlexId::LOWER_MAX,
+    ];
+    let expected: Vec<_> = targets
+        .into_iter()
+        .flat_map(|target| {
+            tree.iter()
+                .filter_map(move |(id, v)| Some((id.intersection(&target)?, v)))
+        })
+        .collect();
+
+    let mut iter = tree.get(targets);
+    let got: Vec<_> = iter.by_ref().collect();
+    assert_eq!(got, expected);
+    assert_eq!(iter.next(), None);
+    assert_eq!(iter.next(), None);
+}

@@ -76,36 +76,67 @@ impl<V> FlexTreeCore<V> {
         &'a self,
         target: impl IntoIterator<Item = FlexId, IntoIter: 'a>,
     ) -> impl Iterator<Item = (FlexId, &'a V)> + 'a {
-        target.into_iter().flat_map(move |t| {
-            // 積むのは `t` と重なる Node だけ
-            let mut stack = self.new_stack();
-            stack.retain(|(_, root)| root.intersects(&t));
-            from_fn(move || {
-                while let Some((node, this)) = stack.pop() {
+        let mut targets = target.into_iter().fuse();
+        // `stack` が非空のときだけその探索対象を保持すれば足りるので、単一分岐だけ辿る間は読み書きしない
+        let mut active_t = FlexId::UPPER_MAX;
+        let mut stack: Vec<(&'a Node<V>, FlexId)> = Vec::new();
+        from_fn(move || {
+            loop {
+                let (t, mut node, mut this) = match stack.pop() {
+                    Some((node, this)) => (active_t, node, this),
+                    None => {
+                        let t = targets.next()?;
+                        let Some((root, root_id)) = self.matching_root(&t) else {
+                            continue;
+                        };
+                        (t, root, root_id)
+                    }
+                };
+                loop {
                     match node {
-                        Node::Value(value) => return Some((this.intersection(&t)?, value)),
+                        Node::Value(value) => {
+                            return Some((this.intersection_intersecting(&t), value));
+                        }
                         // 積んだ領域が `t` と重なっていても、埋め込んだ行き先は重ならないことがある
                         Node::ShortSkipValue(path, value) => {
                             if let Some(region) = path.to_absolute(&this).intersection(&t) {
                                 return Some((region, value));
                             }
+                            break;
                         }
-                        Node::Branch(branch) => push_overlapping(&mut stack, branch, this, &t),
+                        Node::Branch(branch) => {
+                            (node, this) = step_overlapping_branch(
+                                &mut stack,
+                                &mut active_t,
+                                branch,
+                                this,
+                                &t,
+                            );
+                        }
                         Node::ShortSkipBranch(path, branch) => {
                             let region = path.to_absolute(&this);
-                            if region.intersects(&t) {
-                                push_overlapping(&mut stack, branch, region, &t);
+                            if !region.intersects(&t) {
+                                break;
                             }
+                            (node, this) = step_overlapping_branch(
+                                &mut stack,
+                                &mut active_t,
+                                branch,
+                                region,
+                                &t,
+                            );
                         }
-                        node => stack.extend(
-                            node.children(this)
-                                .filter(|(_, region)| region.intersects(&t))
-                                .rev(),
-                        ),
+                        Node::LongSkip(skip) => {
+                            let region = skip.path.to_absolute(&this).unwrap();
+                            if !region.intersects(&t) {
+                                break;
+                            }
+                            node = &skip.child;
+                            this = region;
+                        }
                     }
                 }
-                None
-            })
+            }
         })
     }
 
@@ -251,6 +282,16 @@ impl<V> FlexTreeCore<V> {
             stack.push((upper, FlexId::UPPER_MAX));
         }
         stack
+    }
+
+    /// `target` を含む方のルート（北半球か南半球）と、その領域を返す。
+    #[inline]
+    fn matching_root(&self, target: &FlexId) -> Option<(&Node<V>, FlexId)> {
+        if target.f_index().is_negative() {
+            self.lower_root.as_ref().map(|r| (r, FlexId::LOWER_MAX))
+        } else {
+            self.upper_root.as_ref().map(|r| (r, FlexId::UPPER_MAX))
+        }
     }
 
     /// `target` を含む方のルート（北半球か南半球）と、その領域を返す。
@@ -532,18 +573,18 @@ fn push_overlapping_branch<'a, V>(
     overlaps(&lower_id).then_some((&branch.lower, lower_id))
 }
 
-/// 領域 `this` の `branch` の子のうち `t` と重なるものを、下側から取り出されるように積む。
+/// 領域 `this` の `branch` で `t` と重なる下側を直接返し、上側も重なればプリフェッチして `stack` へ積む。
 ///
-/// `t` が割った次元で `this` より細かければ、`t` がどちらの半分にあるかが割った次元だけで決まるので、
-/// 両方の子の領域を作って確かめずに済む。
+/// `this` と `t` は交差済みのため、`t` が割った次元で `this` より細かければ片側だけ、そうでなければ両側が重なる。
 // 展開されないと、`get` の1段ごとに呼び出しが挟まり、`get` が4割ほど遅くなる
 #[inline(always)]
-fn push_overlapping<'a, V>(
+fn step_overlapping_branch<'a, V>(
     stack: &mut Vec<(&'a Node<V>, FlexId)>,
+    active_t: &mut FlexId,
     branch: &'a node::Branch<V>,
     this: FlexId,
     t: &FlexId,
-) {
+) -> (&'a Node<V>, FlexId) {
     let dimension = branch.dimension;
     if t.zoomlevel_on(dimension) > this.zoomlevel_on(dimension) {
         let side = this.side_toward(dimension, t);
@@ -551,13 +592,17 @@ fn push_overlapping<'a, V>(
             Side::Lower => &branch.lower,
             Side::Upper => &branch.upper,
         };
-        stack.push((child, this.split_on(dimension, side).unwrap()));
-        return;
+        return (child, this.split_on(dimension, side).unwrap());
     }
-    for (child, side) in [(&branch.upper, Side::Upper), (&branch.lower, Side::Lower)] {
-        let region = this.split_on(dimension, side).unwrap();
-        if region.intersects(t) {
-            stack.push((child, region));
-        }
+    let upper_id = this.split_on(dimension, Side::Upper).unwrap();
+    let lower_id = this.split_on(dimension, Side::Lower).unwrap();
+    debug_assert!(upper_id.intersects(t) && lower_id.intersects(t));
+    // upper は lower 側の部分木を返し終えるまで使わないので、その間に読み込ませておく
+    branch.upper.prefetch();
+    if stack.is_empty() {
+        *active_t = *t;
+        stack.reserve(usize::from(branch.height));
     }
+    stack.push((&branch.upper, upper_id));
+    (&branch.lower, lower_id)
 }
