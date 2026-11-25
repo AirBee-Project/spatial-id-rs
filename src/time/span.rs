@@ -199,7 +199,7 @@ mod tests {
                 assert_eq!(
                     s.start(),
                     cursor,
-                    "[{start}, {end}) でSegmentが連続していない"
+                    "[{start}, {end}) でTimeSegmentが連続していない"
                 );
                 cursor = s.end();
             }
