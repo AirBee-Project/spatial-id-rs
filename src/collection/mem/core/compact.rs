@@ -16,18 +16,11 @@ use triomphe::Arc;
 impl<V: Eq + Hash + Clone> FlexTreeCore<V> {
     /// 同じ形状と値を持つ [`Branch`] と [`LongSkip`](Node::LongSkip) を探索し、同一の `Arc` を共有するよう圧縮する。
     ///
-    /// 保持している [FlexId](crate::FlexId) と値の対応は変わらない。他の [`FlexTreeCore`] と共有されている `Node` は書き換えず、
+    /// 保持している [`FlexId`](crate::FlexId) と値の対応は変わらない。他の [`FlexTreeCore`] と共有されている `Node` は書き換えず、
     /// 新しい `Branch` や `LongSkip` のみを組み立てて共有する。
     ///
     /// ユニークな `Node` 数を n として O(n) 時間で動作し、実行中のみ O(n) の作業メモリを使用する。
     pub fn compact(&mut self) {
-        if [&self.upper_root, &self.lower_root]
-            .into_iter()
-            .flatten()
-            .all(|node| matches!(node, Node::Value(_) | Node::ShortSkipValue(..)))
-        {
-            return;
-        }
         let mut compactor = Compactor::new();
         for root in [&mut self.upper_root, &mut self.lower_root]
             .into_iter()
@@ -142,7 +135,8 @@ impl<V: Eq + Hash> Internable<V> for Skip<V> {
 
 struct Pool<T> {
     hasher: DefaultHashBuilder,
-    interned: HashTable<Arc<T>>,
+    // 表の拡張時に全エントリのキー（`V` を含みうる）を再ハッシュしないよう、ハッシュ値を併せて持つ
+    interned: HashTable<(u64, Arc<T>)>,
     // 元の `Arc` を保持して解放を防ぎ、探索中のポインタアドレス再利用（ABA問題）を避ける
     visited: HashTable<(Arc<T>, Arc<T>)>,
 }
@@ -156,17 +150,16 @@ impl<T> Pool<T> {
         }
     }
 
-    fn entry<'a, V>(&'a mut self, key: &T::Key<'_>) -> Entry<'a, Arc<T>>
+    /// 挿入時に要るハッシュ値を `Entry` と併せて返す。
+    fn entry<'a, V>(&'a mut self, key: &T::Key<'_>) -> (u64, Entry<'a, (u64, Arc<T>)>)
     where
         T: Internable<V>,
     {
         let h = self.hasher.hash_one(key);
-        let hasher = &self.hasher;
-        self.interned.entry(
-            h,
-            |existing| existing.matches_key(key),
-            |existing| hasher.hash_one(existing.shallow_key()),
-        )
+        let entry = self
+            .interned
+            .entry(h, |(_, existing)| existing.matches_key(key), |&(h, _)| h);
+        (h, entry)
     }
 
     fn intern_existing<V>(&mut self, arc: &Arc<T>) -> Option<Arc<T>>
@@ -175,12 +168,12 @@ impl<T> Pool<T> {
     {
         let key = arc.shallow_key();
         match self.entry(&key) {
-            Entry::Occupied(entry) => {
-                let found = entry.get();
+            (_, Entry::Occupied(entry)) => {
+                let (_, found) = entry.get();
                 (!Arc::ptr_eq(found, arc)).then(|| Arc::clone(found))
             }
-            Entry::Vacant(entry) => {
-                entry.insert(Arc::clone(arc));
+            (h, Entry::Vacant(entry)) => {
+                entry.insert((h, Arc::clone(arc)));
                 None
             }
         }
@@ -318,8 +311,8 @@ impl<V: Eq + Hash + Clone> Compactor<V> {
             ShallowNode(upper_node.as_ref().unwrap_or(&orig.upper)),
         );
         match self.branches.entry(&key) {
-            Entry::Occupied(entry) => Arc::clone(entry.get()),
-            Entry::Vacant(entry) => {
+            (_, Entry::Occupied(entry)) => Arc::clone(&entry.get().1),
+            (h, Entry::Vacant(entry)) => {
                 let new_arc = Arc::new(Branch {
                     dimension: orig.dimension,
                     split_dimensions: orig.split_dimensions,
@@ -328,7 +321,7 @@ impl<V: Eq + Hash + Clone> Compactor<V> {
                     lower: lower_node.unwrap_or_else(|| orig.lower.clone()),
                     upper: upper_node.unwrap_or_else(|| orig.upper.clone()),
                 });
-                entry.insert(Arc::clone(&new_arc));
+                entry.insert((h, Arc::clone(&new_arc)));
                 new_arc
             }
         }
@@ -339,14 +332,14 @@ impl<V: Eq + Hash + Clone> Compactor<V> {
         let child_node = Node::from(child);
         let key = (orig.path, ShallowNode(&child_node));
         match self.skips.entry(&key) {
-            Entry::Occupied(entry) => Arc::clone(entry.get()),
-            Entry::Vacant(entry) => {
+            (_, Entry::Occupied(entry)) => Arc::clone(&entry.get().1),
+            (h, Entry::Vacant(entry)) => {
                 let new_arc = Arc::new(Skip {
                     path: orig.path,
                     split_dimensions: orig.split_dimensions,
                     child: child_node,
                 });
-                entry.insert(Arc::clone(&new_arc));
+                entry.insert((h, Arc::clone(&new_arc)));
                 new_arc
             }
         }

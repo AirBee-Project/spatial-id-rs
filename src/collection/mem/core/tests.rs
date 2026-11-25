@@ -1112,7 +1112,6 @@ fn compact_preserves_contents_and_is_idempotent() {
             assert_eq!(tree.count(), expected.len());
 
             let (total_after_first, unique_after_first) = arc_counts(&tree);
-            assert!(unique_after_first <= total_after_first);
 
             // すでに共有されている構造へ再度 `compact` しても同一のポインタ構成と中身を保つ
             tree.compact();
@@ -1223,10 +1222,34 @@ fn compact_does_not_affect_clones_and_supports_later_edits() {
             );
 
             // `compact` 後に `IntoIterator` で共有する `Node` ごと消費しても全要素が正しく得られる
-            let mut expected_after = tree.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>();
+            let expected_after = tree.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>();
             let owned_after = tree.into_iter().collect::<Vec<_>>();
             assert_eq!(owned_after, expected_after);
-            expected_after.clear();
+        }
+    }
+}
+
+/// `Node` を共有する2つの `FlexTreeCore` を両方 `compact` しても、それぞれの中身を保つ。
+#[test]
+fn compact_both_trees_sharing_nodes() {
+    let mut next = rng(0x0b07_c0de);
+    for max_zoom in [5, 20] {
+        for _ in 0..30 {
+            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(2));
+            let mut other = tree.clone();
+            // 一部だけ変更して、共有する `Node` と共有しない `Node` を混在させる
+            for _ in 0..next(5) {
+                other.insert(random_id(&mut next, max_zoom), next(2));
+            }
+            let tree_items: Vec<(FlexId, u64)> = tree.iter().map(|(id, v)| (id, *v)).collect();
+            let other_items: Vec<(FlexId, u64)> = other.iter().map(|(id, v)| (id, *v)).collect();
+
+            tree.compact();
+            other.compact();
+            for (t, items) in [(&tree, &tree_items), (&other, &other_items)] {
+                assert_rules(t);
+                assert_eq!(t.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>(), *items);
+            }
         }
     }
 }
