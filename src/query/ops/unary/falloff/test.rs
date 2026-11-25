@@ -15,15 +15,15 @@ fn row(table: &SpatialIdMap<i32>) -> BTreeMap<u32, i32> {
         .collect()
 }
 
-fn time_segment(x: u32, v: i32) -> (SingleId, i32) {
+fn single_at_x(x: u32, v: i32) -> (SingleId, i32) {
     (SingleId::new(20, 0, x, 0).unwrap(), v)
 }
 
-/// 単一Segmentの X falloff（半径2）。減衰は value*(r-|d|)/r。重なりが無いので Sum/Max は同値。
+/// 単一の標準空間IDの X falloff（半径2）。減衰は value*(r-|d|)/r。重なりが無いので Sum/Max は同値。
 #[test]
-fn falloff_x_single_segment() {
+fn falloff_x_single_id() {
     let mut table = SpatialIdMap::new();
-    let (id, v) = time_segment(100, 4);
+    let (id, v) = single_at_x(100, 4);
     table.insert(id, v);
 
     let out = table
@@ -42,12 +42,12 @@ fn falloff_x_single_segment() {
     assert_eq!(r.get(&102), Some(&0));
 }
 
-/// 重なる2Segmentの X falloff を Sum で合成。重なったSegmentは両寄与の和になる。
+/// 重なる2つの標準空間IDの X falloff を Sum で合成。重なった箇所は両寄与の和になる。
 #[test]
 fn falloff_x_overlap_sum() {
     let mut table = SpatialIdMap::new();
-    table.insert(time_segment(100, 4).0, 4);
-    table.insert(time_segment(102, 4).0, 4);
+    table.insert(single_at_x(100, 4).0, 4);
+    table.insert(single_at_x(102, 4).0, 4);
 
     let out = table
         .query()
@@ -73,8 +73,8 @@ fn falloff_x_overlap_sum() {
 #[test]
 fn falloff_x_overlap_max() {
     let mut table = SpatialIdMap::new();
-    table.insert(time_segment(100, 4).0, 4);
-    table.insert(time_segment(102, 4).0, 4);
+    table.insert(single_at_x(100, 4).0, 4);
+    table.insert(single_at_x(102, 4).0, 4);
 
     let out = table
         .query()
@@ -107,8 +107,8 @@ fn falloff_x_reverse_target_wrapped_covers_needed_range() {
 #[test]
 fn falloff_x_overlap_average() {
     let mut table = SpatialIdMap::new();
-    table.insert(time_segment(100, 12).0, 12);
-    table.insert(time_segment(101, 0).0, 0);
+    table.insert(single_at_x(100, 12).0, 12);
+    table.insert(single_at_x(101, 0).0, 0);
     // z=19 の x=51 は z=20 の x102..=103 を覆う
     table.insert(SingleId::new(19, 0, 51, 0).unwrap(), 0);
 
@@ -149,7 +149,7 @@ fn falloff_validate_rejects_radius_out_of_range() {
 #[test]
 fn falloff_x_radius_zero_is_noop() {
     let mut table = SpatialIdMap::new();
-    table.insert(time_segment(100, 7).0, 7);
+    table.insert(single_at_x(100, 7).0, 7);
 
     let out = table
         .query()
@@ -167,7 +167,7 @@ fn falloff_x_radius_zero_is_noop() {
 #[test]
 fn falloff_x_large_value_does_not_overflow() {
     let mut table = SpatialIdMap::new();
-    table.insert(time_segment(1000, 100_000).0, 100_000);
+    table.insert(single_at_x(1000, 100_000).0, 100_000);
 
     // 100_000 * 200^2 は i32 を超える
     let out = table

@@ -4,7 +4,7 @@
 //! - `sequential`: `insert` を1件ずつ
 //! - `parallel`  : `par_iter().collect()`（[`FromParallelIterator`]）
 //!
-//! 並列構築は空間ソート→チャンク部分木化→union簡約で、規模が大きいほど効く。
+//! 並列構築は空間ソート→チャンク部分木化→union簡約で行い、要素数が多いほど高速化の効果が大きくなる。
 //! パターンは systematic_* ベンチと共通の `patterns.rs` を使う。
 
 #[path = "patterns.rs"]

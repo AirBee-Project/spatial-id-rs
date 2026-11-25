@@ -43,7 +43,7 @@ mod cover_single_ids {
         insta::assert_debug_snapshot!(sorted_ids(&cylinder, 18));
     }
 
-    /// cos, sinによる近似曲面の計算で、境界スレスレにあるボクセルを拾うか拾わないかがOSの標準ライブラリ（libm等）の実装によって揺れるケース。
+    /// cos, sinによる近似曲面の計算で、境界スレスレにある `SingleId` を拾うか拾わないかがOSの標準ライブラリ（libm等）の実装によって揺れるケース。
     #[ignore]
     #[test]
     fn os_rounding_boundary_cylinder_at_z18() {
