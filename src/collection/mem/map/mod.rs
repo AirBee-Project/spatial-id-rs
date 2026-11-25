@@ -1,5 +1,7 @@
 use crate::collection::core::{FlexTreeCore, IntoIter};
 use alloc::collections::BTreeSet;
+#[cfg(feature = "unstable")]
+use core::hash::Hash;
 use core::iter::Map;
 use core::ops::RangeBounds;
 #[cfg(feature = "unstable")]
@@ -288,6 +290,35 @@ impl<V: Ord + Clone> SpatialIdMap<V> {
         Self {
             inner: self.inner.filter_values(values),
         }
+    }
+}
+
+#[cfg(feature = "unstable")]
+impl<V: Eq + Hash + Clone> SpatialIdMap<V> {
+    /// 同じ形状と値を持つ領域群でメモリ上の実体を共有し、メモリ使用量を削減する。
+    ///
+    /// 保持している空間IDと値の対応は変わらない。既にクローン等で他のインスタンスと共有されている領域があっても、
+    /// 他のインスタンスには影響しない。
+    ///
+    /// ユニークな内部構成要素数を n として O(n) 時間で動作し、実行中のみ O(n) の作業メモリを使用する。
+    ///
+    /// # 動作例
+    ///
+    /// 同じ形状の領域群の圧縮:
+    /// ```
+    /// use spatial_id::collection::SpatialIdMap;
+    /// use spatial_id::SingleId;
+    ///
+    /// let mut map = SpatialIdMap::new();
+    /// for dx in [0, 100] {
+    ///     map.insert(SingleId::new(20, 0, dx, 0).unwrap(), 1);
+    ///     map.insert(SingleId::new(20, 0, dx + 1, 1).unwrap(), 2);
+    /// }
+    /// map.compact();
+    /// assert_eq!(map.count(), 4);
+    /// ```
+    pub fn compact(&mut self) {
+        self.inner.compact();
     }
 }
 

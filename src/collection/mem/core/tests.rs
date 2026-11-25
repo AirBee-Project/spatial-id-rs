@@ -905,7 +905,7 @@ std::thread_local! {
 }
 
 /// 生存中のインスタンス数を数える型。Node を再確保せずに書き換えても、二重解放や解放漏れが起きないことを検証する。
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 struct Tracked(u64);
 
 impl Tracked {
@@ -1054,4 +1054,247 @@ fn get_single_target_matches_clipped_iteration() {
             assert_eq!(got, expected, "target {target}");
         }
     }
+}
+
+/// 辿れる延べ Arc 数とユニーク Arc 数を `(total_arcs, unique_arcs)` で数える。
+fn arc_counts<V>(tree: &FlexTreeCore<V>) -> (usize, usize) {
+    use hashbrown::HashSet;
+
+    fn visit<V>(
+        node: &Node<V>,
+        total: &mut usize,
+        branches: &mut HashSet<*const Branch<V>>,
+        skips: &mut HashSet<*const Skip<V>>,
+    ) {
+        match node {
+            Node::Value(_) | Node::ShortSkipValue(..) => {}
+            Node::Branch(arc) | Node::ShortSkipBranch(_, arc) => {
+                *total += 1;
+                branches.insert(Arc::as_ptr(arc));
+                visit(&arc.lower, total, branches, skips);
+                visit(&arc.upper, total, branches, skips);
+            }
+            Node::LongSkip(arc) => {
+                *total += 1;
+                skips.insert(Arc::as_ptr(arc));
+                visit(&arc.child, total, branches, skips);
+            }
+        }
+    }
+
+    let mut total = 0;
+    let mut branches = HashSet::new();
+    let mut skips = HashSet::new();
+    if let Some(upper) = &tree.upper_root {
+        visit(upper, &mut total, &mut branches, &mut skips);
+    }
+    if let Some(lower) = &tree.lower_root {
+        visit(lower, &mut total, &mut branches, &mut skips);
+    }
+    (total, branches.len() + skips.len())
+}
+
+/// `compact` は不変条件と中身を保ち、再実行しても冪等で、同じ構造を1つの `Arc` に共有する。
+#[test]
+fn compact_preserves_contents_and_is_idempotent() {
+    let mut next = rng(0x5150_c011);
+    for max_zoom in [5, 20] {
+        for _ in 0..50 {
+            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(2));
+            let expected: Vec<(FlexId, u64)> = tree.iter().map(|(id, v)| (id, *v)).collect();
+
+            tree.compact();
+            assert_rules(&tree);
+            assert_eq!(
+                tree.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>(),
+                expected
+            );
+            assert_eq!(tree.count(), expected.len());
+
+            let (total_after_first, unique_after_first) = arc_counts(&tree);
+            assert!(unique_after_first <= total_after_first);
+
+            // すでに共有されている構造へ再度 `compact` しても同一のポインタ構成と中身を保つ
+            tree.compact();
+            assert_rules(&tree);
+            assert_eq!(
+                tree.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>(),
+                expected
+            );
+            let (total_after_second, unique_after_second) = arc_counts(&tree);
+            assert_eq!(total_after_second, total_after_first);
+            assert_eq!(unique_after_second, unique_after_first);
+        }
+    }
+}
+
+/// 北半球・南半球・`ShortSkipBranch`・`LongSkip`・同一 `Branch` の左右など、様々な位置の同型構造を共有する。
+#[test]
+fn compact_shares_identical_subtrees_across_positions() {
+    let mut tree = FlexTreeCore::<u64>::default();
+    // 同じ相対配置を北半球の離れた2箇所と南半球の1箇所に置く
+    let offsets = [(0, 0_u32), (0, 2000), (-16, 0)];
+    for &(f_base, x_base) in &offsets {
+        tree.insert(FlexId::new(12, f_base, 12, x_base, 12, 10).unwrap(), 1);
+        tree.insert(FlexId::new(12, f_base, 12, x_base + 1, 12, 11).unwrap(), 2);
+        tree.insert(FlexId::new(12, f_base, 12, x_base + 2, 12, 10).unwrap(), 3);
+    }
+
+    let before_items: Vec<(FlexId, u64)> = tree.iter().map(|(id, v)| (id, *v)).collect();
+    let (total_before, unique_before) = arc_counts(&tree);
+    assert_eq!(total_before, unique_before);
+
+    tree.compact();
+    assert_rules(&tree);
+    assert_eq!(
+        tree.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>(),
+        before_items
+    );
+
+    let (total_after, unique_after) = arc_counts(&tree);
+    assert_eq!(total_after, total_before);
+    assert!(
+        unique_after < unique_before,
+        "共有が減っていない: before={unique_before}, after={unique_after}"
+    );
+
+    // F軸の兄弟が同じ子孫（かつ子孫もF軸分割あり）になるケース：同じ `Branch` の左右が同じ `Arc` を指す
+    let mut sym_tree = FlexTreeCore::<u64>::default();
+    for f in 0..4 {
+        sym_tree.insert(
+            FlexId::new(2, f, 0, 0, 0, 0).unwrap(),
+            if f % 2 == 0 { 7 } else { 8 },
+        );
+    }
+    sym_tree.compact();
+    assert_rules(&sym_tree);
+    let root_branch = match sym_tree.upper_root.as_ref().unwrap() {
+        Node::Branch(b) => b,
+        _ => panic!("expected root branch"),
+    };
+    assert!(root_branch.lower.ptr_eq(&root_branch.upper));
+
+    // 同じ `LongSkip(Value)` が離れた2箇所にあれば `Arc<Skip>` も共有される
+    let mut skip_tree = FlexTreeCore::<u64>::default();
+    skip_tree.insert(FlexId::new(20, 0, 20, 0, 20, 0).unwrap(), 42);
+    skip_tree.insert(FlexId::new(20, 0, 20, 524_288, 20, 0).unwrap(), 42);
+    let (skip_total_before, skip_unique_before) = arc_counts(&skip_tree);
+    assert_eq!(skip_total_before, skip_unique_before);
+    skip_tree.compact();
+    assert_rules(&skip_tree);
+    let (skip_total_after, skip_unique_after) = arc_counts(&skip_tree);
+    assert_eq!(skip_total_after, skip_total_before);
+    assert!(skip_unique_after < skip_unique_before);
+}
+
+/// 別の `FlexTreeCore` と `Node` を共有していても、`compact` は元のクローンに影響を与えず正しく圧縮する。
+#[test]
+fn compact_does_not_affect_clones_and_supports_later_edits() {
+    let mut next = rng(0xbeef_1234);
+    for max_zoom in [5, 20] {
+        for _ in 0..30 {
+            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(2));
+            let snapshot = tree.clone();
+            let snapshot_items: Vec<(FlexId, u64)> =
+                snapshot.iter().map(|(id, v)| (id, *v)).collect();
+            let (snap_total_before, snap_unique_before) = arc_counts(&snapshot);
+
+            tree.compact();
+            assert_rules(&tree);
+            assert_rules(&snapshot);
+            assert_eq!(tree, snapshot);
+
+            // snapshot 側のポインタは変わっていないこと
+            let (snap_total_after, snap_unique_after) = arc_counts(&snapshot);
+            assert_eq!(snap_total_after, snap_total_before);
+            assert_eq!(snap_unique_after, snap_unique_before);
+            assert_eq!(
+                snapshot.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>(),
+                snapshot_items
+            );
+
+            // `compact` 後の FlexTreeCore に対する変更（CoW）も snapshot に波及しない
+            let id = random_id(&mut next, max_zoom);
+            tree.insert(id, 99);
+            assert_rules(&tree);
+            assert_eq!(
+                snapshot.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>(),
+                snapshot_items
+            );
+
+            // `compact` 後に `IntoIterator` で共有する `Node` ごと消費しても全要素が正しく得られる
+            let mut expected_after = tree.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>();
+            let owned_after = tree.into_iter().collect::<Vec<_>>();
+            assert_eq!(owned_after, expected_after);
+            expected_after.clear();
+        }
+    }
+}
+
+/// `compact` を含む操作列でも値はちょうど1回ずつ解放される。
+#[test]
+fn compact_drops_values_exactly_once() {
+    let mut next = rng(0xdead_c0de);
+    for max_zoom in [5, 20] {
+        let mut tree = FlexTreeCore::<Tracked>::default();
+        for _ in 0..200 {
+            let id = random_id(&mut next, max_zoom);
+            if next(4) == 0 {
+                tree.remove(id);
+            } else {
+                tree.insert(id, Tracked::new(next(3)));
+            }
+            if next(10) == 0 {
+                let clone = tree.clone();
+                tree.compact();
+                assert_rules(&tree);
+                assert_eq!(tree, clone);
+            }
+        }
+        tree.compact();
+        assert_rules(&tree);
+    }
+    assert_eq!(LIVE_TRACKED.with(core::cell::Cell::get), 0);
+}
+
+/// 空の FlexTreeCore や `Value` / `ShortSkipValue` のみの浅い状態でも安全に動作する。
+#[test]
+fn compact_handles_empty_and_value_only_trees() {
+    let mut empty = FlexTreeCore::<u64>::default();
+    empty.compact();
+    assert!(empty.is_empty());
+
+    let mut whole = FlexTreeCore::<u64>::default();
+    whole.insert(FlexId::UPPER_MAX, 10);
+    whole.compact();
+    assert_rules(&whole);
+    assert_eq!(whole.iter().collect::<Vec<_>>(), [(FlexId::UPPER_MAX, &10)]);
+
+    let mut short_skip = FlexTreeCore::<u64>::default();
+    let id = FlexId::new(2, 1, 2, 3, 2, 1).unwrap();
+    short_skip.insert(id, 20);
+    short_skip.compact();
+    assert_rules(&short_skip);
+    assert_eq!(short_skip.iter().collect::<Vec<_>>(), [(id, &20)]);
+}
+
+/// 大きな値型を深い FlexTreeCore およびクローン共有経路で `compact` してもスタックを圧迫しない。
+#[test]
+fn compact_handles_large_values_safely() {
+    #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+    struct Big([u64; 512]);
+
+    let a = Big([1; 512]);
+    let b = Big([2; 512]);
+    let mut tree = FlexTreeCore::default();
+    for x in [0_u32, 1_000_000] {
+        tree.insert(FlexId::new(25, 0, 25, x, 25, 0).unwrap(), a.clone());
+        tree.insert(FlexId::new(25, 0, 25, x + 1, 25, 1).unwrap(), b.clone());
+    }
+    let snapshot = tree.clone();
+    tree.compact();
+    assert_rules(&tree);
+    assert_eq!(tree, snapshot);
+    let (total, unique) = arc_counts(&tree);
+    assert!(unique < total);
 }

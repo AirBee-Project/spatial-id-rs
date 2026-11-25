@@ -223,6 +223,33 @@ impl SpatialIdSet {
         self.inner.is_empty()
     }
 
+    #[cfg(feature = "unstable")]
+    /// 同じ形状を持つ領域群でメモリ上の実体を共有し、メモリ使用量を削減する。
+    ///
+    /// 保持している空間IDの集合は変わらない。既にクローン等で他のインスタンスと共有されている領域があっても、
+    /// 他のインスタンスには影響しない。
+    ///
+    /// ユニークな内部構成要素数を n として O(n) 時間で動作し、実行中のみ O(n) の作業メモリを使用する。
+    ///
+    /// # 動作例
+    ///
+    /// 同じ形状の領域群の圧縮:
+    /// ```
+    /// use spatial_id::collection::SpatialIdSet;
+    /// use spatial_id::SingleId;
+    ///
+    /// let mut set = SpatialIdSet::new();
+    /// for dx in [0, 100] {
+    ///     set.insert(SingleId::new(20, 0, dx, 0).unwrap());
+    ///     set.insert(SingleId::new(20, 0, dx + 1, 1).unwrap());
+    /// }
+    /// set.compact();
+    /// assert_eq!(set.count(), 4);
+    /// ```
+    pub fn compact(&mut self) {
+        self.inner.compact();
+    }
+
     /// 集合が保持するすべての空間IDを返す。
     pub fn iter(&self) -> impl Iterator<Item = RangeId> + Clone + '_ {
         self.iter_flex_ids().map(RangeId::from)

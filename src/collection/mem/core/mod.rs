@@ -11,6 +11,8 @@ pub(crate) use iter::Iter;
 use node::{Decision, Node};
 use view::View;
 
+#[cfg(any(feature = "unstable", test))]
+mod compact;
 mod iter;
 mod node;
 #[cfg(test)]
