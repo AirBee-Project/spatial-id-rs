@@ -304,22 +304,6 @@ impl<V: Eq + Hash + Clone> SpatialIdMap<V> {
     /// 一部のフィールドだけを比較する [`Eq`] 実装では、どのインスタンスが残るかは規定しない。
     ///
     /// ユニークな内部構成要素数を n として O(n) 時間で動作し、実行中のみ O(n) の作業メモリを使用する。
-    ///
-    /// # 動作例
-    ///
-    /// 同じ形状の領域群の圧縮:
-    /// ```
-    /// use spatial_id::collection::SpatialIdMap;
-    /// use spatial_id::SingleId;
-    ///
-    /// let mut map = SpatialIdMap::new();
-    /// for dx in [0, 100] {
-    ///     map.insert(SingleId::new(20, 0, dx, 0).unwrap(), 1);
-    ///     map.insert(SingleId::new(20, 0, dx + 1, 1).unwrap(), 2);
-    /// }
-    /// map.compact();
-    /// assert_eq!(map.count(), 4);
-    /// ```
     pub fn compact(&mut self) {
         self.inner.compact();
     }

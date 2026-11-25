@@ -230,22 +230,6 @@ impl SpatialIdSet {
     /// 他のインスタンスには影響しない。圧縮後に変更すると、共有している領域はその時点で複製される。
     ///
     /// ユニークな内部構成要素数を n として O(n) 時間で動作し、実行中のみ O(n) の作業メモリを使用する。
-    ///
-    /// # 動作例
-    ///
-    /// 同じ形状の領域群の圧縮:
-    /// ```
-    /// use spatial_id::collection::SpatialIdSet;
-    /// use spatial_id::SingleId;
-    ///
-    /// let mut set = SpatialIdSet::new();
-    /// for dx in [0, 100] {
-    ///     set.insert(SingleId::new(20, 0, dx, 0).unwrap());
-    ///     set.insert(SingleId::new(20, 0, dx + 1, 1).unwrap());
-    /// }
-    /// set.compact();
-    /// assert_eq!(set.count(), 4);
-    /// ```
     pub fn compact(&mut self) {
         self.inner.compact();
     }
