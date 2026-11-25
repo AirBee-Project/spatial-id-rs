@@ -357,14 +357,16 @@ fn read_source<'a, V: SafeValue + 'static>(
     bounds: &[RangeId],
     token: &CancellationToken,
 ) -> Result<QueryIter<'a, V>, Error> {
+    let stream = source.read_flex_ids(bounds, token)?;
+    if token.is_never() {
+        return Ok(stream);
+    }
     let token = token.clone();
     let mut counter = 0u32;
-    Ok(QueryIter::new(source.read_flex_ids(bounds, &token)?.map(
-        move |item| {
-            token.check_amortized(&mut counter)?;
-            item
-        },
-    )))
+    Ok(QueryIter::new(stream.map(move |item| {
+        token.check_amortized(&mut counter)?;
+        item
+    })))
 }
 
 impl<V: SafeValue + 'static> Query<V> {

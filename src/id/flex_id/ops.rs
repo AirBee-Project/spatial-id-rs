@@ -234,9 +234,9 @@ impl FlexId {
     pub fn intersects_range(&self, range: &crate::RangeId) -> bool {
         // 時間軸だけは「共通ズームでの整数範囲」に落とせない（`RangeId` の `Interval` は
         // 2の冪乗とは限らない）ので、絶対秒区間の重なりで判定する。
-        // `temporal_id` 無効時は双方とも全時間で必ず重なるため、判定ごと消す。
+        // `temporal_id` 無効時、または片側が全時間なら必ず重なるため計算を省く。
         #[cfg(feature = "temporal_id")]
-        {
+        if self.t_zoomlevel() != 0 && range.i() != crate::Interval::WHOLE {
             let (self_start, self_end) = self.seconds_range();
             let (range_start, range_end) = range.seconds_range();
             if self_start >= range_end || range_start >= self_end {
@@ -244,6 +244,11 @@ impl FlexId {
             }
         }
 
+        self.intersects_spatial_range(range)
+    }
+
+    #[inline]
+    pub(crate) fn intersects_spatial_range(&self, range: &crate::RangeId) -> bool {
         let rz = range.z();
         let [f_start, f_end] = range.f();
         if !overlaps_i32(self.f_zoomlevel(), self.f_index(), rz, f_start, f_end) {
@@ -264,6 +269,39 @@ impl FlexId {
             overlaps_u32(xz, xi, rz, x_start, (1_u32 << rz) - 1)
                 || overlaps_u32(xz, xi, rz, 0, x_end)
         }
+    }
+}
+
+/// 時間区間を事前計算し、複数 [`FlexId`] との交差判定を繰り返すための [`RangeId`] ラッパー。
+#[derive(Clone, Copy)]
+pub(crate) struct PreparedRange {
+    range: crate::RangeId,
+    #[cfg(feature = "temporal_id")]
+    time: Option<(u64, u64)>,
+}
+
+impl PreparedRange {
+    #[inline]
+    pub(crate) fn new(range: crate::RangeId) -> Self {
+        Self {
+            range,
+            #[cfg(feature = "temporal_id")]
+            time: (range.i() != crate::Interval::WHOLE).then(|| range.seconds_range()),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn intersects(&self, id: &FlexId) -> bool {
+        #[cfg(feature = "temporal_id")]
+        if let Some((range_start, range_end)) = self.time
+            && id.t_zoomlevel() != 0
+        {
+            let (self_start, self_end) = id.seconds_range();
+            if self_start >= range_end || range_start >= self_end {
+                return false;
+            }
+        }
+        id.intersects_spatial_range(&self.range)
     }
 }
 

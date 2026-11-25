@@ -36,7 +36,8 @@ impl<'a, V> Iterator for Iter<'a, V> {
     type Item = (FlexId, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some((node, this)) = self.stack.pop() {
+        let (mut node, mut this) = self.stack.pop()?;
+        loop {
             match node {
                 Node::Value(value) => {
                     self.remaining -= 1;
@@ -46,37 +47,94 @@ impl<'a, V> Iterator for Iter<'a, V> {
                     self.remaining -= 1;
                     return Some((path.to_absolute(&this), value));
                 }
-                Node::Branch(branch) => self.push_branch(this, branch),
-                Node::ShortSkipBranch(path, branch) => {
-                    self.push_branch(path.to_absolute(&this), branch)
+                Node::Branch(branch) => {
+                    (node, this) = push_upper_ref(&mut self.stack, this, branch);
                 }
-                Node::LongSkip(skip) => self
-                    .stack
-                    .push((&skip.child, skip.path.to_absolute(&this).unwrap())),
+                Node::ShortSkipBranch(path, branch) => {
+                    let region = path.to_absolute(&this);
+                    (node, this) = push_upper_ref(&mut self.stack, region, branch);
+                }
+                Node::LongSkip(skip) => {
+                    this = skip.path.to_absolute(&this).unwrap();
+                    node = &skip.child;
+                }
             }
         }
-        None
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.remaining, Some(self.remaining))
     }
+
+    fn fold<B, F>(mut self, mut init: B, mut f: F) -> B
+    where
+        F: FnMut(B, Self::Item) -> B,
+    {
+        while let Some((node, this)) = self.stack.pop() {
+            init = fold_node_ref(node, this, init, &mut f);
+        }
+        init
+    }
 }
 
-impl<'a, V> Iter<'a, V> {
-    /// 領域 `this` の `branch` の子を、下側から取り出されるように積む。
-    fn push_branch(&mut self, this: FlexId, branch: &'a Branch<V>) {
-        // 走査はポインタを辿るキャッシュミスが律速になる。upper は lower 側の部分木を返し終えるまで使わないので、その間に読み込ませておく
-        branch.upper.prefetch();
-        let dimension = branch.dimension;
-        self.stack.push((
-            &branch.upper,
-            this.split_on(dimension, Side::Upper).unwrap(),
-        ));
-        self.stack.push((
-            &branch.lower,
-            this.split_on(dimension, Side::Lower).unwrap(),
-        ));
+/// 領域 `this` の `branch` の上側を `stack` へ積み、そのまま降りる下側を返す。
+#[inline(always)]
+fn push_upper_ref<'a, V>(
+    stack: &mut Vec<(&'a Node<V>, FlexId)>,
+    this: FlexId,
+    branch: &'a Branch<V>,
+) -> (&'a Node<V>, FlexId) {
+    // 走査はポインタを辿るキャッシュミスが律速になる。upper は lower 側の部分木を返し終えるまで使わないので、その間に読み込ませておく
+    branch.upper.prefetch();
+    let dimension = branch.dimension;
+    stack.push((
+        &branch.upper,
+        this.split_on(dimension, Side::Upper).unwrap(),
+    ));
+    (
+        &branch.lower,
+        this.split_on(dimension, Side::Lower).unwrap(),
+    )
+}
+
+fn fold_node_ref<'a, V, B, F>(mut node: &'a Node<V>, mut this: FlexId, mut acc: B, f: &mut F) -> B
+where
+    F: FnMut(B, (FlexId, &'a V)) -> B,
+{
+    loop {
+        match node {
+            Node::Value(value) => return f(acc, (this, value)),
+            Node::ShortSkipValue(path, value) => return f(acc, (path.to_absolute(&this), value)),
+            Node::Branch(branch) => {
+                branch.upper.prefetch();
+                let dimension = branch.dimension;
+                acc = fold_node_ref(
+                    &branch.lower,
+                    this.split_on(dimension, Side::Lower).unwrap(),
+                    acc,
+                    f,
+                );
+                node = &branch.upper;
+                this = this.split_on(dimension, Side::Upper).unwrap();
+            }
+            Node::ShortSkipBranch(path, branch) => {
+                let region = path.to_absolute(&this);
+                branch.upper.prefetch();
+                let dimension = branch.dimension;
+                acc = fold_node_ref(
+                    &branch.lower,
+                    region.split_on(dimension, Side::Lower).unwrap(),
+                    acc,
+                    f,
+                );
+                node = &branch.upper;
+                this = region.split_on(dimension, Side::Upper).unwrap();
+            }
+            Node::LongSkip(skip) => {
+                this = skip.path.to_absolute(&this).unwrap();
+                node = &skip.child;
+            }
+        }
     }
 }
 
@@ -98,7 +156,8 @@ impl<V: Clone> Iterator for IntoIter<V> {
     type Item = (FlexId, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some((node, this)) = self.stack.pop() {
+        let (mut node, mut this) = self.stack.pop()?;
+        loop {
             match node {
                 Node::Value(value) => {
                     self.remaining -= 1;
@@ -108,40 +167,97 @@ impl<V: Clone> Iterator for IntoIter<V> {
                     self.remaining -= 1;
                     return Some((path.to_absolute(&this), value));
                 }
-                Node::Branch(branch) => self.push_branch(this, branch),
+                Node::Branch(branch) => {
+                    (node, this) = push_upper_owned(&mut self.stack, this, branch);
+                }
                 Node::ShortSkipBranch(path, branch) => {
-                    self.push_branch(path.to_absolute(&this), branch)
+                    let region = path.to_absolute(&this);
+                    (node, this) = push_upper_owned(&mut self.stack, region, branch);
                 }
                 Node::LongSkip(skip) => {
-                    let region = skip.path.to_absolute(&this).unwrap();
-                    let child = Arc::try_unwrap(skip)
+                    this = skip.path.to_absolute(&this).unwrap();
+                    node = Arc::try_unwrap(skip)
                         .map_or_else(|skip| skip.child.clone(), |skip| skip.child);
-                    self.stack.push((child, region));
                 }
             }
         }
-        None
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.remaining, Some(self.remaining))
     }
+
+    fn fold<B, F>(mut self, mut init: B, mut f: F) -> B
+    where
+        F: FnMut(B, Self::Item) -> B,
+    {
+        while let Some((node, this)) = self.stack.pop() {
+            init = fold_node_owned(node, this, init, &mut f);
+        }
+        init
+    }
 }
 
-impl<V> IntoIter<V> {
-    /// 領域 `this` の `branch` の子を、[Iter]と同じく下側から取り出されるように積む。
-    fn push_branch(&mut self, this: FlexId, branch: Arc<Branch<V>>)
-    where
-        V: Clone,
-    {
-        let (dimension, lower, upper) = match Arc::try_unwrap(branch) {
-            Ok(branch) => (branch.dimension, branch.lower, branch.upper),
-            Err(branch) => (branch.dimension, branch.lower.clone(), branch.upper.clone()),
-        };
-        self.stack
-            .push((upper, this.split_on(dimension, Side::Upper).unwrap()));
-        self.stack
-            .push((lower, this.split_on(dimension, Side::Lower).unwrap()));
+#[inline(always)]
+fn unwrap_branch<V: Clone>(branch: Arc<Branch<V>>) -> (Dimension, Node<V>, Node<V>) {
+    match Arc::try_unwrap(branch) {
+        Ok(branch) => (branch.dimension, branch.lower, branch.upper),
+        Err(branch) => (branch.dimension, branch.lower.clone(), branch.upper.clone()),
+    }
+}
+
+/// 領域 `this` の `branch` の上側を `stack` へ積み、そのまま降りる下側を返す。
+#[inline(always)]
+fn push_upper_owned<V: Clone>(
+    stack: &mut Vec<(Node<V>, FlexId)>,
+    this: FlexId,
+    branch: Arc<Branch<V>>,
+) -> (Node<V>, FlexId) {
+    let (dimension, lower, upper) = unwrap_branch(branch);
+    upper.prefetch();
+    stack.push((upper, this.split_on(dimension, Side::Upper).unwrap()));
+    (lower, this.split_on(dimension, Side::Lower).unwrap())
+}
+
+fn fold_node_owned<V: Clone, B, F>(mut node: Node<V>, mut this: FlexId, mut acc: B, f: &mut F) -> B
+where
+    F: FnMut(B, (FlexId, V)) -> B,
+{
+    loop {
+        match node {
+            Node::Value(value) => return f(acc, (this, value)),
+            Node::ShortSkipValue(path, value) => return f(acc, (path.to_absolute(&this), value)),
+            Node::Branch(branch) => {
+                let (dimension, lower, upper) = unwrap_branch(branch);
+                upper.prefetch();
+                acc = fold_node_owned(
+                    lower,
+                    this.split_on(dimension, Side::Lower).unwrap(),
+                    acc,
+                    f,
+                );
+                node = upper;
+                this = this.split_on(dimension, Side::Upper).unwrap();
+            }
+            Node::ShortSkipBranch(path, branch) => {
+                let region = path.to_absolute(&this);
+                let (dimension, lower, upper) = unwrap_branch(branch);
+                upper.prefetch();
+                acc = fold_node_owned(
+                    lower,
+                    region.split_on(dimension, Side::Lower).unwrap(),
+                    acc,
+                    f,
+                );
+                node = upper;
+                this = region.split_on(dimension, Side::Upper).unwrap();
+            }
+            Node::LongSkip(skip) => {
+                this = skip.path.to_absolute(&this).unwrap();
+                node =
+                    Arc::try_unwrap(skip).map_or_else(|skip| skip.child.clone(), |skip| skip.child);
+            }
+        }
     }
 }
 
@@ -164,12 +280,8 @@ impl<V: Clone> IntoIterator for FlexTreeCore<V> {
 
     fn into_iter(self) -> Self::IntoIter {
         let remaining = self.count();
-        let height = self
-            .upper_root
-            .as_ref()
-            .map_or(0, |r| r.height())
-            .max(self.lower_root.as_ref().map_or(0, |r| r.height()));
-        let mut stack = Vec::with_capacity(usize::from(height) + 2);
+        let height = self.max_height();
+        let mut stack = Vec::with_capacity(usize::from(height) + 1);
         // 後に積んだものから取り出すので、上側のルートを後に積む
         if let Some(lower) = self.lower_root {
             stack.push((lower, FlexId::LOWER_MAX));

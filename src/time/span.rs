@@ -31,11 +31,13 @@ impl TimeSpan {
     }
 
     /// 開始秒
+    #[cfg(any(feature = "temporal_id", test))]
     pub const fn start(&self) -> u64 {
         self.start
     }
 
     /// 終了秒 (排他)
+    #[cfg(any(feature = "temporal_id", test))]
     pub const fn end(&self) -> u64 {
         self.end
     }
