@@ -1,7 +1,6 @@
-use super::FilterMapValues;
+use crate::Error;
+use crate::query::Query;
 use crate::query::SafeValue;
-use crate::query::{Node, Query};
-use alloc::boxed::Box;
 
 impl<V: SafeValue + 'static> Query<V> {
     /// 各値を `f` に渡し、[`Some`] なら値を写し、[`None`] なら取り除く。値は別の型へ写せる。
@@ -26,11 +25,18 @@ impl<V: SafeValue + 'static> Query<V> {
         U: SafeValue + 'static,
         F: Fn(V) -> Option<U> + Send + Sync + 'static,
     {
-        Query(Node::Source(Box::new(FilterMapValues {
-            inner: self,
-            f,
-            _marker: core::marker::PhantomData,
-        })))
+        self.filter_map(move |_, value| f(value))
+    }
+
+    /// 各値を `f` に渡し、`Ok(Some(_))` なら値を写し、`Ok(None)` なら取り除く。
+    /// [`Err`] を返した時点で変換を打ち切り、そのエラーを評価結果として返す。
+    pub fn try_filter_map_values<U, E, F>(self, f: F) -> Query<U>
+    where
+        U: SafeValue + 'static,
+        E: Into<Error>,
+        F: Fn(V) -> Result<Option<U>, E> + Send + Sync + 'static,
+    {
+        self.try_filter_map(move |_, value| f(value))
     }
 
     /// 各値を `f` で写す。値は別の型へ写せる。
