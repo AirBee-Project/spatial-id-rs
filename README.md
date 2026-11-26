@@ -73,7 +73,7 @@ let bldg_risk = bldg
 let risk = bldg_risk
     .merge(tran_risk, Max)
     .zoom_out(23, Average)
-    .filter_in(0..100)
+    .filter_values(|v| (0..100).contains(v))
     .get(..)
     .into_map()?;
 ```

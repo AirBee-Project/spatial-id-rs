@@ -42,13 +42,4 @@ impl<V: SafeValue + 'static> Query<V> {
     {
         self.filter_map(move |id, value| Some(f(id, value)))
     }
-
-    /// 各要素の [`FlexId`] と値を `f` に渡し、`true` を返した要素だけを残す。
-    /// [`FlexId`] の扱いは [`filter_map`](Self::filter_map) と同じ。
-    pub fn filter<F>(self, f: F) -> Self
-    where
-        F: Fn(FlexId, &V) -> bool + Send + Sync + 'static,
-    {
-        self.filter_map(move |id, value| f(id, &value).then_some(value))
-    }
 }

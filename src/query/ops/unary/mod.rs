@@ -2,7 +2,7 @@ use crate::FlexId;
 
 pub(crate) mod extrude;
 pub(crate) mod falloff;
-pub(crate) mod filter_values;
+pub(crate) mod filter;
 pub(crate) mod shift;
 pub(crate) mod zoom_out;
 
