@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::{
-    Coordinate, Error, Line, Point, Shape, SingleId, Vec3, Vec3Ecef,
+    Coordinate, Error, Line, Point, Shape, SingleId, Vec3, Vec3Ecef, Vec3FractionalId,
     geometry::traits::CoverSingleIds,
 };
 
@@ -40,49 +40,36 @@ impl CoverSingleIds for Line {
             + (v1.x() as i32 - v2.x() as i32).abs()
             + (v1.y() as i32 - v2.y() as i32).abs()) as f64;
         let devide_num = 5 + libm::floor(diff / 120.0 + distance / 2000.0) as u16;
-        let mut coordinates = Vec::with_capacity(devide_num as usize + 1);
+        let mut points = Vec::with_capacity(devide_num as usize + 1);
         for i in 0..=devide_num {
             let t = i as f64 / devide_num as f64;
             let v = vec_a.scale(1.0 - t) + vec_b.scale(t);
             let coo: Coordinate = v.try_into()?;
-            coordinates.push(coo);
+            points.push(Vec3FractionalId::from(coo.fractional_id(z)?));
         }
         let estimated_capacity = (diff as usize) + 10;
         let mut voxels: Vec<SingleId> = Vec::with_capacity(estimated_capacity);
-        for pair in coordinates.windows(2) {
-            let start = pair[0];
-            let end = pair[1];
-            let line_iter = line_dda(z, start, end)?;
+        for pair in points.windows(2) {
             voxels.pop();
-            voxels.extend(line_iter);
+            voxels.extend(line_dda(z, pair[0], pair[1]));
         }
         Ok(voxels.into_iter().map(move |id| (id, value.clone())))
     }
 }
 
-///DDAを用いたLine関数
-fn line_dda(z: u8, a: Coordinate, b: Coordinate) -> Result<impl Iterator<Item = SingleId>, Error> {
-    let zoom = crate::id::zoom_level::ZoomLevel::new(z)?;
-    let z = zoom.get();
-    let origin1 = coordinate_to_matrix(a, z);
-    let origin2 = coordinate_to_matrix(b, z);
-    let offsets = origin1.map(libm::floor);
-    let vp1 = [
-        origin1[0] - offsets[0],
-        origin1[1] - offsets[1],
-        origin1[2] - offsets[2],
-    ];
-    let vp2 = [
-        origin2[0] - offsets[0],
-        origin2[1] - offsets[1],
-        origin2[2] - offsets[2],
-    ];
+/// `a` から `b` へ DDA で辿った空間IDを、`a` 側から順に返す。
+fn line_dda(z: u8, a: Vec3FractionalId, b: Vec3FractionalId) -> impl Iterator<Item = SingleId> {
+    let offsets = Vec3FractionalId::new(libm::floor(a.a), libm::floor(a.b), libm::floor(a.c));
+    let vp1 = a - offsets;
+    let vp2 = b - offsets;
+    let vp1 = [vp1.a, vp1.b, vp1.c];
+    let vp2 = [vp2.a, vp2.b, vp2.c];
+    let offsets_int = [offsets.a as i32, offsets.b as i32, offsets.c as i32];
     let d_total = [
         libm::fabs(vp2[0] - vp1[0]),
         libm::fabs(vp2[1] - vp1[1]),
         libm::fabs(vp2[2] - vp1[2]),
     ];
-    let offsets_int = offsets.map(|x| x as i32);
     let max_d = d_total[0].max(d_total[1]).max(d_total[2]);
     let max_flag: usize = if max_d == d_total[0] {
         0
@@ -148,7 +135,7 @@ fn line_dda(z: u8, a: Coordinate, b: Coordinate) -> Result<impl Iterator<Item = 
         (current[pull_index[2]] + offsets_int[2]) as u32,
     )
     .unwrap();
-    let iter = core::iter::once(first).chain((1..=max_steps).map(move |_| {
+    core::iter::once(first).chain((1..=max_steps).map(move |_| {
         let min_wall = (tm_int as f64).min(to1).min(to2);
         if min_wall == tm_int as f64 {
             tm_int += 1;
@@ -167,26 +154,5 @@ fn line_dda(z: u8, a: Coordinate, b: Coordinate) -> Result<impl Iterator<Item = 
             (current[pull_index[2]] + offsets_int[2]) as u32,
         )
         .unwrap()
-    }));
-    Ok(iter)
-}
-
-fn coordinate_to_matrix(p: Coordinate, z: u8) -> [f64; 3] {
-    let lat = p.latitude();
-    let lon = p.longitude();
-    let alt = p.altitude();
-
-    // 空間idの高さはz=25でちょうど1mになるように定義されている
-    let factor = libm::pow(2_f64, (z as i32 - 25) as f64);
-    let f = factor * alt;
-
-    let n = 2u64.pow(z as u32) as f64;
-    let x = (lon + Coordinate::LON_ABS_MAX) / (2.0 * Coordinate::LON_ABS_MAX) * n;
-
-    let lat_rad = lat.to_radians();
-    let y = (1.0
-        - libm::log(libm::tan(lat_rad) + 1.0 / libm::cos(lat_rad)) / core::f64::consts::PI)
-        / 2.0
-        * n;
-    [f, x, y]
+    }))
 }
