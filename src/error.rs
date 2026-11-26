@@ -71,6 +71,15 @@ pub enum GeometryError {
     /// GeoJSON の Position の要素数が足りないことを示す。経度と緯度の 2 要素が必要。
     PositionTooShort { len: usize },
 
+    /// Polygon のリングを構成する頂点が 3 未満であることを示す。
+    PolygonTooFewVertices { count: usize },
+
+    /// Polygon の面積が 0（または許容誤差以下）であることを示す。
+    PolygonZeroArea,
+
+    /// Polygon のリングが自己交差していることを示す。
+    PolygonSelfIntersecting,
+
     /// GeoJSON の Polygon の穴が外周の内側に収まっていないことを示す。`index` は内周リングの位置（0 始まり）。
     HoleOutsideExterior { index: usize },
 }
@@ -231,6 +240,19 @@ impl fmt::Display for GeometryError {
                     "Position has {} elements, but at least 2 (longitude, latitude) are required",
                     len
                 )
+            }
+            GeometryError::PolygonTooFewVertices { count } => {
+                write!(
+                    f,
+                    "Polygon ring requires at least 3 distinct vertices, got {}",
+                    count
+                )
+            }
+            GeometryError::PolygonZeroArea => {
+                write!(f, "Polygon has zero area")
+            }
+            GeometryError::PolygonSelfIntersecting => {
+                write!(f, "Polygon ring is self-intersecting")
             }
             GeometryError::HoleOutsideExterior { index } => {
                 write!(f, "Polygon hole {} is not inside the exterior ring", index)

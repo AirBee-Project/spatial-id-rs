@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 
+use super::ring_plane::signed_area;
 use crate::{
     Coordinate, Ecef, ExpandCoordinates, ExpandLines, ExpandTriangles, Line, Polygon, Triangle,
 };
@@ -123,16 +124,6 @@ pub(crate) fn get_projection_axes(pts: &[Ecef]) -> (usize, usize) {
     } else {
         (0, 1)
     }
-}
-
-fn signed_area(pts: &[(f64, f64)]) -> f64 {
-    let mut area = 0.0;
-    for i in 0..pts.len() {
-        let j = (i + 1) % pts.len();
-        area += pts[i].0 * pts[j].1;
-        area -= pts[j].0 * pts[i].1;
-    }
-    area / 2.0
 }
 
 fn is_ear(

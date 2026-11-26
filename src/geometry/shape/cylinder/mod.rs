@@ -80,7 +80,7 @@ impl Cylinder {
             let v_next = vertices[next_i as usize];
 
             Polygon::with_epsilon(
-                vec![
+                [
                     to_coord(v_curr[0]),
                     to_coord(v_next[0]),
                     to_coord(v_next[1]),
@@ -88,6 +88,7 @@ impl Cylinder {
                 ],
                 Epsilon::ZERO,
             )
+            .unwrap()
         });
 
         // 側面を全て集める
@@ -95,15 +96,14 @@ impl Cylinder {
         let mut raw_surfaces: Vec<Polygon> = side_surfaces.collect();
 
         // 底面
-        raw_surfaces.push(Polygon::with_epsilon(
-            vertices.iter().rev().map(|v| to_coord(v[0])).collect(),
-            Epsilon::ZERO,
-        ));
+        raw_surfaces.push(
+            Polygon::with_epsilon(vertices.iter().rev().map(|v| to_coord(v[0])), Epsilon::ZERO)
+                .unwrap(),
+        );
         // 上面
-        raw_surfaces.push(Polygon::with_epsilon(
-            vertices.iter().map(|v| to_coord(v[1])).collect(),
-            Epsilon::ZERO,
-        ));
+        raw_surfaces.push(
+            Polygon::with_epsilon(vertices.iter().map(|v| to_coord(v[1])), Epsilon::ZERO).unwrap(),
+        );
 
         raw_surfaces.into_iter()
     }
@@ -136,7 +136,7 @@ impl Cylinder {
             let v_next = vertices[next_i as usize];
 
             Polygon::with_epsilon(
-                vec![
+                [
                     to_coord(v_curr[0]),
                     to_coord(v_next[0]),
                     to_coord(v_next[1]),
@@ -144,6 +144,7 @@ impl Cylinder {
                 ],
                 Epsilon::ZERO,
             )
+            .unwrap()
         });
 
         // 側面を全て集める
@@ -151,15 +152,14 @@ impl Cylinder {
         let mut raw_surfaces: Vec<Polygon> = side_surfaces.collect();
 
         // 底面
-        raw_surfaces.push(Polygon::with_epsilon(
-            vertices.iter().rev().map(|v| to_coord(v[0])).collect(),
-            Epsilon::ZERO,
-        ));
+        raw_surfaces.push(
+            Polygon::with_epsilon(vertices.iter().rev().map(|v| to_coord(v[0])), Epsilon::ZERO)
+                .unwrap(),
+        );
         // 上面
-        raw_surfaces.push(Polygon::with_epsilon(
-            vertices.iter().map(|v| to_coord(v[1])).collect(),
-            Epsilon::ZERO,
-        ));
+        raw_surfaces.push(
+            Polygon::with_epsilon(vertices.iter().map(|v| to_coord(v[1])), Epsilon::ZERO).unwrap(),
+        );
 
         raw_surfaces.into_iter()
     }

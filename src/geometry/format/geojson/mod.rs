@@ -264,7 +264,7 @@ fn cover_polygon(rings: &[Vec<Position>], z: u8) -> Result<HashSet<SingleId>, Er
                 .iter()
                 .map(Coordinate::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(Polygon::new(coords))
+            Polygon::new(coords)
         })
         .collect::<Result<Vec<_>, Error>>()?
         .into_iter();
