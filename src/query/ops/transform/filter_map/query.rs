@@ -1,7 +1,7 @@
-use super::FilterMap;
-use crate::FlexId;
+use super::{FilterMap, TryFilterMap};
 use crate::query::SafeValue;
 use crate::query::{Node, Query};
+use crate::{Error, FlexId};
 use alloc::boxed::Box;
 
 impl<V: SafeValue + 'static> Query<V> {
@@ -16,11 +16,22 @@ impl<V: SafeValue + 'static> Query<V> {
         U: SafeValue + 'static,
         F: Fn(FlexId, V) -> Option<U> + Send + Sync + 'static,
     {
-        Query(Node::Source(Box::new(FilterMap {
-            inner: self,
-            f,
-            _marker: core::marker::PhantomData,
-        })))
+        Query(Node::Source(Box::new(FilterMap::new(self, f))))
+    }
+
+    /// 各要素の [`FlexId`] と値を `f` に渡し、`Ok(Some(_))` なら値を写し、`Ok(None)` なら取り除く。
+    /// [`Err`] を返した時点で変換を打ち切り、そのエラーを評価結果として返す。
+    /// [`FlexId`] の扱いは [`filter_map`](Self::filter_map) と同じ。
+    pub fn try_filter_map<U, E, F>(self, f: F) -> Query<U>
+    where
+        U: SafeValue + 'static,
+        E: Into<Error>,
+        F: Fn(FlexId, V) -> Result<Option<U>, E> + Send + Sync + 'static,
+    {
+        Query(Node::Source(Box::new(TryFilterMap::new(
+            self,
+            move |id, value| f(id, value).map_err(Into::into),
+        ))))
     }
 
     /// 各要素の [`FlexId`] と値を `f` で写す。[`FlexId`] の扱いは [`filter_map`](Self::filter_map) と同じ。
@@ -30,14 +41,5 @@ impl<V: SafeValue + 'static> Query<V> {
         F: Fn(FlexId, V) -> U + Send + Sync + 'static,
     {
         self.filter_map(move |id, value| Some(f(id, value)))
-    }
-
-    /// 各要素の [`FlexId`] と値を `f` に渡し、`true` を返した要素だけを残す。
-    /// [`FlexId`] の扱いは [`filter_map`](Self::filter_map) と同じ。
-    pub fn filter<F>(self, f: F) -> Self
-    where
-        F: Fn(FlexId, &V) -> bool + Send + Sync + 'static,
-    {
-        self.filter_map(move |id, value| f(id, &value).then_some(value))
     }
 }

@@ -114,7 +114,7 @@ impl SpatialId for RangeId {
 
     /// [`RangeId`] の空間中心座標を [`Coordinate`] 型で返す。
     ///
-    /// 中心座標は空間 ID の最も外側の頂点の8点の平均座標である。現実空間における空間 ID は完全な直方体ではなく、緯度や高度によって歪みが発生していることに注意する必要がある。
+    /// 中心座標は空間IDの最も外側の頂点の8点の平均座標である。現実空間における空間IDは完全な直方体ではなく、緯度や高度によって歪みが発生していることに注意する必要がある。
     fn spatial_center(&self) -> Coordinate {
         let z = self.z.get();
 
@@ -132,7 +132,7 @@ impl SpatialId for RangeId {
 
     /// [`RangeId`] の最も外側の頂点の8点の座標を [`Coordinate`] 型の配列として返す。
     ///
-    /// 現実空間における空間 ID は完全な直方体ではなく、緯度や高度によって歪みが発生していることに注意する必要がある。
+    /// 現実空間における空間IDは完全な直方体ではなく、緯度や高度によって歪みが発生していることに注意する必要がある。
     fn spatial_vertices(&self) -> [Coordinate; 8] {
         let z = self.z.get();
 
@@ -170,7 +170,7 @@ impl SpatialId for RangeId {
         //Z=25のとき、ちょうど高さが1mとなる
         let one = libm::pow(2_f64, (25 - self.z() as i32) as f64);
 
-        //このRangeIdが表すSegment数を計算（両端含む）
+        //このRangeIdがF方向に占める単位数を計算（両端含む）
         let range = (self.f()[1] - self.f()[0] + 1) as f64;
 
         //かけ合わせて答えを返却

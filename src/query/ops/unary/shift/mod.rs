@@ -1,3 +1,6 @@
+#[cfg(feature = "rayon")]
+use alloc::vec::Vec;
+
 use crate::query::SafeValue;
 use crate::query::{query_iter::QueryIter, traits::UnaryOperator};
 use crate::{Error, FlexId, RangeId, SpatialIdMap, ZoomLevel};

@@ -13,22 +13,22 @@ use crate::{SingleId, SpatialIdMap, SpatialIdSet};
 use proptest::prelude::*;
 
 /// 道路（平面ストリップ）の X/Y 方向マージ対称性。
-/// ガード付きの異方 collapse により、最深軸であれば X 方向ストリップも畳まれる。
+/// ガード付きの次元ごとの collapse により、最深軸であれば X 方向ストリップも畳まれる。
 #[test]
 fn road_strip_xy_symmetry() {
     let z = 4u8;
 
-    // Y 方向 2 TimeSegment → 1。
+    // Y 方向の隣接 2 要素 → 1。
     let mut y_strip = SpatialIdSet::new();
     y_strip.insert(SingleId::new(z, 0, 0, 0).unwrap());
     y_strip.insert(SingleId::new(z, 0, 0, 1).unwrap());
     assert_eq!(y_strip.count(), 1, "Y-strip merges");
 
-    // X 方向 2 TimeSegment → 最深 X の冗長分割が畳まれ 1（異方Segment x_zoom=z-1, y_zoom=z）。
+    // X 方向の隣接 2 要素 → 最深 X の冗長分割が畳まれ 1（x_zoom=z-1, y_zoom=z の FlexId）。
     let mut x_strip = SpatialIdSet::new();
     x_strip.insert(SingleId::new(z, 0, 0, 0).unwrap());
     x_strip.insert(SingleId::new(z, 0, 1, 0).unwrap());
-    assert_eq!(x_strip.count(), 1, "X-strip now merges (anisotropic)");
+    assert_eq!(x_strip.count(), 1, "X-strip now merges");
 
     // 2x2 ブロック → 1。
     let mut block = SpatialIdSet::new();
@@ -39,7 +39,7 @@ fn road_strip_xy_symmetry() {
     }
     assert_eq!(block.count(), 1, "2x2 block merges");
 
-    // X 方向に長さ 8 のアライン道（Y=1Segment幅）→ 1 つの異方Segmentへ畳まれる。
+    // X 方向に長さ 8 のアライン道（Y=1単位幅）→ 1 つの FlexId へ畳まれる。
     let mut long_x_road = SpatialIdSet::new();
     for x in 0..8 {
         long_x_road.insert(SingleId::new(z, 0, x, 0).unwrap());
@@ -47,12 +47,12 @@ fn road_strip_xy_symmetry() {
     assert_eq!(
         long_x_road.count(),
         1,
-        "aligned X-road merges to a single anisotropic time_segment"
+        "aligned X-road merges to a single FlexId"
     );
 }
 
 /// フル充填の葉 collapse で max_zoom が減るケース。
-/// zoom4 の 2×2×2 ブロック（f,x,y∈{0,1}）は zoom3 等方Segment（葉）へ畳まれ、
+/// zoom4 の 2×2×2 ブロック（f,x,y∈{0,1}）は zoom3 の 1 つの空間ID（葉）へ畳まれ、
 /// max_zoomlevel は 4→3 になる。
 #[test]
 fn f_collapse_reduces_max_zoom() {
@@ -83,11 +83,7 @@ fn table_merges_same_value_only() {
     let mut diff = SpatialIdMap::<i32>::new();
     diff.insert(SingleId::new(2, 0, 0, 0).unwrap(), 7);
     diff.insert(SingleId::new(2, 0, 0, 1).unwrap(), 8);
-    assert_eq!(
-        diff.count(),
-        2,
-        "different-value time_segments must NOT merge"
-    );
+    assert_eq!(diff.count(), 2, "different-value y-siblings must NOT merge");
 }
 
 /// Table: 8 オクタントを同値で満たすと 1 葉へ collapse。異値が混じると collapse しない。
@@ -109,7 +105,7 @@ fn table_full_cube_same_value_collapses() {
 }
 
 /// 未適用のマージが残っていないこと。FlexTreeCore は形状に対して一意に定まるので、
-/// 全Segmentを挿入し直した木と構造が一致するかで判定する。
+/// 全要素を挿入し直した木と構造が一致するかで判定する。
 fn set_is_fully_merged(set: &SpatialIdSet) -> bool {
     rebuilt(set) == *set
 }
@@ -133,7 +129,7 @@ fn union_of_f_halves_collapses() {
 }
 
 /// 深いズームの立方体を完全に満たすと、多段の collapse が再帰的に伝播して
-/// 1 葉になる。zoom Z の等方立方体 = (2^Z)^3 TimeSegment、ツリー深さ 3*Z 段の cascade。
+/// 1 葉になる。zoom Z の立方体 = (2^Z)^3 個の標準空間ID、ツリー深さ 3*Z 段の cascade。
 #[test]
 fn deep_recursive_cascade_collapses() {
     for z in 1u8..=3 {
@@ -155,7 +151,7 @@ fn deep_recursive_cascade_collapses() {
     }
 }
 
-/// 最後の 1 Segmentを入れた瞬間に、全レベルの collapse が一気にカスケードすること。
+/// 最後の 1 要素を入れた瞬間に、全レベルの collapse が一気にカスケードすること。
 /// 直前は複数葉、最後の insert 後に 1 葉。
 #[test]
 fn final_insert_triggers_full_cascade() {
@@ -182,12 +178,12 @@ fn final_insert_triggers_full_cascade() {
 }
 
 /// 部分木（ルートではない深い位置）での再帰 collapse。
-/// 1つの zoom2 Segmentの 8 つの zoom3 子を満たすと、その部分木だけが 1 葉に畳まれ、
-/// 離れた別Segmentは別葉として残る（全体 count == 2）。
+/// 1つの zoom2 領域の 8 つの zoom3 子を満たすと、その部分木だけが 1 葉に畳まれ、
+/// 離れた別要素は別葉として残る（全体 count == 2）。
 #[test]
 fn recursive_collapse_in_subtree() {
     let mut set = SpatialIdSet::new();
-    // (f,x,y)=(0,0,0) の zoom2 Segmentを、その zoom3 子 8 個で満たす。
+    // (f,x,y)=(0,0,0) の zoom2 領域を、その zoom3 子 8 個で満たす。
     for f in 0..2 {
         for x in 0..2 {
             for y in 0..2 {
@@ -195,7 +191,7 @@ fn recursive_collapse_in_subtree() {
             }
         }
     }
-    // 別の zoom2 親に属する離れたSegment（zoom3 の有効範囲 0..=7）。
+    // 別の zoom2 親に属する離れた標準空間ID（zoom3 の有効範囲 0..=7）。
     set.insert(SingleId::new(3, 5, 5, 5).unwrap());
 
     assert_eq!(
@@ -280,7 +276,7 @@ fn insert_order_independence() {
 #[test]
 fn verify_f_strip_coverage_preserved() {
     use crate::id::zoom_level::ZoomLevel;
-    // corner_cases と同じ 10 個の F 隣接Segment（z=30, x=y=0）。
+    // corner_cases と同じ 10 個の F 隣接要素（z=30, x=y=0）。
     let mut set = SpatialIdSet::new();
     let mut expected = std::collections::BTreeSet::new();
     for i in 0..10 {
@@ -288,7 +284,7 @@ fn verify_f_strip_coverage_preserved() {
         set.insert(id);
         expected.insert((ZoomLevel::MAX.f_max() - i, 0u32, 0u32));
     }
-    // マージ後 count は減るが、最細Segmentへ展開すると元の 10 Segmentと一致するはず（被覆不変）。
+    // マージ後 count は減るが、最細ズームへ展開すると元の 10 個の標準空間IDと一致するはず（被覆不変）。
     let mut got = std::collections::BTreeSet::new();
     for (sid, _) in set.flat_single_ids(None).map(|s| (s, ())) {
         assert_eq!(sid.z(), ZoomLevel::MAX.get());

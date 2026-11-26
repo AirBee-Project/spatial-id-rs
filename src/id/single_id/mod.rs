@@ -12,11 +12,12 @@ use crate::{
     Interval, SpatialId, SpatialIdError, error::Error, id::zoom_level::ZoomLevel, time::span,
 };
 
-/// 標準的な時空間IDを表す型。
+/// 標準空間IDを表す型。
 ///
-/// [Ouranos 4D 時空間ID仕様](https://www.ipa.go.jp/)の Spatio-temporal ID
-/// `{z}/{f}/{x}/{y}_{i}/{t}` に一対一で対応する。空間部分が[`ZoomLevel`]でのf/x/y、
-/// 時間部分が時間間隔 `i`（[`Interval`]）と**単一**インデックス `t` である。
+/// [4次元時空間情報基盤 ガイドライン（IPA）](https://www.ipa.go.jp/digital/architecture/guidelines/4dspatio-temporal-guideline.html)
+/// で定義された標準空間ID `{z}/{f}/{x}/{y}`（`temporal_id` feature で時間を指定した場合は
+/// 拡張仕様の時空間ID `{z}/{f}/{x}/{y}_{i}/{t}`）に一対一で対応する。
+/// 空間部分が [`ZoomLevel`] での `f`/`x`/`y`、時間部分が時間間隔 `i`（[`Interval`]）と**単一**インデックス `t` である。
 ///
 /// 範囲を扱いたい場合は[`RangeId`](crate::RangeId)を使う。
 ///
@@ -105,7 +106,7 @@ impl SingleId {
 
     /// この [`SingleId`] の時間インデックス `{t}` を返す。
     ///
-    /// `temporal_id` feature 無効時は常に `0`（全時間の唯一のSegment）。
+    /// `temporal_id` feature 無効時は常に `0`（全時間を表す唯一の値）。
     pub fn t(&self) -> u64 {
         #[cfg(feature = "temporal_id")]
         {
@@ -120,23 +121,23 @@ impl SingleId {
 
     /// 時間を設定した自身を返す（ビルダー形式）。
     ///
-    /// [Ouranos 4D 時空間ID仕様](https://www.ipa.go.jp/)の `{i}/{t}` に対応する。`interval` は
+    /// [4次元時空間情報基盤 ガイドライン（IPA）](https://www.ipa.go.jp/digital/architecture/guidelines/4dspatio-temporal-guideline.html)第 2.5.3 項の `{i}/{t}` に対応する。`interval` は
     /// [`Interval`]、または秒数を表す整数（無注釈のリテラルを含む）のどちらでも渡せる。
     ///
     /// ## 動作コスト
     ///
-    /// 木構造（[`SpatialIdSet`](crate::collection::SpatialIdSet) など）へ挿入する際、時間間隔が2の冪秒であれば必ず1つの時間Segment
-    /// （[`FlexId`](crate::FlexId)）に収まる。しかし非2冪の秒数（例: 1800秒）を指定した場合、
-    /// 内部で最大十数個のSegmentに分解されるため、**挿入コストと木の葉の数が比例して増大**する。
+    /// 木構造（[`SpatialIdSet`](crate::collection::SpatialIdSet) など）へ挿入する際、時間間隔が2の冪乗の秒数であれば必ず1つの `TimeSegment`
+    /// （[`FlexId`](crate::FlexId)）に収まる。しかし2の冪乗でない秒数（例: 1800秒）を指定した場合、
+    /// 内部で最大十数個の `TimeSegment` に分解されるため、**挿入コストと木の葉の数が比例して増大**する。
     /// パフォーマンスが重視される用途では、1800秒や3600秒の代わりに、**1024秒**や**4096秒**
-    /// などの2の冪秒を利用することを強く推奨する（挿入処理が約10倍高速化される）。
+    /// などの2の冪乗の秒数を利用することを強く推奨する（挿入処理が約10倍高速化される）。
     ///
     /// 仕様どおり任意の秒数を単位にできる。
     ///
-    /// [`SingleId`] は空間が1Segmentなのと揃えて**時間も1Segment**しか持たない。時間の範囲を扱いたい
+    /// [`SingleId`] は空間3軸が単一のインデックスであるのと同様に、**時間も単一の `{i}/{t}`** しか持たない。時間の範囲を扱いたい
     /// 場合は [`RangeId::time_with`](crate::RangeId::time_with) を使う。
     ///
-    /// FlexTreeが内部で必要とする2の冪秒のSegmentへの分解は、木へ挿入する段階
+    /// FlexTreeが内部で必要とする、2の冪乗の秒数を持つ `TimeSegment` への分解は、木へ挿入する段階
     /// （[`flex_ids`](crate::SpatialId::flex_ids)による[`FlexId`](crate::FlexId)への展開）で自動的に行われる。
     ///
     /// # バリデーション
@@ -171,25 +172,25 @@ impl SingleId {
         Ok(self.time_with_unchecked(interval, t))
     }
 
-    /// Unix 時刻（秒）が属する時間Segmentを設定した自身を返す。
+    /// Unix 時刻（秒）が属する時間区間（`{i}/{t}`）を設定した自身を返す。
     ///
-    /// 仕様書 1.5.3 (3) の `t = floor(u / i)` をこちらで計算するので、呼び出し側で
+    /// 仕様書 2.5.3 (3) の `t = floor(u / i)` をこちらで計算するので、呼び出し側で
     /// インデックスを求める必要がない。
     ///
     /// ## 動作コスト
     ///
-    /// 木構造（[`SpatialIdSet`](crate::collection::SpatialIdSet) など）へ挿入する際、時間間隔が2の冪秒であれば必ず1つの時間Segment
-    /// （[`FlexId`](crate::FlexId)）に収まる。しかし非2冪の秒数（例: 1800秒）を指定した場合、
-    /// 内部で最大十数個のSegmentに分解されるため、**挿入コストと木の葉の数が比例して増大**する。
+    /// 木構造（[`SpatialIdSet`](crate::collection::SpatialIdSet) など）へ挿入する際、時間間隔が2の冪乗の秒数であれば必ず1つの `TimeSegment`
+    /// （[`FlexId`](crate::FlexId)）に収まる。しかし2の冪乗でない秒数（例: 1800秒）を指定した場合、
+    /// 内部で最大十数個の `TimeSegment` に分解されるため、**挿入コストと木の葉の数が比例して増大**する。
     /// パフォーマンスが重視される用途では、1800秒や3600秒の代わりに、**1024秒**や**4096秒**
-    /// などの2の冪秒を利用することを強く推奨する（挿入処理が約10倍高速化される）。
+    /// などの2の冪乗の秒数を利用することを強く推奨する（挿入処理が約10倍高速化される）。
     ///
     /// ```
     /// # use spatial_id::SpatialId;
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::SingleId;
-    /// // 1457482000 秒は 30 分単位で 809712 番目のSegmentに入る。
+    /// // 1457482000 秒は 30 分単位で 809712 番目の区間に入る。
     /// let id = SingleId::new(12, 0, 3638, 1614).unwrap().time_with_at(1800, 1_457_482_000).unwrap();
     /// assert_eq!(id.to_string(), "12/0/3638/1614_1800/809712");
     /// # }
@@ -205,7 +206,7 @@ impl SingleId {
 
     /// 同じ絶対秒区間を、別の単位で表し直した自身を返す。
     ///
-    /// 単位が変わっても指す時刻は変わらない。その単位で単一Segmentにならない場合は
+    /// 単位が変わっても指す時刻は変わらない。その単位で単一の `{i}/{t}` にならない場合は
     /// [`SpatialIdError::TIntervalError`] を返す。
     ///
     /// ```
@@ -214,7 +215,7 @@ impl SingleId {
     /// # {
     /// # use spatial_id::{SingleId, time::Interval};
     /// let id = SingleId::new(5, 3, 2, 10).unwrap().time_with(3600, 5).unwrap();
-    /// // 1時間ぶんは 1800 秒単位では 2 Segmentになるので単一にできない。
+    /// // 1時間ぶんは 1800 秒単位では 2 区間になるので単一にできない。
     /// assert!(id.time_relabel(1800).is_err());
     /// assert_eq!(id.time_relabel(Interval::HOUR).unwrap().t(), 5);
     /// # }
@@ -418,7 +419,7 @@ impl SingleId {
     pub fn spatial_children_at_zoom(
         &self,
         target_z: u8,
-    ) -> Result<impl Iterator<Item = SingleId>, Error> {
+    ) -> Result<impl Iterator<Item = SingleId> + use<>, Error> {
         let target_zoom = ZoomLevel::new(target_z)?;
 
         if target_z < self.z() {
@@ -441,6 +442,9 @@ impl SingleId {
         let f_range = f_start..=f_start + scale_f - 1;
         let x_range = x_start..=x_start + scale_xy - 1;
         let y_range = y_start..=y_start + scale_xy - 1;
+        let i = self.i;
+        #[cfg(feature = "temporal_id")]
+        let t = self.t;
 
         Ok(f_range.flat_map(move |f| {
             let x_range = x_range.clone();
@@ -453,9 +457,9 @@ impl SingleId {
                     x,
                     y,
 
-                    i: self.i,
+                    i,
                     #[cfg(feature = "temporal_id")]
-                    t: self.t,
+                    t,
                 })
             })
         }))
@@ -465,7 +469,7 @@ impl SingleId {
     ///
     /// # バリデーション
     /// - 現在のズームレベルが最大ズームレベル [`ZoomLevel::MAX`] の場合は、[`SpatialIdError::ZOutOfRange`] を返す。
-    pub fn spatial_children(&self) -> Result<impl Iterator<Item = SingleId>, Error> {
+    pub fn spatial_children(&self) -> Result<impl Iterator<Item = SingleId> + use<>, Error> {
         self.spatial_children_at_zoom(self.z() + 1)
     }
 

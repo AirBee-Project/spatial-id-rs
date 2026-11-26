@@ -2,14 +2,14 @@ use alloc::string::{String, ToString};
 
 use crate::{SingleId, Source, SpatialIdMap};
 
-fn time_segment(x: u32) -> SingleId {
+fn single_at_x(x: u32) -> SingleId {
     SingleId::new(20, 0, x, 200).unwrap()
 }
 
 fn int_table() -> SpatialIdMap<i32> {
     let mut t = SpatialIdMap::new();
-    t.insert(time_segment(10), 1);
-    t.insert(time_segment(11), 15);
+    t.insert(single_at_x(10), 1);
+    t.insert(single_at_x(11), 15);
     t
 }
 
@@ -62,9 +62,9 @@ fn map_values_to_text() {
 fn map_values_composes_with_other_operators() {
     let out: SpatialIdMap<bool> = int_table()
         .query()
-        .filter_in(10..) // 変換前: 10以上だけ残す
+        .filter_values(|v| *v >= 10) // 変換前: 10以上だけ残す
         .map_values(|v: i32| v > 10) // 型変換
-        .filter_eq(true) // 変換後: true だけ残す
+        .filter_values(|v| *v) // 変換後: true だけ残す
         .get(..)
         .into_map()
         .unwrap();
@@ -83,14 +83,14 @@ fn map_values_via_partial_get() {
     let query = int_table().query().map_values(|v: i32| v > 10);
 
     let got: alloc::vec::Vec<bool> = query
-        .get(time_segment(11))
+        .get(single_at_x(11))
         .map(Result::unwrap)
         .map(|(_, v)| v)
         .collect();
     assert_eq!(got, alloc::vec![true]);
 
     let got: alloc::vec::Vec<bool> = query
-        .get(time_segment(10))
+        .get(single_at_x(10))
         .map(Result::unwrap)
         .map(|(_, v)| v)
         .collect();
@@ -138,4 +138,32 @@ fn filter_map_values_drops_none_and_changes_the_type() {
         .collect();
 
     assert_eq!(rows, alloc::vec![(11, "15".to_string())]);
+}
+
+/// `try_filter_map_values` は `Ok(Some)` / `Ok(None)` を反映し、`Err` で打ち切る。
+#[test]
+fn try_filter_map_values_transforms_and_propagates_error() {
+    use alloc::sync::Arc;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_in_closure = calls.clone();
+    let err = int_table()
+        .query()
+        .try_filter_map_values(move |v| {
+            calls_in_closure.fetch_add(1, Ordering::Relaxed);
+            if v == 1 {
+                Err(crate::QueryError::Transform("stop".to_string()))
+            } else {
+                Ok(Some(v * 2))
+            }
+        })
+        .into_map()
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        crate::Error::Query(crate::QueryError::Transform("stop".to_string()))
+    );
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
 }

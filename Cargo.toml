@@ -64,7 +64,7 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"], optio
 [features]
 default = ["std", "rayon", "temporal_id"]
 std = ["dep:geojson"]
-rayon = ["dep:rayon", "std"]
+rayon = ["dep:rayon"]
 random = ["dep:rand"]
 temporal_id = []
 # 破壊的な変更があり得るAPI

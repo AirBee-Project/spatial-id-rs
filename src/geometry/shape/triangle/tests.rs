@@ -46,7 +46,7 @@ mod cover_single_ids {
         insta::assert_debug_snapshot!(sorted_ids(&tri, 25));
     }
 
-    /// Triangle を構成する頂点が、ちょうど空間IDの境界付近にあるため、外積・sqrt・floor等の計算過程のわずかな誤差で、隣接ボクセルを拾うか拾わないか（OS依存性）が変わるケース。
+    /// Triangle を構成する頂点が、ちょうど空間IDの境界付近にあるため、外積・sqrt・floor等の計算過程のわずかな誤差で、隣接する `SingleId` を拾うか拾わないか（OS依存性）が変わるケース。
     #[ignore]
     #[test]
     fn os_rounding_boundary_triangle_at_z25() {

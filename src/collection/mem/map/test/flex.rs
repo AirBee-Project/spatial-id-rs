@@ -48,7 +48,7 @@ mod tests {
         );
     }
 
-    /// 削除は呼び出した時点で済み、どちらの版でも同じ内容が取り除かれる。
+    /// 削除は呼び出した時点で完了し、`remove` と `remove_flex_ids` のどちらでも同じ内容が取り除かれる。
     #[test]
     fn remove_variants_remove_the_same_content() {
         let target = RangeId::new(5, [0, 2], [2, 5], [2, 3]).unwrap();
@@ -88,5 +88,25 @@ mod tests {
 
         let from_single: SpatialIdMap<i32> = [(single, 1)].into_iter().collect();
         assert_eq!(from_single.count(), 1);
+    }
+
+    #[cfg(feature = "unstable")]
+    #[test]
+    fn compact_preserves_map_entries_and_queries() {
+        let mut map = SpatialIdMap::new();
+        for dx in [0_u32, 10_000] {
+            map.insert(SingleId::new(20, 0, dx, 0).unwrap(), 10);
+            map.insert(SingleId::new(20, 0, dx + 1, 1).unwrap(), 20);
+            map.insert(SingleId::new(20, 0, dx + 2, 0).unwrap(), 10);
+        }
+        let expected: Vec<_> = map.iter().map(|(id, v)| (id, *v)).collect();
+        map.compact();
+        assert_eq!(map.count(), expected.len());
+        assert_eq!(
+            map.iter().map(|(id, v)| (id, *v)).collect::<Vec<_>>(),
+            expected
+        );
+        let q = SingleId::new(20, 0, 10_001, 1).unwrap();
+        assert_eq!(map.get(q).map(|(_, v)| *v).collect::<Vec<_>>(), [20]);
     }
 }

@@ -5,6 +5,7 @@ use core::{error, fmt};
 
 /// 本クレートで発生し得るエラーを表す最上位の型。
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Error {
     /// 空間IDまわりのエラー。
     SpatialId(SpatialIdError),
@@ -36,6 +37,7 @@ pub enum DiskError {
 
 /// クエリ関連で発生するエラー。
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum QueryError {
     /// クエリ演算子のパラメータが不正であることを示す。
     InvalidParameter(&'static str),
@@ -43,12 +45,16 @@ pub enum QueryError {
     /// [`Source`](crate::Source) 実装側で発生した読み取りエラー。
     SourceRead(String),
 
+    /// [`Query::try_filter_map`](crate::query::Query::try_filter_map) などの変換処理で発生したエラー。
+    Transform(String),
+
     /// [`CancellationToken`](crate::CancellationToken) によりキャンセルされた。
     Cancelled,
 }
 
 /// Geometry 関連で発生するエラー。
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum GeometryError {
     /// 緯度が有効範囲外であることを表す。
     LatitudeOutOfRange { latitude: f64 },
@@ -86,12 +92,22 @@ pub enum GeometryError {
     /// GeoJSON の Position の要素数が足りないことを示す。経度と緯度の 2 要素が必要。
     PositionTooShort { len: usize },
 
+    /// Polygon のリングを構成する頂点が 3 未満であることを示す。
+    PolygonTooFewVertices { count: usize },
+
+    /// Polygon の面積が 0（または許容誤差以下）であることを示す。
+    PolygonZeroArea,
+
+    /// Polygon のリングが自己交差していることを示す。
+    PolygonSelfIntersecting,
+
     /// GeoJSON の Polygon の穴が外周の内側に収まっていないことを示す。`index` は内周リングの位置（0 始まり）。
     HoleOutsideExterior { index: usize },
 }
 
 /// [`SpatialId`](crate::SpatialId) 関連で発生するエラー。
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SpatialIdError {
     /// ズームレベルが有効範囲（0..=30）外であることを示す。
     ZOutOfRange { z: u8 },
@@ -116,7 +132,7 @@ pub enum SpatialIdError {
 
     /// 時間間隔 `i` に 0 を指定した場合のエラー。
     TIntervalError { i: u64 },
-    /// 文字列表現を空間 ID として解釈できないことを示す。
+    /// 文字列表現を空間IDとして解釈できないことを示す。
     ParseSpatialIdFormat { kind: &'static str, input: String },
 
     /// 祖先として渡された ID が、対象の ID を包含していないことを示す。
@@ -189,6 +205,7 @@ impl fmt::Display for QueryError {
         match self {
             QueryError::InvalidParameter(what) => write!(f, "invalid query parameter: {what}"),
             QueryError::SourceRead(msg) => write!(f, "source read failed: {msg}"),
+            QueryError::Transform(msg) => write!(f, "query transform failed: {msg}"),
             QueryError::Cancelled => write!(f, "query execution was cancelled"),
         }
     }
@@ -268,6 +285,19 @@ impl fmt::Display for GeometryError {
                     "Position has {} elements, but at least 2 (longitude, latitude) are required",
                     len
                 )
+            }
+            GeometryError::PolygonTooFewVertices { count } => {
+                write!(
+                    f,
+                    "Polygon ring requires at least 3 distinct vertices, got {}",
+                    count
+                )
+            }
+            GeometryError::PolygonZeroArea => {
+                write!(f, "Polygon has zero area")
+            }
+            GeometryError::PolygonSelfIntersecting => {
+                write!(f, "Polygon ring is self-intersecting")
             }
             GeometryError::HoleOutsideExterior { index } => {
                 write!(f, "Polygon hole {} is not inside the exterior ring", index)

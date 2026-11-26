@@ -7,7 +7,7 @@
 
 ### 空間ID・時空間IDの型定義
 
-- `SingleId`: 1つの空間ID（例: `25/0/29800549/13205107`）
+- `SingleId`: 標準空間ID（例: `25/0/29800549/13205107`）
 - `RangeId`: 各次元を範囲で指定した空間IDのまとまり（例: `24/0:3/14900274:14900277/6602553:6602555`）
 - `SpatialIdSet`: 空間IDの集合
 - `SpatialIdMap<V>`: 空間IDごとに値を持つマップ
@@ -73,7 +73,7 @@ let bldg_risk = bldg
 let risk = bldg_risk
     .merge(tran_risk, Max)
     .zoom_out(23, Average)
-    .filter_in(0..100)
+    .filter_values(|v| (0..100).contains(v))
     .get(..)
     .into_map()?;
 ```

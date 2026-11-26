@@ -1,6 +1,6 @@
 use core::ops::BitOr;
 
-/// 時空間IDの次元。F/X/Yは空間3軸（各最大ズーム30）、Tは時間軸の生の2分岐Segment
+/// 時空間IDの次元。F/X/Yは空間3軸（各最大ズーム30）、Tは時間軸の `TimeSegment`
 /// （最大ズーム[`TZoomLevel::MAX`](crate::time::TZoomLevel::MAX)=35）。並び順（F→X→Y→T）は木が次元を選ぶときの規約で、
 /// 他に意味は無い。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -34,10 +34,23 @@ pub(crate) struct DimensionSet(u8);
 impl DimensionSet {
     pub(crate) const EMPTY: Self = DimensionSet(0);
 
+    #[inline]
+    pub(crate) const fn from_bits(bits: u8) -> Self {
+        DimensionSet(bits)
+    }
+
+    #[inline]
+    pub(crate) const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    #[inline]
     pub(crate) const fn contains(self, dimension: Dimension) -> bool {
         self.0 & 1 << dimension as u8 != 0
     }
 
+    #[cfg(test)]
+    #[inline]
     pub(crate) fn iter(self) -> impl Iterator<Item = Dimension> {
         Dimension::ALL
             .into_iter()
@@ -46,20 +59,31 @@ impl DimensionSet {
 }
 
 impl From<Dimension> for DimensionSet {
+    #[inline]
     fn from(dimension: Dimension) -> Self {
         DimensionSet(1 << dimension as u8)
+    }
+}
+
+/// [`Dimension`] の値を位置とする、下位 4bit のビット列。[`DimensionSet::from_bits`] の逆。
+impl From<DimensionSet> for u8 {
+    #[inline]
+    fn from(set: DimensionSet) -> u8 {
+        set.0
     }
 }
 
 impl BitOr for DimensionSet {
     type Output = Self;
 
+    #[inline]
     fn bitor(self, rhs: Self) -> Self {
         DimensionSet(self.0 | rhs.0)
     }
 }
 
 impl FromIterator<Dimension> for DimensionSet {
+    #[inline]
     fn from_iter<I: IntoIterator<Item = Dimension>>(iter: I) -> Self {
         iter.into_iter()
             .fold(DimensionSet::EMPTY, |set, d| set | d.into())

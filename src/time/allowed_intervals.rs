@@ -24,9 +24,9 @@ use alloc::vec::Vec;
 pub struct AllowedIntervals {
     /// 秒数の降順。重複なし。先頭から見て最初に割り切れたものが「最も粗い」。
     ///
-    /// [`Vec`]ではなく[`Cow`]なのは、[`calendar`](Self::calendar)を`static`として
-    /// 用意して`&'static`で貸し出すためである。所有版（[`new`](Self::new)）は
-    /// [`Cow::Owned`]、組み込みの候補集合は[`Cow::Borrowed`]になる。
+    /// [`Vec`] ではなく [`Cow`] を使うのは、[`calendar`](Self::calendar) を `static` に定義して
+    /// `&'static` の参照を返すためである。[`new`](Self::new) で生成した値は
+    /// [`Cow::Owned`]、組み込みの候補集合は [`Cow::Borrowed`] になる。
     intervals: Cow<'static, [Interval]>,
 }
 
@@ -81,7 +81,7 @@ impl AllowedIntervals {
     ///
     /// `temporal_id` feature が無効なビルドでは、暦の定数（[`Interval::DAY`] など）
     /// 自体が存在しないため、この関数も**存在しない**（[`Interval::HOUR`] などと同じ扱い）。
-    /// `{WHOLE}` だけの集合へ黙って縮退させることはしない。無効時でも候補集合が欲しい場合は
+    /// `{WHOLE}` だけの集合を暗黙に返すことはしない。無効時でも候補集合が欲しい場合は
     /// [`AllowedIntervals::default`] を使う（`{WHOLE}` を明示的に返す）。
     ///
     /// # なぜ `&'static` を返すのか
@@ -90,10 +90,10 @@ impl AllowedIntervals {
     /// **一時値のまま直接渡せる**ようにするためである。所有値を返していた頃は
     ///
     /// ```text
-    /// let ids = set.reconstructed_time_ranges(Some(&AllowedIntervals::calendar()));  // 一時値が文末で死ぬ
+    /// let ids = set.reconstructed_time_ranges(Some(&AllowedIntervals::calendar()));  // 一時値のライフタイムが文末で切れる
     /// ```
     ///
-    /// が書けず、コレクションごとに `range_ids_calendar()` のような別名を生やして
+    /// が書けず、コレクションごとに `range_ids_calendar()` のような専用メソッドを追加して
     /// 内側で `collect` する必要があった（＝遅延評価が失われていた）。
     ///
     /// ```
@@ -101,9 +101,9 @@ impl AllowedIntervals {
     /// # {
     /// # use spatial_id::time::{AllowedIntervals, Interval};
     /// let intervals = AllowedIntervals::calendar();
-    /// // 2時間ぶんは「1時間 × 2Segment」として表される（`gcd` なら `7200秒 × 1Segment`）。
+    /// // 2時間ぶんは「1時間 × 2区間」として表される（`gcd` なら `7200秒 × 1区間`）。
     /// assert_eq!(intervals.coarsest_dividing(0, 7200), Interval::HOUR);
-    /// // 暦で割り切れない区間は秒まで落ちる。
+    /// // 暦で割り切れない区間は秒単位で表される。
     /// assert_eq!(intervals.coarsest_dividing(30, 90), Interval::SECOND);
     /// # }
     /// ```
@@ -125,8 +125,8 @@ impl AllowedIntervals {
     /// 絶対秒区間 `[start, end)` を表せる候補のうち、**最も粗いもの**を返す。
     ///
     /// 単位 `u` でこの区間を表せる条件は `start % u == 0 && end % u == 0` である
-    /// （`t = [start/u, end/u - 1]` になる）。粗いほどSegment数
-    /// （`t_max - t_min + 1`）が少なくなるので、これが候補の中でのSegment数最小を与える。
+    /// （`t = [start/u, end/u - 1]` になる）。粗いほど区間数
+    /// （`t_max - t_min + 1`）が少なくなるので、これが候補の中での区間数最小を与える。
     ///
     /// `Interval::SECOND` が必ず候補にあるため、**この関数は必ず値を返す**
     /// （`temporal_id` feature 無効時は全時間しか存在せず、[`WHOLE`](Interval::WHOLE) が返る）。
@@ -187,7 +187,7 @@ mod tests {
 
     /// [`CALENDAR`] は `new` を通さない `static` なので、降順・重複なしの不変条件を
     /// ここで固定する。`coarsest_dividing` は「先頭から最初に割り切れたもの」を返すため、
-    /// 順序が崩れると最も粗い単位が選ばれなくなる。
+    /// 降順で並ばなくなると最も粗い単位が選ばれなくなる。
     #[test]
     fn calendar_is_sorted_descending_without_duplicates() {
         let seconds: Vec<u64> = AllowedIntervals::calendar()
@@ -203,12 +203,12 @@ mod tests {
         );
     }
 
-    /// 全時間は `WHOLE` で1Segmentに収まる。
+    /// 全時間は `WHOLE` で1区間に収まる。
     ///
     /// 暦の単位はどれも `2^35` を割り切らないので、`WHOLE` を必須にしていないと
-    /// 時間なしの ID が `_1/0:34359738367`（343億Segment）になってしまう。
+    /// 時間なしの ID が `_1/0:34359738367`（343億区間）になってしまう。
     #[test]
-    fn whole_time_stays_a_single_segment() {
+    fn whole_time_stays_a_single_interval() {
         let intervals = AllowedIntervals::calendar();
         assert_eq!(
             intervals.coarsest_dividing(0, Interval::MAX_SECONDS),
@@ -230,11 +230,11 @@ mod tests {
         let intervals = AllowedIntervals::calendar();
         // ちょうど1日
         assert_eq!(intervals.coarsest_dividing(86_400, 172_800), Interval::DAY);
-        // 2時間ぶん（`gcd` なら 7200 秒だが、候補にないので 1 時間 × 2 TimeSegment）
+        // 2時間ぶん（`gcd` なら 7200 秒だが、候補にないので 1 時間 × 2 区間）
         assert_eq!(intervals.coarsest_dividing(0, 7_200), Interval::HOUR);
         // 30分ぶん
         assert_eq!(intervals.coarsest_dividing(0, 1_800), Interval::MINUTE);
-        // 暦で表せない端数は秒まで落ちる
+        // 暦で表せない端数は秒単位が選ばれる
         assert_eq!(intervals.coarsest_dividing(30, 90), Interval::SECOND);
     }
 
@@ -244,7 +244,7 @@ mod tests {
         let half_hour = Interval::new(1_800).unwrap();
         let intervals = AllowedIntervals::new([half_hour]);
         assert_eq!(intervals.coarsest_dividing(1_800, 3_600), half_hour);
-        // 候補に無い 3600 は選ばれず、1800 × 2 Segmentになる。
+        // 候補に無い 3600 は選ばれず、1800 × 2 区間になる。
         assert_eq!(intervals.coarsest_dividing(0, 3_600), half_hour);
     }
 }
@@ -276,14 +276,14 @@ mod collection_api {
             set.insert(id);
         }
 
-        // 既定は gcd なので「7200 秒 × 1 TimeSegment」。
+        // 既定は gcd なので「7200 秒 × 1 区間」。
         let natural: Vec<_> = set
             .reconstructed_time_ranges(None)
             .map(|r| r.to_string())
             .collect();
         assert_eq!(natural, ["12/0/3638/1614_7200/0"]);
 
-        // 暦に正規化すると「3600 秒 × 2 TimeSegment」。
+        // 暦に正規化すると「3600 秒 × 2 区間」。
         let calendar: Vec<_> = set
             .reconstructed_time_ranges(Some(AllowedIntervals::calendar()))
             .map(|r| r.to_string())
@@ -362,7 +362,7 @@ mod collection_api {
         assert_eq!(got, [("12/0/3638/1614_3600/0:1".into(), 7u32)]);
     }
 
-    /// `flat_single_ids` 側でも単位を選べる。暦にすると2Segmentなので2件へ展開される。
+    /// `flat_single_ids` 側でも単位を選べる。暦にすると2区間なので2件へ展開される。
     #[test]
     fn flat_single_ids_honours_the_unit() {
         let mut set = SpatialIdSet::new();
@@ -370,10 +370,10 @@ mod collection_api {
             set.insert(id);
         }
 
-        // 既定（gcd, 7200秒 × 1Segment）は1件。
+        // 既定（gcd, 7200秒 × 1区間）は1件。
         assert_eq!(set.flat_single_ids(None).count(), 1);
 
-        // 暦（3600秒 × 2Segment）は2件へ展開される。
+        // 暦（3600秒 × 2区間）は2件へ展開される。
         let calendar: Vec<_> = set
             .flat_single_ids(Some(AllowedIntervals::calendar()))
             .map(|s| s.to_string())
@@ -384,7 +384,7 @@ mod collection_api {
     /// 時間を持たない ID は、候補集合を渡しても全時間のまま。
     ///
     /// 暦の単位はどれも `2^35` を割り切らないので、`WHOLE` が候補に無いと
-    /// `_1/0:34359738367`（343億Segment）に化ける。
+    /// `_1/0:34359738367`（343億区間）になってしまう。
     #[test]
     fn whole_time_ids_are_untouched() {
         let mut set = SpatialIdSet::new();
@@ -402,7 +402,7 @@ mod collection_api {
         }
     }
 
-    /// 仕様書の例（1800秒）は、既定なら往復し、暦に正規化すると分（60秒）へ落ちる。
+    /// 仕様書の例（1800秒）は、既定ならそのまま復元され、暦に正規化すると分（60秒）単位になる。
     #[test]
     fn spec_example_under_each_policy() {
         let original = SingleId::new(12, 0, 3638, 1614)

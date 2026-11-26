@@ -16,10 +16,10 @@ fn sorted_ids(solid: &Solid, z: u8) -> Vec<String> {
 /// 閉じた四面体（テトラヘドロン）を生成するヘルパー
 fn tetrahedron(p0: Coordinate, p1: Coordinate, p2: Coordinate, p3: Coordinate) -> Solid {
     let faces = vec![
-        Polygon::new(vec![p0, p2, p1]), // 底面
-        Polygon::new(vec![p0, p1, p3]), // 前面
-        Polygon::new(vec![p1, p2, p3]), // 右面
-        Polygon::new(vec![p2, p0, p3]), // 左面
+        Polygon::new(vec![p0, p2, p1]).unwrap(), // 底面
+        Polygon::new(vec![p0, p1, p3]).unwrap(), // 前面
+        Polygon::new(vec![p1, p2, p3]).unwrap(), // 右面
+        Polygon::new(vec![p2, p0, p3]).unwrap(), // 左面
     ];
     Solid::new(faces).expect("tetrahedron must be watertight")
 }
@@ -27,7 +27,7 @@ fn tetrahedron(p0: Coordinate, p1: Coordinate, p2: Coordinate, p3: Coordinate) -
 mod cover_single_ids {
     use super::*;
 
-    /// 小さな四面体（辺 ~111m）の内部ボクセルを変換する
+    /// 小さな四面体（辺 ~111m）の内部を含む `SingleId` へ変換する
     #[test]
     fn small_tetrahedron_at_z16() {
         let p0 = Coordinate::new(35.000, 139.000, 10.0).unwrap();
@@ -58,10 +58,10 @@ mod cover_single_ids {
         let p3 = Coordinate::new(35.000, 139.000, 500.0).unwrap();
 
         let faces = vec![
-            Polygon::new(vec![p0, p2, p1]),
-            Polygon::new(vec![p0, p1, p3]),
-            Polygon::new(vec![p1, p2, p3]),
-            Polygon::new(vec![p2, p0, p3]),
+            Polygon::new(vec![p0, p2, p1]).unwrap(),
+            Polygon::new(vec![p0, p1, p3]).unwrap(),
+            Polygon::new(vec![p1, p2, p3]).unwrap(),
+            Polygon::new(vec![p2, p0, p3]).unwrap(),
         ];
         let solid = Solid::with_epsilon(faces, Epsilon::from_meters(0.001).unwrap());
         assert!(solid.is_ok());

@@ -1,7 +1,7 @@
 use crate::{SpatialIdError, error::Error};
 use core::fmt;
 
-/// ズームレベルを表す型の土台。
+/// 上限値 `LIMIT` を持つズームレベルの共通型。
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Zoom<const LIMIT: u8>(u8);
@@ -82,7 +82,7 @@ impl<const LIMIT: u8> Zoom<LIMIT> {
     }
 
     /// このズームレベルにおけるインデックスの最大値（`2^z - 1`）。
-    /// 空間軸のX/Yと時間軸の生Segmentとで共有する式。
+    /// 空間軸のX/Yと時間軸の `TimeSegment` とで共有する式。
     const fn max_index_u64(self) -> u64 {
         (1u64 << self.0) - 1
     }
@@ -167,7 +167,7 @@ impl Zoom<35> {
         self.max_index_u64()
     }
 
-    /// このズームレベルにおける1Segmentの秒数（`2^(MAX - z)`）。
+    /// このズームレベルにおける `TimeSegment` 1個あたりの秒数（`2^(MAX - z)`）。
     pub const fn segment_seconds(self) -> u64 {
         1u64 << (Self::MAX.get() - self.0)
     }

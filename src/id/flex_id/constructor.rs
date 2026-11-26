@@ -79,7 +79,7 @@ impl FlexId {
 mod tests {
     use crate::FlexId;
 
-    /// 全時間のSegmentはどちらの feature 構成でも作れる。
+    /// 全時間の `TimeSegment` はどちらの feature 構成でも作れる。
     #[test]
     fn whole_time_segment_is_always_constructible() {
         assert!(
@@ -90,10 +90,10 @@ mod tests {
         );
     }
 
-    /// `temporal_id` 無効時は、時間を持つSegmentを構築段階で弾く。
+    /// `temporal_id` 無効時は、時間を持つ `TimeSegment` を構築段階で弾く。
     ///
-    /// 無効時の木はT軸を分割しないため、受け付けると挿入した時間区間が黙って
-    /// 全時間へ広がってしまう（読み出すと4倍などに化ける）。
+    /// 無効時の木はT軸を分割しないため、受け付けると挿入した時間区間がエラーも警告もなく
+    /// 全時間へ広がってしまう（読み出すと4倍など別の範囲になってしまう）。
     #[cfg(not(feature = "temporal_id"))]
     #[test]
     fn temporal_segment_is_rejected_without_the_feature() {

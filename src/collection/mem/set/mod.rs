@@ -136,7 +136,7 @@ impl SpatialIdSet {
             .map(|(flex_id, _)| flex_id)
     }
 
-    /// 指定した単体の空間 IDと面で接している空間IDを重複なく返す。入力された空間ID自身と重なる空間IDは除外する。
+    /// 指定した空間IDと面で接している空間IDを重複なく返す。入力された空間ID自身と重なる空間IDは除外する。
     pub fn spatial_face_neighbors<S: SpatialId>(
         &self,
         target: S,
@@ -161,20 +161,20 @@ impl SpatialIdSet {
     }
 
     /// 集合の内部にある全ての[FlexId]のうち、最大のズームレベル値を返す。
-    /// 内部に空間 ID が存在しない場合は [`None`] を返す。
+    /// 内部に空間IDが存在しない場合は [`None`] を返す。
     ///
     /// キャッシュを持たず、全ての[FlexId]を走査する（O(n)）。
     pub fn max_zoomlevel(&self) -> Option<ZoomLevel> {
         self.inner.max_zoomlevel()
     }
 
-    /// 時間方向に結合した [`RangeId`] として読み出す。**空間解像度は変えない**。
+    /// 時間方向に結合した [`RangeId`] として読み出す。**ズームレベルは変えない**。
     ///
-    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1Segmentになる。
+    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1区間になる。
     /// [`AllowedIntervals`] を渡すと、その候補のうち**区間を割り切る最も粗いもの**で表す
-    /// （＝候補の中でSegment数が最小）。[`AllowedIntervals`] は必ず全区間を表せる候補を含むので失敗しない。
+    /// （＝候補の中で区間数が最小）。[`AllowedIntervals`] は必ず全区間を表せる候補を含むので失敗しない。
     ///
-    /// [`iter`](Self::iter) が返す生の [`FlexId`] は木の2分岐Segmentそのもの
+    /// [`iter`](Self::iter) が返す生の [`FlexId`] は時間軸が `TimeSegment` に分解されたまま
     /// （`_8/182185424` のような断片）なので、人間が読む用途にはこちらを使う。
     ///
     /// ```
@@ -186,10 +186,10 @@ impl SpatialIdSet {
     /// set.insert(SingleId::new(12, 0, 3638, 1614).unwrap().time_with(Interval::HOUR, 0).unwrap());
     /// set.insert(SingleId::new(12, 0, 3638, 1614).unwrap().time_with(Interval::HOUR, 1).unwrap());
     ///
-    /// // 既定（gcd）では 2 時間ぶんが「7200 秒 × 1 TimeSegment」になる。
+    /// // 既定（gcd）では 2 時間ぶんが「7200 秒 × 1 区間」になる。
     /// assert_eq!(set.reconstructed_time_ranges(None).next().unwrap().to_string(), "12/0/3638/1614_7200/0");
     ///
-    /// // 暦の単位に正規化すると「3600 秒 × 2 TimeSegment」になる。
+    /// // 暦の単位に正規化すると「3600 秒 × 2 区間」になる。
     /// let got = set.reconstructed_time_ranges(Some(AllowedIntervals::calendar())).next().unwrap();
     /// assert_eq!(got.to_string(), "12/0/3638/1614_3600/0:1");
     /// # }
@@ -213,7 +213,7 @@ impl SpatialIdSet {
             .map(|(single_id, _)| single_id)
     }
 
-    /// [SpatialIdSet] 内部の空間 ID をすべて削除する。
+    /// [SpatialIdSet] 内部の空間IDをすべて削除する。
     pub fn clear(&mut self) {
         self.inner.clear();
     }
@@ -221,6 +221,17 @@ impl SpatialIdSet {
     /// [SpatialIdSet] 内部が空かどうかを判定する。
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
+    }
+
+    #[cfg(feature = "unstable")]
+    /// 同じ形状を持つ領域群でメモリ上の実体を共有し、メモリ使用量を削減する。
+    ///
+    /// 保持している空間IDの集合は変わらない。既にクローン等で他のインスタンスと共有されている領域があっても、
+    /// 他のインスタンスには影響しない。圧縮後に変更すると、共有している領域はその時点で複製される。
+    ///
+    /// ユニークな内部構成要素数を n として O(n) 時間で動作し、実行中のみ O(n) の作業メモリを使用する。
+    pub fn compact(&mut self) {
+        self.inner.compact();
     }
 
     /// 集合が保持するすべての空間IDを返す。

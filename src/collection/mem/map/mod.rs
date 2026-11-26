@@ -1,5 +1,7 @@
 use crate::collection::core::{FlexTreeCore, IntoIter};
 use alloc::collections::BTreeSet;
+#[cfg(feature = "unstable")]
+use core::hash::Hash;
 use core::iter::Map;
 use core::ops::RangeBounds;
 #[cfg(feature = "unstable")]
@@ -201,7 +203,7 @@ where
         self.inner.remove_overlapping(target.flex_ids()).into_iter()
     }
 
-    /// 指定した単体の空間 ID と面で接している空間IDと値への参照を重複なく返す。入力された空間 ID 自身と重なる要素は除外する。
+    /// 指定した空間IDと面で接している空間IDと値への参照を重複なく返す。入力された空間ID自身と重なる要素は除外する。
     pub fn spatial_face_neighbors<T: SpatialId>(
         &self,
         target: T,
@@ -230,9 +232,9 @@ where
         self.inner.max_zoomlevel()
     }
 
-    /// 時間方向に隣接する同値のSegmentを結合した [`RangeId`] と値を返す。**空間解像度は変えない**。
+    /// 時間方向に隣接する同値の [`FlexId`] を結合した [`RangeId`] と値を返す。**ズームレベルは変えない**。
     ///
-    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1Segmentになる。
+    /// `allowed_intervals` が [`None`] なら、各区間はそれを表せる最も粗い単位（`gcd(開始秒, 幅)`）の1区間になる。
     /// [`AllowedIntervals`] を渡すと、その候補のうち区間を割り切る最も粗い単位で表す。
     pub fn reconstructed_time_ranges<'a>(
         &'a self,
@@ -291,6 +293,22 @@ impl<V: Ord + Clone> SpatialIdMap<V> {
     }
 }
 
+#[cfg(feature = "unstable")]
+impl<V: Eq + Hash + Clone> SpatialIdMap<V> {
+    /// 同じ形状と値を持つ領域群でメモリ上の実体を共有し、メモリ使用量を削減する。
+    ///
+    /// 保持している空間IDと値の対応は変わらない。既にクローン等で他のインスタンスと共有されている領域があっても、
+    /// 他のインスタンスには影響しない。圧縮後に変更すると、共有している領域はその時点で複製される。
+    ///
+    /// [`Eq`] で等しい値は同一とみなし、いずれか1つのインスタンスを共有する。
+    /// 一部のフィールドだけを比較する [`Eq`] 実装では、どのインスタンスが残るかは規定しない。
+    ///
+    /// ユニークな内部構成要素数を n として O(n) 時間で動作し、実行中のみ O(n) の作業メモリを使用する。
+    pub fn compact(&mut self) {
+        self.inner.compact();
+    }
+}
+
 impl<V: Clone> SpatialIdMap<V> {
     /// [`into_iter`](IntoIterator::into_iter) と同じだが、木が保持する [`FlexId`] をそのまま返す。
     pub fn into_iter_flex_ids(self) -> IntoIter<V> {
@@ -312,9 +330,12 @@ impl<V: Clone> IntoIterator for SpatialIdMap<V> {
 /// `(SpatialId, V)` 列から作る。[`SingleId`] / [`RangeId`] / [`FlexId`] のいずれも渡せる。
 impl<S: SpatialId, V: PartialEq + Clone> FromIterator<(S, V)> for SpatialIdMap<V> {
     fn from_iter<T: IntoIterator<Item = (S, V)>>(iter: T) -> Self {
-        let mut map = Self::new();
-        map.extend(iter);
-        map
+        Self {
+            inner: iter
+                .into_iter()
+                .flat_map(|(id, value)| id.flex_ids().map(move |flex_id| (flex_id, value.clone())))
+                .collect(),
+        }
     }
 }
 

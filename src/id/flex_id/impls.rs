@@ -160,9 +160,16 @@ impl SpatialId for FlexId {
     }
 
     fn seconds_range(&self) -> (u64, u64) {
-        let zoom = crate::id::zoom_level::TZoomLevel::new(self.t_zoomlevel()).unwrap();
-        let time_span = crate::time::segment::TimeSegment::new(zoom, self.t_index()).time_span();
-        (time_span.start(), time_span.end())
+        #[cfg(feature = "temporal_id")]
+        {
+            let time_span =
+                crate::time::segment::TimeSegment::new(self.t_zoomlevel, self.t_index).time_span();
+            (time_span.start(), time_span.end())
+        }
+        #[cfg(not(feature = "temporal_id"))]
+        {
+            (0, crate::Interval::MAX_SECONDS)
+        }
     }
 
     fn time_cleared(self) -> Self {
@@ -236,7 +243,7 @@ impl FromStr for FlexId {
                     part.split_once('/').ok_or_else(|| parse_error(s))?;
                 let t_zoomlevel = t_zoom_text.parse::<u8>().map_err(|_| parse_error(s))?;
                 let t_index = t_index_text.parse::<u64>().map_err(|_| parse_error(s))?;
-                // 文字列は `{i}/{t}` ではなく「ズーム/インデックス」なので、Segmentの入口を使う。
+                // 文字列は `{i}/{t}` ではなく「ズーム/インデックス」なので、TimeSegment指定の入口を使う。
                 FlexId::new(
                     f_zoomlevel,
                     f_index,

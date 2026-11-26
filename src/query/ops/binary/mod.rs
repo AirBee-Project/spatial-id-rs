@@ -43,7 +43,7 @@ impl<'a, V: Clone> StreamCursor<'a, V> {
     /// `enclosing` に含まれる先頭要素群を `dim` で 2 分割し、FlexId の Z-order 列を保って `stack` に戻す。
     ///
     /// 先頭要素が `enclosing` そのものであれば 1 要素を 2 分割するだけで済むが、`first_id != enclosing`
-    /// （異方性により粗い `dim` を飛ばして後続の次元で先に割られている場合）は、`dim` の下側・上側の順に
+    /// （粗い `dim` の分割を飛ばして後続の次元で先に割られている場合）は、`dim` の下側・上側の順に
     /// 並べ替えるため `enclosing` 内の要素をすべて `stack` に積む。そのため、粗い次元を共有する要素が
     /// 広い範囲に多数存在すると、その範囲全体がメモリに載る。
     fn split_enclosing(&mut self, enclosing: FlexId, dim: Dimension) -> Result<(), Error> {
@@ -216,7 +216,7 @@ mod test {
     }
 
     #[test]
-    fn binary_ops_stream_matches_tree_operations_on_anisotropic_ids() {
+    fn binary_ops_stream_matches_tree_operations_on_mixed_zoom_ids() {
         let mut next = rng(0x5eed_cafe);
         for max_zoom in [4, 12] {
             for _ in 0..40 {

@@ -7,8 +7,8 @@ use crate::{RangeId, SingleId};
 impl SingleId {
     /// 空間3軸（F/X/Y）だけで重なりを判定し、重なる場合は「深い側」の [`SingleId`] を返す。
     ///
-    /// FlexIdは四分木（八分木）なので、異なるズームのSegmentは「入れ子」か「素」のどちらかしか
-    /// あり得ない。したがって重なる場合の交差は必ず深い側のSegmentそのものになる。
+    /// 空間木（四分木／八分木）の構造上、異なるズームレベルの領域は「包含関係」か「互いに素」のどちらかしか
+    /// あり得ない。したがって重なる場合の交差は必ず深い側の領域そのものになる。
     fn spatial_intersection<'a>(&'a self, other: &'a Self) -> Option<&'a Self> {
         let (deep, shallow) = if self.z() > other.z() {
             (self, other)
@@ -37,8 +37,8 @@ impl SingleId {
     /// # 戻り値の型について
     ///
     /// 要素は [`SingleId`] ではなく [`RangeId`] である。時間を刳り抜いた残りは
-    /// 単一Segment（`{i}/{t}`）で表せるとは限らないため（[`intersection`](Self::intersection)の
-    /// 説明を参照）、空間が1Segmentであっても時間が範囲になりうる。
+    /// 単一の `{i}/{t}` で表せるとは限らないため（[`intersection`](Self::intersection)の
+    /// 説明を参照）、空間が単一であっても時間が範囲になりうる。
     ///
     /// # パラメーター
     /// * `other` - 差し引く相手の [`SingleId`] である。
@@ -81,10 +81,9 @@ impl SingleId {
         let mut current = *self;
         while current.z() < other.z() {
             let next_z = current.z() + 1;
-            let children: Vec<_> = current
+            let children = current
                 .spatial_children_at_zoom(next_z)
-                .expect("next_z は current.z() より1段深く、other.z() 以下なので常に有効")
-                .collect();
+                .expect("next_z は current.z() より1段深く、other.z() 以下なので常に有効");
 
             for child in children {
                 if child.spatial_intersection(other).is_some() {
@@ -116,8 +115,8 @@ impl SingleId {
     /// # 戻り値の型について
     ///
     /// 戻り値は [`Option`]`<`[`SingleId`]`>` ではなく [`Option`]`<`[`RangeId`]`>` である。空間の交差は
-    /// 必ず単一Segmentになるが、**時間の交差は単一Segmentにならないことがある**ためである。
-    /// 例えば `5/1`（`[5, 10)`）と `7/1`（`[7, 14)`）の交差は `[7, 10)` で、これを単一Segment
+    /// 必ず単一（1つの標準空間IDの空間部）になるが、**時間の交差は単一の `{i}/{t}` にならないことがある**ためである。
+    /// 例えば `5/1`（`[5, 10)`）と `7/1`（`[7, 14)`）の交差は `[7, 10)` で、これを単一の
     /// `{i}/{t}` として表すには `i = 3` かつ `t = 7/3` が必要になるが、`7` は `3` の倍数では
     /// ないので表せない。
     ///

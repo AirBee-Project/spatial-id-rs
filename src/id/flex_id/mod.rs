@@ -22,7 +22,7 @@ pub(crate) enum ZOrderRel {
     Equal,
     /// 最初に食い違う位置で両方が割られており、左辺が上側（奥）、右辺が下側（手前）にある。互いに重ならない。
     Greater,
-    /// 最初に食い違う位置で片方だけが割られている（包含関係にあるか、異方性により FlexId の PartialOrd で比較できない）。
+    /// 最初に食い違う位置で片方だけが割られている（包含関係にあるか、軸ごとに細かさが異なって包含し合わず FlexId の PartialOrd で比較できない）。
     Overlap {
         /// 最初に食い違う位置の直前まで一致している共通の祖先領域。両方の [`FlexId`] を含む。
         enclosing: FlexId,
@@ -99,7 +99,7 @@ impl FlexId {
     pub fn y_zoomlevel(&self) -> u8 {
         self.y_zoomlevel.get()
     }
-    /// 時間軸のズームレベル。1Segmentは `2^(35 - t_zoomlevel)` 秒。
+    /// 時間軸のズームレベル。1つの `TimeSegment` は `2^(35 - t_zoomlevel)` 秒。
     ///
     /// `temporal_id` feature 無効時は常に `0`（全時間）。
     pub fn t_zoomlevel(&self) -> u8 {
@@ -139,9 +139,9 @@ impl FlexId {
     pub fn y_index(&self) -> u32 {
         self.y_index
     }
-    /// この [`FlexId`] の時間インデックス `{t}`。[`t_zoomlevel`](Self::t_zoomlevel) が決める Segment 幅を単位とする。
+    /// この [`FlexId`] の時間インデックス `{t}`。[`t_zoomlevel`](Self::t_zoomlevel) が決める `TimeSegment` 幅を単位とする。
     ///
-    /// [`t_zoomlevel`](Self::t_zoomlevel) と対で読めば、木の2分岐Segment `(zoom, index)` そのもの。
+    /// [`t_zoomlevel`](Self::t_zoomlevel) と対で読めば、木の `TimeSegment` `(zoom, index)` そのもの。
     /// `temporal_id` feature 無効時は常に `0`（全時間）。
     pub fn t_index(&self) -> u64 {
         #[cfg(feature = "temporal_id")]
@@ -156,17 +156,17 @@ impl FlexId {
     }
 
     /// この [`FlexId`] が占める絶対秒区間 `[start, end)` を返す。
-    /// 時間Segment（4軸目）を設定した自身を返す（ビルダー形式）。
+    /// 時間軸の `TimeSegment`（4軸目）を設定した自身を返す（ビルダー形式）。
     ///
     /// 引数は空間3軸と同じ「**ズームレベル＋インデックス**」で、[`new`](Self::new) の
     /// `f_zoomlevel` / `f_index` と同じく [`Into<u8>`](Into) を受ける
-    /// （[`TZoomLevel`] をそのまま渡すこともできる）。1Segmentは `2^(35 - t_zoomlevel)` 秒で、
+    /// （[`TZoomLevel`] をそのまま渡すこともできる）。1つの `TimeSegment` は `2^(35 - t_zoomlevel)` 秒で、
     /// [`t_zoomlevel`](Self::t_zoomlevel) / [`t_index`](Self::t_index) で読むのと同じ形である。
     ///
     /// # [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) の [`time_with`](crate::SingleId::time_with) との違い
     ///
     /// あちらは仕様の `{i}/{t}`、つまり**秒数**＋インデックスを取る。[`FlexId`] は木の
-    /// ノードアドレスであり2分岐Segment1個しか持てないため、**ズーム**で受ける。
+    /// ノードアドレスであり `TimeSegment` を1個しか持てないため、**ズーム**で受ける。
     ///
     /// ```text
     /// # use spatial_id::SpatialId;
@@ -180,7 +180,7 @@ impl FlexId {
     ///
     /// 任意秒数の間隔（`1800` など）を [`FlexId`] の集合として扱いたい場合は
     /// [`SingleId`](crate::SingleId) / [`RangeId`](crate::RangeId) に付けてから
-    /// [`SingleId::flex_ids`](crate::SingleId::flex_ids) などで展開する（必要な数のSegmentへ自動的に分解される）。
+    /// [`SingleId::flex_ids`](crate::SingleId::flex_ids) などで展開する（必要な数の `TimeSegment` へ自動的に分解される）。
     ///
     /// # バリデーション
     /// - `t_zoomlevel` が `35` を超える場合は [`crate::SpatialIdError::ZOutOfRange`] を返す。
@@ -192,7 +192,7 @@ impl FlexId {
     /// # #[cfg(feature = "temporal_id")]
     /// # {
     /// # use spatial_id::{FlexId, time::TZoomLevel};
-    /// // ズーム25のSegmentは 2^(35-25) = 1024 秒幅。
+    /// // ズーム25の TimeSegment は 2^(35-25) = 1024 秒幅。
     /// let id = FlexId::new(5, 3, 2, 3, 10, 1).unwrap().time_with_segment(25, 7).unwrap();
     /// assert_eq!((id.t_zoomlevel(), id.t_index()), (25, 7));
     /// assert_eq!(id.seconds_range(), (7 * 1024, 8 * 1024));
@@ -247,7 +247,7 @@ impl FlexId {
         unsafe { self.time_with_segment_unchecked(0, 0) }
     }
 
-    /// 検証を行わずに時間Segment（4軸目）を設定した自身を返す。
+    /// 検証を行わずに `TimeSegment`（4軸目）を設定した自身を返す。
     ///
     /// # Safety
     ///
@@ -271,7 +271,7 @@ impl FlexId {
         {
             debug_assert!(
                 zoom == 0 && index == 0,
-                "temporal_id 無効時に時間Segment ({zoom}, {index}) を設定しようとした"
+                "temporal_id 無効時に TimeSegment ({zoom}, {index}) を設定しようとした"
             );
             let _ = (zoom, index);
         }
@@ -282,27 +282,12 @@ impl FlexId {
     /// 指定したズームレベルでの空間的な親ID（包含する最小のFlexId）を返す。
     /// 指定されたズームが現在のズーム以上の場合は、各軸についてそのままのズームとインデックスを返す。
     pub fn spatial_parent_at_zoom(&self, target_z: u8) -> Result<FlexId, Error> {
-        let f_zoomlevel = self.f_zoomlevel().min(target_z);
-        let x_zoomlevel = self.x_zoomlevel().min(target_z);
-        let y_zoomlevel = self.y_zoomlevel().min(target_z);
-
-        let shift_f = self.f_zoomlevel() - f_zoomlevel;
-        let shift_x = self.x_zoomlevel() - x_zoomlevel;
-        let shift_y = self.y_zoomlevel() - y_zoomlevel;
-
-        let f_index = self.f_index() >> shift_f;
-        let x_index = self.x_index() >> shift_x;
-        let y_index = self.y_index() >> shift_y;
-
-        FlexId::new(
-            f_zoomlevel,
-            f_index,
-            x_zoomlevel,
-            x_index,
-            y_zoomlevel,
-            y_index,
-        )
-        .map(|id| unsafe { id.time_with_segment_unchecked(self.t_zoomlevel(), self.t_index()) })
+        Ok(self.ancestor_at([
+            self.f_zoomlevel().min(target_z),
+            self.x_zoomlevel().min(target_z),
+            self.y_zoomlevel().min(target_z),
+            self.t_zoomlevel(),
+        ]))
     }
 
     /// F方向で二つに切り分ける。[`ZoomLevel::MAX`] なら [`None`]。
@@ -310,6 +295,7 @@ impl FlexId {
     /// 分割後も各軸が有効範囲に収まることは構築時に保証される（F は
     /// `[-2^z, 2^z-1]` を2倍して `side` を足すと過不足なく `z+1` の範囲になり、
     /// X/Y は値を変えずに引き継ぐ）ため、[`FlexId::new`] の再検証を通さない。
+    #[inline]
     pub(crate) fn split_f(&self, side: Side) -> Option<FlexId> {
         let f_zoomlevel = self.f_zoomlevel.deeper()?;
         let f_index = self.f_index * 2 + side as i32;
@@ -332,6 +318,7 @@ impl FlexId {
     /// X方向で二つに切り分ける。[`ZoomLevel::MAX`] なら [`None`]。
     ///
     /// 再検証を省ける理由は [`split_f`](Self::split_f) と同じ。
+    #[inline]
     pub(crate) fn split_x(&self, side: Side) -> Option<FlexId> {
         let x_zoomlevel = self.x_zoomlevel.deeper()?;
         let x_index = self.x_index * 2 + side as u32;
@@ -354,6 +341,7 @@ impl FlexId {
     /// Y方向で二つに切り分ける。[`ZoomLevel::MAX`] なら [`None`]。
     ///
     /// 再検証を省ける理由は [`split_f`](Self::split_f) と同じ。
+    #[inline]
     pub(crate) fn split_y(&self, side: Side) -> Option<FlexId> {
         let y_zoomlevel = self.y_zoomlevel.deeper()?;
         let y_index = self.y_index * 2 + side as u32;
@@ -378,6 +366,7 @@ impl FlexId {
     /// 再検証を省ける理由は [`split_f`](Self::split_f) と同じ
     /// （インデックスを2倍して `side` を足すと過不足なく1段深い範囲になる）。
     #[cfg(feature = "temporal_id")]
+    #[inline]
     pub(crate) fn split_t(&self, side: Side) -> Option<FlexId> {
         let t_zoomlevel = self.t_zoomlevel.deeper()?;
         let t_index = self.t_index * 2 + side as u64;
@@ -403,11 +392,13 @@ impl FlexId {
     /// `temporal_id` feature 無効時は時間軸が存在せず、全時間は分割できないので常に
     /// [`None`]。木も3軸なのでこの経路には来ない。
     #[cfg(not(feature = "temporal_id"))]
+    #[inline]
     pub(crate) fn split_t(&self, _side: Side) -> Option<FlexId> {
         None
     }
 
     /// `dimension` 方向のズームレベルを返す。軸を値で選ぶ必要があるFlexTreeの実装用。
+    #[inline]
     pub(crate) fn zoomlevel_on(&self, dimension: Dimension) -> u8 {
         match dimension {
             Dimension::F => self.f_zoomlevel(),
@@ -418,6 +409,7 @@ impl FlexId {
     }
 
     /// `dimension` 方向のインデックスを返す。次元ごとに幅が違うので `i64` に揃える。
+    #[inline]
     pub(crate) fn index_on(&self, dimension: Dimension) -> i64 {
         match dimension {
             Dimension::F => i64::from(self.f_index()),
@@ -429,6 +421,7 @@ impl FlexId {
 
     /// 次元ごとのズームレベル `zoom`（[`Dimension::ALL`] の順）での自身の祖先を返す。
     /// `zoom` の各値は自身のその次元のズーム以下であること。
+    #[inline]
     pub(crate) fn ancestor_at(&self, zoom: [u8; 4]) -> FlexId {
         let [f, x, y, t] = zoom;
         debug_assert!(
@@ -456,6 +449,7 @@ impl FlexId {
     }
 
     /// `dimension` 方向で二つに切り分けた `side` 側を返す。その軸が最大ズームなら [`None`]。軸を値で選ぶ必要があるFlexTreeの実装用。
+    #[inline]
     pub(crate) fn split_on(&self, dimension: Dimension, side: Side) -> Option<FlexId> {
         match dimension {
             Dimension::F => self.split_f(side),
@@ -477,6 +471,7 @@ impl FlexId {
 
     /// `dimension` 方向で二つに切り分けた側のうち、`target` を含む側。
     /// `target` は自身に含まれ、その次元で自身より細かいこと。
+    #[inline]
     pub(crate) fn side_toward(&self, dimension: Dimension, target: &FlexId) -> Side {
         let shift = target.zoomlevel_on(dimension) - self.zoomlevel_on(dimension) - 1;
         if (target.index_on(dimension) >> shift) & 1 == 1 {
@@ -487,29 +482,14 @@ impl FlexId {
     }
 
     /// 自身が `other` より細かい次元の集合。
+    #[inline]
     pub(crate) fn finer_dimensions_than(&self, other: &FlexId) -> DimensionSet {
-        Dimension::ALL
-            .into_iter()
-            .filter(|&d| self.zoomlevel_on(d) > other.zoomlevel_on(d))
-            .collect()
-    }
-
-    /// FlexId の PartialOrd の各位置について、自身がどちら側にあるかを、先に割る位置から順に返す。
-    ///
-    /// 位置はルート（F の符号）、続いてズーム 1, 2, … の各ズームで F→X→Y→T の順。
-    /// 自身がその位置で割られていなければ [`None`]、割られていれば上側なら `true`。
-    #[cfg(any(feature = "unstable", test))]
-    fn zorder_sides(&self) -> impl Iterator<Item = Option<bool>> + '_ {
-        let levels = (1..=TZoomLevel::MAX.get()).flat_map(move |level| {
-            Dimension::ALL
-                .into_iter()
-                .filter(move |&d| d == Dimension::T || level <= ZoomLevel::MAX.get())
-                .map(move |d| {
-                    let z = self.zoomlevel_on(d);
-                    (level <= z).then(|| (self.index_on(d) >> (z - level)) & 1 == 1)
-                })
-        });
-        core::iter::once(Some(self.root_index() == 1)).chain(levels)
+        DimensionSet::from_bits(
+            u8::from(self.f_zoomlevel > other.f_zoomlevel)
+                | (u8::from(self.x_zoomlevel > other.x_zoomlevel) << 1)
+                | (u8::from(self.y_zoomlevel > other.y_zoomlevel) << 2)
+                | (u8::from(self.t_zoomlevel() > other.t_zoomlevel()) << 3),
+        )
     }
 
     /// FlexId の PartialOrd に沿って並べ替えるためのキーを返す。
@@ -519,8 +499,30 @@ impl FlexId {
     /// このキーの狭義の昇順に並ぶ。
     #[cfg(any(feature = "unstable", test))]
     pub fn zorder_key(&self) -> u128 {
-        self.zorder_sides()
-            .fold(0, |key, side| key << 1 | u128::from(side == Some(true)))
+        /// 下位 30 ビットを `b_29` が bit 116、`b_0` が bit 0 に来るよう 4 ビットおきに広げる。
+        #[inline(always)]
+        const fn spread_4_u32(v: u32) -> u128 {
+            let mut x = v as u128;
+            x = (x | (x << 48)) & 0x0000_FFFF_0000_0000_0000_FFFF;
+            x = (x | (x << 24)) & 0x0000_00FF_0000_00FF_0000_00FF_0000_00FF;
+            x = (x | (x << 12)) & 0x000F_000F_000F_000F_000F_000F_000F_000F;
+            x = (x | (x << 6)) & 0x0303_0303_0303_0303_0303_0303_0303_0303;
+            (x | (x << 3)) & 0x1111_1111_1111_1111_1111_1111_1111_1111
+        }
+
+        let f_aligned = ((self.f_index() as u32) << (30 - self.f_zoomlevel())) & 0x3FFF_FFFF;
+        let x_aligned = self.x_index() << (30 - self.x_zoomlevel());
+        let y_aligned = self.y_index() << (30 - self.y_zoomlevel());
+        let t_aligned = self.t_index() << (35 - self.t_zoomlevel());
+        let t_top30 = (t_aligned >> 5) as u32;
+        let t_bot5 = (t_aligned & 0x1F) as u128;
+
+        let interleaved_30 = (spread_4_u32(f_aligned) << 3)
+            | (spread_4_u32(x_aligned) << 2)
+            | (spread_4_u32(y_aligned) << 1)
+            | spread_4_u32(t_top30);
+
+        ((self.root_index() as u128) << 125) | (interleaved_30 << 5) | t_bot5
     }
 
     /// FlexId の PartialOrd における `self` と `other` の関係を求める。
@@ -528,6 +530,7 @@ impl FlexId {
     /// 両方が割られた位置で先に食い違えば [`ZOrderRel::Less`] または [`ZOrderRel::Greater`]、
     /// 完全一致なら [`ZOrderRel::Equal`]、片方だけが割られた位置で先に食い違えば
     /// 揃えるために割るべき共通祖先領域と次元を持つ [`ZOrderRel::Overlap`] を返す。
+    #[inline]
     pub(crate) fn zorder_rel(&self, other: &FlexId) -> ZOrderRel {
         match self.root_index().cmp(&other.root_index()) {
             core::cmp::Ordering::Less => return ZOrderRel::Less,
@@ -557,6 +560,7 @@ impl FlexId {
 
     /// 同じルート内で `self` が FlexId の PartialOrd で `other` より前にあるなら、
     /// 分岐する共通の祖先領域・割る次元・その次元でのズーム深さを返す。
+    #[inline]
     pub(crate) fn zorder_fork(&self, other: &FlexId) -> Option<(FlexId, Dimension, u8)> {
         if self.root_index() != other.root_index() {
             return None;
@@ -575,24 +579,81 @@ impl FlexId {
 
     /// 同じルート内で、FlexId の PartialOrd において `self` と `other` が最初に食い違う `(一致ズーム深さ, 次元)` を返す。
     /// `self == other` なら [`None`]。
+    #[inline]
     fn first_zorder_diff(&self, other: &FlexId) -> Option<(u8, Dimension)> {
-        let mut best: Option<(u8, Dimension)> = None;
-        for d in Dimension::ALL {
-            let (za, zb) = (self.zoomlevel_on(d), other.zoomlevel_on(d));
+        let mut best_agree = u8::MAX;
+        let mut best_dim = Dimension::F;
+
+        {
+            let (za, zb) = (self.f_zoomlevel(), other.f_zoomlevel());
             let deepest = za.min(zb);
-            let diff = (self.index_on(d) >> (za - deepest)) ^ (other.index_on(d) >> (zb - deepest));
-            if diff == 0 && za == zb {
-                continue;
-            }
-            let agree = deepest - (u64::BITS - (diff as u64).leading_zeros()) as u8;
-            if best.is_none_or(|(best_agree, _)| agree < best_agree) {
-                best = Some((agree, d));
+            let diff =
+                ((self.f_index() >> (za - deepest)) ^ (other.f_index() >> (zb - deepest))) as u32;
+            if diff != 0 || za != zb {
+                let agree = deepest - (u32::BITS - diff.leading_zeros()) as u8;
+                best_agree = agree;
             }
         }
-        best
+
+        #[inline(always)]
+        fn check_u32(
+            za: u8,
+            ia: u32,
+            zb: u8,
+            ib: u32,
+            d: Dimension,
+            best_agree: &mut u8,
+            best_dim: &mut Dimension,
+        ) {
+            let deepest = za.min(zb);
+            let diff = (ia >> (za - deepest)) ^ (ib >> (zb - deepest));
+            if diff != 0 || za != zb {
+                let agree = deepest - (u32::BITS - diff.leading_zeros()) as u8;
+                if agree < *best_agree {
+                    *best_agree = agree;
+                    *best_dim = d;
+                }
+            }
+        }
+
+        check_u32(
+            self.x_zoomlevel(),
+            self.x_index(),
+            other.x_zoomlevel(),
+            other.x_index(),
+            Dimension::X,
+            &mut best_agree,
+            &mut best_dim,
+        );
+        check_u32(
+            self.y_zoomlevel(),
+            self.y_index(),
+            other.y_zoomlevel(),
+            other.y_index(),
+            Dimension::Y,
+            &mut best_agree,
+            &mut best_dim,
+        );
+
+        #[cfg(feature = "temporal_id")]
+        {
+            let (za, zb) = (self.t_zoomlevel(), other.t_zoomlevel());
+            let deepest = za.min(zb);
+            let diff = (self.t_index() >> (za - deepest)) ^ (other.t_index() >> (zb - deepest));
+            if diff != 0 || za != zb {
+                let agree = deepest - (u64::BITS - diff.leading_zeros()) as u8;
+                if agree < best_agree {
+                    best_agree = agree;
+                    best_dim = Dimension::T;
+                }
+            }
+        }
+
+        (best_agree != u8::MAX).then_some((best_agree, best_dim))
     }
 
     /// 最初に食い違う `(agree, split_dim)` の直前まで一致している共通の祖先領域を返す。
+    #[inline]
     fn common_zorder_ancestor(&self, other: &FlexId, agree: u8, split_dim: Dimension) -> FlexId {
         let zoom = Dimension::ALL.map(|d| {
             self.zoomlevel_on(d)
@@ -603,10 +664,41 @@ impl FlexId {
     }
 
     /// `dimensions` のうち、自身のズームが一番粗い次元を返す。同じズームなら F→X→Y→T の順。空なら [`None`]。
+    #[inline]
     pub(crate) fn coarsest_dimension_in(&self, dimensions: DimensionSet) -> Option<Dimension> {
-        dimensions
-            .iter()
-            .min_by_key(|&d| (self.zoomlevel_on(d), d as u8))
+        if dimensions.is_empty() {
+            return None;
+        }
+        let mut best_z = u8::MAX;
+        let mut best_dim = Dimension::F;
+        if dimensions.contains(Dimension::F) {
+            best_z = self.f_zoomlevel();
+        }
+        if dimensions.contains(Dimension::X) {
+            let z = self.x_zoomlevel();
+            if z < best_z {
+                best_z = z;
+                best_dim = Dimension::X;
+            }
+        }
+        if dimensions.contains(Dimension::Y) {
+            let z = self.y_zoomlevel();
+            if z < best_z {
+                #[cfg(feature = "temporal_id")]
+                {
+                    best_z = z;
+                }
+                best_dim = Dimension::Y;
+            }
+        }
+        #[cfg(feature = "temporal_id")]
+        if dimensions.contains(Dimension::T) {
+            let z = self.t_zoomlevel();
+            if z < best_z {
+                best_dim = Dimension::T;
+            }
+        }
+        Some(best_dim)
     }
 
     /// この [`FlexId`] が `other` と **面を共有** しているかを判定する。X 軸は循環（対蹠経度で東西端が接続）を考慮する。辺・頂点だけで接する場合、領域が重なる場合、離れている場合はいずれも `false` を返す。判定は空間 3 軸（F / X / Y）のみで行い、時間 ID は考慮しない。
@@ -679,8 +771,8 @@ impl FlexId {
 
 /// `temporal_id` feature 無効時に時間軸ぶんのメモリが本当に消えていることを固定する。
 ///
-/// `t_zoomlevel` / `t_index` を `cfg` で落とし忘れると、時間を使わない利用者が
-/// [`FlexId`] 1個あたり8バイト（＋木の走査スタックぶん）を払い続けることになる。
+/// `t_zoomlevel` / `t_index` を `cfg` で除外し忘れると、時間を使わない場合でも
+/// [`FlexId`] 1個あたり8バイト（および走査スタックのメモリ領域）を余分に消費する。
 /// 有効時の24バイトは `3軸(4+4+4) + ズーム3 + Tズーム1 + パディング + t_index(8)`。
 #[cfg(not(feature = "temporal_id"))]
 const _: () = assert!(

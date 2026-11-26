@@ -247,9 +247,9 @@ struct PlainDataEntry {
 
 /// 値ありコレクション（Table）向けの JSON 書き出し。
 ///
-/// 値は出現順で重複排除して `value` に列挙し、各空間 ID は `ref` でその添字を参照する。
+/// 値は出現順で重複排除して `value` に列挙し、各空間IDは `ref` でその添字を参照する。
 ///
-/// `iter` は時間方向に結合済みのもの（`range_ids`）を渡す。木は時間を2の冪秒のSegmentで持つため、
+/// `iter` は時間方向に結合済みのもの（`range_ids`）を渡す。木は時間を2の冪乗の秒数を持つ `TimeSegment` で持つため、
 /// 結合しないと `i: 1800` のような単位が断片化した `i: 1` の羅列になってしまう。
 pub(crate) fn serialize_with_values<'a, V, S>(
     iter: impl Iterator<Item = (RangeId, &'a V)>,
@@ -389,11 +389,11 @@ mod tests {
 
     /// コレクションを経由した JSON 往復で、**時空間領域が完全に保存される**。
     ///
-    /// 木は時間を2の冪秒のSegmentで持つため、`1800` 秒のような単位は挿入時に複数Segmentへ分解される
+    /// 木は時間を2の冪乗の秒数を持つ `TimeSegment` で持つため、`1800` 秒のような単位は挿入時に複数の `TimeSegment` へ分解される
     /// （この例では5個）。書き出し側で時間方向の結合を通すことで1件へ戻る。
     ///
     /// ただし `{i}` は暦の単位（[`AllowedIntervals::calendar`](crate::time::AllowedIntervals::calendar)）へ正規化されるので、
-    /// `1800` は JSON 上では `60`（分）× 30 Segmentになる。**ラベルは変わるが秒区間は同じ**で、
+    /// `1800` は JSON 上では `60`（分）× 30 区間になる。**ラベルは変わるが秒区間は同じ**で、
     /// 読み込んだ木の内容は元と一致する。
     #[cfg(feature = "temporal_id")]
     #[test]
@@ -408,10 +408,13 @@ mod tests {
 
         let mut table: SpatialIdMap<i32> = SpatialIdMap::new();
         table.insert(original, 7);
-        assert!(table.count() > 1, "1800秒は複数Segmentへ分解されるはず");
+        assert!(
+            table.count() > 1,
+            "1800秒は複数のTimeSegmentへ分解されるはず"
+        );
 
         let json = serde_json::to_string(&table).unwrap();
-        // 暦に無い 1800 秒は分へ落ちる。断片（`"i":8` など）にはならない。
+        // 暦に無い 1800 秒は分（60秒）単位で表される。断片（`"i":8` など）にはならない。
         assert!(json.contains("\"i\":60"), "i が暦単位でない: {json}");
         assert!(
             json.contains("\"t\":[24291360,24291389]"),
@@ -426,7 +429,7 @@ mod tests {
         assert_eq!(*ids[0].1, 7);
     }
 
-    /// 隣り合う1時間×2は、暦の単位なら `3600 × 2 TimeSegment` として書き出される。
+    /// 隣り合う1時間×2は、暦の単位なら `3600 × 2 区間` として書き出される。
     ///
     /// `gcd` だと `7200`（2時間という単位）になってしまい、受け取り側が解釈しづらい。
     #[cfg(feature = "temporal_id")]

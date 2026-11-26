@@ -60,7 +60,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get(..)
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -75,7 +75,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get(SingleId::new(20, 0, 100, 0)?)
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -88,7 +88,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get(RangeId::new(20, [0, 3], [100, 199], [0, 99])?)
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -101,7 +101,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get(FlexId::new(20, 0, 18, 25, 18, 0)?)
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -118,7 +118,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// let b = SingleId::new(20, 0, 101, 0)?;
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get([a, b])
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -133,7 +133,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// let targets = vec![a, b];
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get(targets)
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -147,7 +147,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # let targets = vec![SingleId::new(20, 0, 100, 0)?, SingleId::new(20, 0, 101, 0)?];
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get(&targets[..])
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -167,7 +167,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get(..)
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -181,7 +181,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get(..)
     ///     .into_set()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -193,7 +193,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # use spatial_id::collection::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
-    /// for item in table.query().filter_in(10..20).get(..) {
+    /// for item in table.query().filter_values(|v| (10..20).contains(v)).get(..) {
     ///     let (id, value) = item?;
     /// }
     /// # Ok::<(), spatial_id::Error>(())
@@ -214,7 +214,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # use spatial_id::collection::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
-    /// let query = table.query().filter_in(10..20);
+    /// let query = table.query().filter_values(|v| (10..20).contains(v));
     /// let output = query.get(..);
     /// # Ok::<(), spatial_id::Error>(())
     /// ```
@@ -234,7 +234,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # use spatial_id::collection::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
-    /// let map = table.query().filter_in(10..20).into_map()?;
+    /// let map = table.query().filter_values(|v| (10..20).contains(v)).into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
     /// ```
     pub fn into_map(self) -> Result<crate::SpatialIdMap<V>, Error> {
@@ -249,7 +249,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # use spatial_id::collection::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
-    /// let set = table.query().filter_in(10..20).into_set()?;
+    /// let set = table.query().filter_values(|v| (10..20).contains(v)).into_set()?;
     /// # Ok::<(), spatial_id::Error>(())
     /// ```
     pub fn into_set(self) -> Result<crate::SpatialIdSet, Error> {
@@ -269,7 +269,7 @@ impl<V: SafeValue + 'static> Query<V> {
     ///
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get_cancellable(.., &token)
     ///     .into_map();
     /// assert_eq!(result, Err(Error::Query(QueryError::Cancelled)));
@@ -293,7 +293,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get_overlapping(SingleId::new(20, 0, 100, 0)?)
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -312,7 +312,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// let token = CancellationToken::new();
     /// let result = table
     ///     .query()
-    ///     .filter_in(10..20)
+    ///     .filter_values(|v| (10..20).contains(v))
     ///     .get_overlapping_cancellable(SingleId::new(20, 0, 100, 0)?, &token)
     ///     .into_map()?;
     /// # Ok::<(), spatial_id::Error>(())
@@ -357,14 +357,16 @@ fn read_source<'a, V: SafeValue + 'static>(
     bounds: &[RangeId],
     token: &CancellationToken,
 ) -> Result<QueryIter<'a, V>, Error> {
+    let stream = source.read_flex_ids(bounds, token)?;
+    if token.is_never() {
+        return Ok(stream);
+    }
     let token = token.clone();
     let mut counter = 0u32;
-    Ok(QueryIter::new(source.read_flex_ids(bounds, &token)?.map(
-        move |item| {
-            token.check_amortized(&mut counter)?;
-            item
-        },
-    )))
+    Ok(QueryIter::new(stream.map(move |item| {
+        token.check_amortized(&mut counter)?;
+        item
+    })))
 }
 
 impl<V: SafeValue + 'static> Query<V> {
@@ -404,12 +406,13 @@ impl<V: SafeValue + 'static> Query<V> {
             }
             Node::Binary(op, lhs, rhs) => {
                 let lhs_bounds = bounds.clone();
-                #[cfg(feature = "rayon")]
+                // wasm32 では非 Send な JS コールバックを呼び出し元スレッドに留めるため、別スレッドへ分岐しない。
+                #[cfg(all(feature = "rayon", not(target_arch = "wasm32")))]
                 let (l, r) = rayon::join(
                     || lhs.stream_within(lhs_bounds, token),
                     || rhs.stream_within(bounds, token),
                 );
-                #[cfg(not(feature = "rayon"))]
+                #[cfg(not(all(feature = "rayon", not(target_arch = "wasm32"))))]
                 let (l, r) = (
                     lhs.stream_within(lhs_bounds, token),
                     rhs.stream_within(bounds, token),

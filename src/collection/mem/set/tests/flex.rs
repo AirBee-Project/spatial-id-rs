@@ -39,7 +39,7 @@ mod tests {
         );
     }
 
-    /// 削除は呼び出した時点で済み、どちらの版でも同じ内容が取り除かれる。
+    /// 削除は呼び出した時点で完了し、`remove` と `remove_flex_ids` のどちらでも同じ内容が取り除かれる。
     #[test]
     fn remove_variants_remove_the_same_content() {
         let target = RangeId::new(5, [0, 2], [2, 5], [2, 3]).unwrap();
@@ -55,5 +55,21 @@ mod tests {
         let removed_flex: Vec<_> = b.remove_overlapping_flex_ids(target).collect();
         assert_eq!(removed, as_range(removed_flex));
         assert_eq!(a, b);
+    }
+
+    #[cfg(feature = "unstable")]
+    #[test]
+    fn compact_preserves_set_elements() {
+        let mut set = SpatialIdSet::new();
+        for dx in [0_u32, 10_000] {
+            set.insert(SingleId::new(20, 0, dx, 0).unwrap());
+            set.insert(SingleId::new(20, 0, dx + 1, 1).unwrap());
+        }
+        let expected: Vec<_> = set.iter().collect();
+        set.compact();
+        assert_eq!(set.count(), expected.len());
+        assert_eq!(set.iter().collect::<Vec<_>>(), expected);
+        let q = SingleId::new(20, 0, 10_001, 1).unwrap();
+        assert_eq!(set.get(q).count(), 1);
     }
 }
