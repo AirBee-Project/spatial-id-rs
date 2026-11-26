@@ -1,7 +1,7 @@
 // ビットの位置は、先頭バイトの最上位ビットを bit 0 として数える。
 use crate::collection::disk::io::PageId;
 use crate::id::dimension::{Dimension, DimensionSet};
-use crate::id::relative_flex_id::ShortRelativeFlexId;
+use crate::id::relative_flex_id::{RelativeFlexId, ShortRelativeFlexId};
 use crate::{DiskError, Error};
 use zerocopy::byteorder::{BigEndian, U16, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
@@ -15,6 +15,7 @@ pub(super) enum NodeKind {
     Branch = 1,
     ShortSkip = 2,
     RefPage = 3,
+    LongSkip = 4,
 }
 
 impl TryFrom<u8> for NodeKind {
@@ -126,6 +127,40 @@ impl ShortSkip {
     }
 }
 
+/// 行き先を [ShortRelativeFlexId] で表せない Skip の、子より前の部分。この後ろに子が続く。
+///
+/// | bit     | 内容                                                     |
+/// |---------|----------------------------------------------------------|
+/// | 0-159   | 行き先の [RelativeFlexId]（[`RelativeFlexId::encode`]）  |
+/// | 160-164 | 0 （現状は空き）                                         |
+/// | 165-167 | 子の種類                                                 |
+#[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned)]
+#[repr(C)]
+pub(super) struct LongSkip {
+    path: [u8; RelativeFlexId::ENCODED_LEN],
+    child: u8,
+}
+
+impl LongSkip {
+    /// 行き先と子の種類を詰めた LongSkip。
+    pub(super) fn new(path: &RelativeFlexId, child_kind: NodeKind) -> Self {
+        LongSkip {
+            path: path.encode(),
+            child: child_kind as u8,
+        }
+    }
+
+    /// 親の領域から見た行き先。
+    pub(super) fn path(&self) -> Result<RelativeFlexId, Error> {
+        RelativeFlexId::decode(&self.path)
+    }
+
+    /// 行き先にある子の種類。
+    pub(super) fn child_kind(&self) -> Result<NodeKind, Error> {
+        NodeKind::try_from(self.child)
+    }
+}
+
 /// 別のページのルートを指す Node。
 ///
 /// 行き先のルートの種類と分割次元の集合を写しておき、行き先のページを読まずに済ませる。
@@ -195,6 +230,10 @@ pub(super) enum Node<'a> {
         header: &'a ShortSkip,
         child: NodeBytes<'a>,
     },
+    LongSkip {
+        header: &'a LongSkip,
+        child: NodeBytes<'a>,
+    },
     RefPage(&'a RefPage),
 }
 
@@ -237,6 +276,17 @@ impl<'a> TryFrom<NodeBytes<'a>> for Node<'a> {
                     },
                 }
             }
+            NodeKind::LongSkip => {
+                let (header, child) =
+                    LongSkip::ref_from_prefix(node.bytes).map_err(|_| DiskError::Corrupt)?;
+                Node::LongSkip {
+                    header,
+                    child: NodeBytes {
+                        kind: header.child_kind()?,
+                        bytes: child,
+                    },
+                }
+            }
             NodeKind::RefPage => {
                 Node::RefPage(RefPage::ref_from_bytes(node.bytes).map_err(|_| DiskError::Corrupt)?)
             }
@@ -251,6 +301,9 @@ impl NodeBytes<'_> {
             Node::Value(_) => DimensionSet::EMPTY,
             Node::Branch { header, .. } => header.split_dimensions(),
             Node::ShortSkip { header, child } => {
+                header.path()?.deeper_dimensions() | child.split_dimensions()?
+            }
+            Node::LongSkip { header, child } => {
                 header.path()?.deeper_dimensions() | child.split_dimensions()?
             }
             Node::RefPage(page) => page.split_dimensions(),
