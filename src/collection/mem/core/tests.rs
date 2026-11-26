@@ -24,21 +24,6 @@ fn node_count<V>(node: &Node<V>) -> usize {
     }
 }
 
-/// 自身と子孫が割っている次元の集合。
-fn split_set<V>(node: &Node<V>) -> DimensionSet {
-    match node {
-        Node::Value(_) => DimensionSet::EMPTY,
-        Node::Branch(branch) => branch_split_set(branch),
-        Node::ShortSkipValue(path, _) => path.deeper_dimensions(),
-        Node::ShortSkipBranch(path, branch) => path.deeper_dimensions() | branch_split_set(branch),
-        Node::LongSkip(skip) => skip.path.deeper_dimensions() | split_set(&skip.child),
-    }
-}
-
-fn branch_split_set<V>(branch: &Branch<V>) -> DimensionSet {
-    DimensionSet::from(branch.dimension) | split_set(&branch.lower) | split_set(&branch.upper)
-}
-
 /// 領域 `this` の Node が FlexTreeCore の規則を守っているか検査する。
 fn check_rules<V: PartialEq + Debug>(node: &Node<V>, this: FlexId) -> Result<(), String> {
     match node {
@@ -49,7 +34,7 @@ fn check_rules<V: PartialEq + Debug>(node: &Node<V>, this: FlexId) -> Result<(),
         }
         Node::ShortSkipBranch(path, branch) => {
             let region = path.to_absolute(&this);
-            check_path(this, region, branch_split_set(branch))?;
+            check_path(this, region, branch.split_dimensions)?;
             check_branch(branch, region)
         }
         Node::LongSkip(skip) => {
@@ -61,7 +46,7 @@ fn check_rules<V: PartialEq + Debug>(node: &Node<V>, this: FlexId) -> Result<(),
                 return Err(format!("{this:?}: 埋め込める Skip を確保している"));
             }
             let region = path.to_absolute(&this).unwrap();
-            check_path(this, region, split_set(child))?;
+            check_path(this, region, child.split_dimensions())?;
             check_rules(child, region)
         }
     }
@@ -71,23 +56,22 @@ fn check_rules<V: PartialEq + Debug>(node: &Node<V>, this: FlexId) -> Result<(),
 fn check_branch<V: PartialEq + Debug>(branch: &Branch<V>, this: FlexId) -> Result<(), String> {
     let Branch {
         dimension,
+        split_dimensions,
         height,
         count,
         lower,
         upper,
     } = branch;
-    if !split_set(lower).contains(*dimension) && lower == upper {
+    let expected =
+        DimensionSet::from(*dimension) | lower.split_dimensions() | upper.split_dimensions();
+    if *split_dimensions != expected {
+        return Err(format!("{this:?}: split_dimensions のキャッシュが古い"));
+    }
+    if !lower.split_dimensions().contains(*dimension) && lower == upper {
         return Err(format!("{this:?}: 割る必要のない Branch"));
     }
-    let split = branch_split_set(branch);
-    if this.coarsest_dimension_in(split) != Some(*dimension) {
+    if this.coarsest_dimension_in(*split_dimensions) != Some(*dimension) {
         return Err(format!("{this:?}: 一番粗い次元で割っていない"));
-    }
-    if let Some(d) = Dimension::ALL
-        .into_iter()
-        .find(|&d| branch.splits_on(&this, d) != split.contains(d))
-    {
-        return Err(format!("{this:?}: splits_on({d:?}) が子孫の集合と食い違う"));
     }
     let expected_height = 1 + lower.height().max(upper.height());
     if *height != expected_height {

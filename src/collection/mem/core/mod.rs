@@ -279,11 +279,8 @@ impl<V: PartialEq> FlexTreeCore<V> {
     ) -> impl Iterator<Item = (RangeId, &'a V)> + 'a {
         let has_temporal_split = [&self.upper_root, &self.lower_root]
             .into_iter()
-            .zip(FlexId::ROOTS)
-            .any(|(root, region)| {
-                root.as_ref()
-                    .is_some_and(|root| root.splits_on(&region, crate::Dimension::T))
-            });
+            .flatten()
+            .any(|root| root.split_dimensions().contains(crate::Dimension::T));
         time_reconstruct::reconstruct(self.iter(), has_temporal_split, allowed_intervals)
     }
 

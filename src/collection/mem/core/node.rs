@@ -39,8 +39,9 @@ impl<V: Clone> Clone for Node<V> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Branch<V> {
-    /// 自身と子孫が割っている次元のうち、領域から見て一番粗い次元。
     pub(super) dimension: Dimension,
+    /// 自身と子孫が割っている次元の集合。自身の `dimension` とlowerとupperの集合を合わせたもの。
+    pub(super) split_dimensions: DimensionSet,
     /// 自身と子孫で Branch が縦に何段続くかの最大。Node を辿るスタックの大きさに使う。
     pub(super) height: u8,
     /// 子孫に含まれる、値を持つ[FlexId]の数。
@@ -102,20 +103,17 @@ impl<V> Node<V> {
         }
     }
 
-    /// 領域 `this` のこの Node か子孫が `dimension` で割っているなら true。
-    ///
-    /// Branch は子孫が割っている次元のうち一番粗い次元で割るので、`dimension` のほうが粗い Branch の下には
-    /// `dimension` で割る Node がない。そこで打ち切るため、`dimension` が一番粗い領域から調べれば、
-    /// 他の次元を1段ずつ割る程度の数の Node しか辿らない。
-    pub(super) fn splits_on(&self, this: &FlexId, dimension: Dimension) -> bool {
+    /// 自身と子孫が割っている次元の集合。
+    pub(super) fn split_dimensions(&self) -> DimensionSet {
         match self {
-            Node::Value(_) => false,
-            Node::Branch(branch) => branch.splits_on(this, dimension),
-            node if node.path_dimensions().contains(dimension) => true,
-            node => match node.skip_target(this).unwrap() {
-                (_, Target::Value(_)) => false,
-                (region, Target::Branch(branch)) => branch.splits_on(&region, dimension),
-            },
+            Node::Value(_) => DimensionSet::EMPTY,
+            Node::Branch(branch) => branch.split_dimensions,
+            // Skip に持たせると Skip<u64> が 40 から 48 バイトに膨らむので、行き先から求める
+            Node::LongSkip(skip) => skip.path.deeper_dimensions() | skip.child.split_dimensions(),
+            Node::ShortSkipValue(path, _) => path.deeper_dimensions(),
+            Node::ShortSkipBranch(path, branch) => {
+                path.deeper_dimensions() | branch.split_dimensions
+            }
         }
     }
 
@@ -150,20 +148,11 @@ impl<V> Node<V> {
     }
 
     /// この Node を最初に割る次元の候補。このうち一番粗い次元で最初に割る。Value なら空。
-    ///
-    /// Skip は、行き先が狭い次元と、行き先の Branch が割る次元。行き先が狭くない次元は Skip の前後でズームが
-    /// 変わらないので、行き先の Branch より下の Node が割る次元は、行き先の Branch の次元より粗くならない。
     pub(super) fn head_dimensions(&self) -> DimensionSet {
         match self {
             Node::Value(_) => DimensionSet::EMPTY,
             Node::Branch(branch) => branch.dimension.into(),
-            Node::LongSkip(skip) => {
-                skip.path.deeper_dimensions() | Target::of(&skip.child).head_dimensions()
-            }
-            Node::ShortSkipValue(path, _) => path.deeper_dimensions(),
-            Node::ShortSkipBranch(path, branch) => {
-                path.deeper_dimensions() | branch.dimension.into()
-            }
+            node => node.split_dimensions(),
         }
     }
 
@@ -212,26 +201,14 @@ impl<V> Branch<V> {
     fn new(dimension: Dimension, lower: Node<V>, upper: Node<V>) -> Self {
         Branch {
             dimension,
+            split_dimensions: DimensionSet::from(dimension)
+                | lower.split_dimensions()
+                | upper.split_dimensions(),
             height: 1 + lower.height().max(upper.height()),
             count: lower.count() + upper.count(),
             lower,
             upper,
         }
-    }
-
-    /// 領域 `this` のこの Branch か子孫が `dimension` で割っているなら true。
-    pub(super) fn splits_on(&self, this: &FlexId, dimension: Dimension) -> bool {
-        if self.dimension == dimension {
-            return true;
-        }
-        if this.coarsest_dimension_in(DimensionSet::from(self.dimension) | dimension.into())
-            == Some(dimension)
-        {
-            return false;
-        }
-        let half = |side| this.split_on(self.dimension, side).unwrap();
-        self.lower.splits_on(&half(Side::Lower), dimension)
-            || self.upper.splits_on(&half(Side::Upper), dimension)
     }
 }
 
@@ -242,17 +219,13 @@ impl<V> Skip<V> {
 }
 
 impl<V: PartialEq + Clone> Node<V> {
-    /// 領域 `this` を `dimension` で割った左右 `lower`,`upper` から、`join` が Branch を作るなら true。
-    fn forms_branch(this: &FlexId, dimension: Dimension, lower: &Self, upper: &Self) -> bool {
-        // 件数か段数が違えば左右は等しくないので、子孫を辿らずに決まる
-        if lower.count() != upper.count() || lower.height() != upper.height() {
-            return true;
-        }
+    /// `join` が Branch を作るなら true。
+    fn forms_branch(dimension: Dimension, lower: &Self, upper: &Self) -> bool {
         // Node は領域との相対位置で意味を持つので、子孫が `dimension` で割っている Node を
         // 広い領域へ持ち上げると意味が変わる。左右が同じでも、そのときは割ったままにする。
-        // 左右の比較は部分木全体を辿りうるので、辿る数が少ないこちらを先に調べる
-        let lower_id = this.split_on(dimension, Side::Lower).unwrap();
-        lower.splits_on(&lower_id, dimension) || !(lower.ptr_eq(upper) || lower == upper)
+        let same = !lower.split_dimensions().contains(dimension)
+            && (lower.ptr_eq(upper) || lower == upper);
+        !same
     }
 
     /// 領域 `this` を `dimension` で割った左右 `lower`,`upper` を、1つの Node に合わせる。まとめられれば1つにし、片側が空なら Skip にする。
@@ -274,7 +247,7 @@ impl<V: PartialEq + Clone> Node<V> {
             }
             (Some(lower), Some(upper)) => {
                 // Branch はここと `merge` でしか作らない。これでどの操作の結果も、同じ形状なら同じ FlexTreeCore になる。
-                if Node::forms_branch(this, dimension, &lower, &upper) {
+                if Node::forms_branch(dimension, &lower, &upper) {
                     Some(Node::Branch(Arc::new(Branch::new(dimension, lower, upper))))
                 } else {
                     Some(lower)
@@ -363,15 +336,15 @@ impl<V: PartialEq + Clone> Node<V> {
         }
         // Skip どうしは、行き先が分かれるところまで1段ずつ割らずに一気に降りる
         if let Some(node_a) = a
-            && let Some((region_a, head_a)) = node_a
+            && let Some((region_a, split_a)) = node_a
                 .skip_target(this)
-                .map(|(region, child)| (region, child.head_dimensions()))
+                .map(|(region, child)| (region, child.split_dimensions()))
             && let Some((region_b, child_b)) = b.as_skip()
         {
             let at = common_descent(
                 this,
-                (&region_a, head_a),
-                (&region_b, child_b.head_dimensions()),
+                (&region_a, split_a),
+                (&region_b, child_b.split_dimensions()),
             );
             let b = View::at(&at, region_b, child_b);
             // 変わるのは行き先の中だけなので、先が Value か Branch のままなら行き先を求め直さない
@@ -439,9 +412,7 @@ impl<V: PartialEq + Clone> Node<V> {
                 Node::merge(&lower_id, &mut lower, b_lower, rule);
                 Node::merge(&upper_id, &mut upper, b_upper, rule);
                 match (lower, upper) {
-                    (Some(lower), Some(upper))
-                        if Node::forms_branch(this, dimension, &lower, &upper) =>
-                    {
+                    (Some(lower), Some(upper)) if Node::forms_branch(dimension, &lower, &upper) => {
                         Ok(Branch::new(dimension, lower, upper))
                     }
                     // `join` に渡すと左右をもう一度比べるので、まとめられると分かった左右は直接返す
@@ -569,8 +540,7 @@ impl<V: PartialEq + Clone> Node<V> {
 /// 次元のうち一番先に順番が来るもので全体が止まる。止まる位置は次元ごとに直接求まるので、
 /// Skip の長さぶん1段ずつ辿らない。
 ///
-/// `split_a`・`split_b` はそれぞれの先の Node が割っている次元の集合。止まる位置はそのうち一番粗い次元で
-/// 決まるので、先の Node が最初に割る次元だけを渡してもよい。
+/// `split_a`・`split_b` はそれぞれの先の Node が割っている次元の集合。
 #[inline]
 pub(super) fn common_descent(
     this: &FlexId,
