@@ -55,6 +55,14 @@ impl From<Dimension> for DimensionSet {
     }
 }
 
+/// [`Dimension`] の値を位置とする、下位 4bit のビット列。[`DimensionSet::from_bits`] の逆。
+impl From<DimensionSet> for u8 {
+    #[inline]
+    fn from(set: DimensionSet) -> u8 {
+        set.0
+    }
+}
+
 impl BitOr for DimensionSet {
     type Output = Self;
 
