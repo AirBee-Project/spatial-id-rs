@@ -406,12 +406,13 @@ impl<V: SafeValue + 'static> Query<V> {
             }
             Node::Binary(op, lhs, rhs) => {
                 let lhs_bounds = bounds.clone();
-                #[cfg(feature = "rayon")]
+                // wasm32 では非 Send な JS コールバックを呼び出し元スレッドに留めるため、別スレッドへ分岐しない。
+                #[cfg(all(feature = "rayon", not(target_arch = "wasm32")))]
                 let (l, r) = rayon::join(
                     || lhs.stream_within(lhs_bounds, token),
                     || rhs.stream_within(bounds, token),
                 );
-                #[cfg(not(feature = "rayon"))]
+                #[cfg(not(all(feature = "rayon", not(target_arch = "wasm32"))))]
                 let (l, r) = (
                     lhs.stream_within(lhs_bounds, token),
                     rhs.stream_within(bounds, token),
