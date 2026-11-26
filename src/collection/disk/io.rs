@@ -1,3 +1,4 @@
+use crate::error::DiskError;
 use alloc::boxed::Box;
 use compio::buf::{IoBuf, IoBufMut, SetLen};
 use compio::fs::{File, OpenOptions};
@@ -8,9 +9,25 @@ use std::mem::MaybeUninit;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::thread;
-use zerocopy::{FromZeros, Immutable, IntoBytes, KnownLayout, TryFromBytes};
+use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, TryFromBytes};
 
-use crate::error::DiskError;
+/// ファイル先頭からの 0 始まりのページ番号。
+#[repr(transparent)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    FromBytes,
+    IntoBytes,
+    Immutable,
+    KnownLayout,
+)]
+pub(crate) struct PageId(pub(crate) u64);
 
 #[repr(C, align(4096))]
 #[derive(Debug, FromZeros)]
@@ -55,9 +72,9 @@ impl Page {
             .map_err(|_| DiskError::Corrupt)
     }
 
-    /// `index` 番目のページのファイル上の位置。
-    fn offset(index: u64) -> u64 {
-        index * Page::SIZE as u64
+    /// `id` が示すページのファイル上の位置。
+    fn offset(id: PageId) -> u64 {
+        id.0 * Page::SIZE as u64
     }
 
     fn checksum(&self) -> u32 {
@@ -102,19 +119,19 @@ impl PagedFile {
         self.len
     }
 
-    /// `index` 番目のページを読み出す。
-    pub(crate) async fn read(&self, index: u64) -> Result<Box<Page>, DiskError> {
-        if index >= self.len {
+    /// `id` が示すページを読み出す。
+    pub(crate) async fn read(&self, id: PageId) -> Result<Box<Page>, DiskError> {
+        if id.0 >= self.len {
             return Err(DiskError::Corrupt);
         }
-        Ok(self.request(|reply| Request::Read { index, reply }).await?)
+        Ok(self.request(|reply| Request::Read { id, reply }).await?)
     }
 
-    /// `index` 番目のページに書く。ファイルの末尾より先なら、ファイルを伸ばす。
-    pub(crate) async fn write(&mut self, index: u64, page: Box<Page>) -> io::Result<()> {
-        self.request(|reply| Request::Write { index, page, reply })
+    /// `id` が示すページに書く。ファイルの末尾より先なら、ファイルを伸ばす。
+    pub(crate) async fn write(&mut self, id: PageId, page: Box<Page>) -> io::Result<()> {
+        self.request(|reply| Request::Write { id, page, reply })
             .await?;
-        self.len = self.len.max(index + 1);
+        self.len = self.len.max(id.0 + 1);
         Ok(())
     }
 
@@ -182,19 +199,19 @@ impl PagedFile {
                 match request {
                     // 読み込みは互いに独立なので、完了を待たずに次の要求を受け付けて並行に投入する。
                     // close は複製した File がすべて drop されるのを待つため、読み込み中に閉じても安全。
-                    Request::Read { index, reply } => {
+                    Request::Read { id, reply } => {
                         let file = file.clone();
                         compio::runtime::spawn(async move {
                             let (result, page) = file
-                                .read_exact_at(Page::new(), Page::offset(index))
+                                .read_exact_at(Page::new(), Page::offset(id))
                                 .await
                                 .into();
                             let _ = reply.send(result.map(|()| page));
                         })
                         .detach();
                     }
-                    Request::Write { index, page, reply } => {
-                        let _ = reply.send(file.write_all_at(page, Page::offset(index)).await.0);
+                    Request::Write { id, page, reply } => {
+                        let _ = reply.send(file.write_all_at(page, Page::offset(id)).await.0);
                     }
                     Request::Sync(reply) => {
                         let _ = reply.send(file.sync_data().await);
@@ -218,11 +235,11 @@ type Reply<T> = flume::Sender<io::Result<T>>;
 
 enum Request {
     Read {
-        index: u64,
+        id: PageId,
         reply: Reply<Box<Page>>,
     },
     Write {
-        index: u64,
+        id: PageId,
         page: Box<Page>,
         reply: Reply<()>,
     },
