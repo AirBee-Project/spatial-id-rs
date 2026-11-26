@@ -5,6 +5,7 @@ use core::{error, fmt};
 
 /// 本クレートで発生し得るエラーを表す最上位の型。
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Error {
     /// 空間IDまわりのエラー。
     SpatialId(SpatialIdError),
@@ -18,6 +19,7 @@ pub enum Error {
 
 /// クエリ関連で発生するエラー。
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum QueryError {
     /// クエリ演算子のパラメータが不正であることを示す。
     InvalidParameter(&'static str),
@@ -31,6 +33,7 @@ pub enum QueryError {
 
 /// Geometry 関連で発生するエラー。
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum GeometryError {
     /// 緯度が有効範囲外であることを表す。
     LatitudeOutOfRange { latitude: f64 },
@@ -74,6 +77,7 @@ pub enum GeometryError {
 
 /// [`SpatialId`](crate::SpatialId) 関連で発生するエラー。
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SpatialIdError {
     /// ズームレベルが有効範囲（0..=30）外であることを示す。
     ZOutOfRange { z: u8 },
