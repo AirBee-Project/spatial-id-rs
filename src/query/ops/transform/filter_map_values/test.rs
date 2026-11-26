@@ -139,3 +139,31 @@ fn filter_map_values_drops_none_and_changes_the_type() {
 
     assert_eq!(rows, alloc::vec![(11, "15".to_string())]);
 }
+
+/// `try_filter_map_values` は `Ok(Some)` / `Ok(None)` を反映し、`Err` で打ち切る。
+#[test]
+fn try_filter_map_values_transforms_and_propagates_error() {
+    use alloc::sync::Arc;
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let calls_in_closure = calls.clone();
+    let err = int_table()
+        .query()
+        .try_filter_map_values(move |v| {
+            calls_in_closure.fetch_add(1, Ordering::Relaxed);
+            if v == 1 {
+                Err(crate::QueryError::Transform("stop".to_string()))
+            } else {
+                Ok(Some(v * 2))
+            }
+        })
+        .into_map()
+        .unwrap_err();
+
+    assert_eq!(
+        err,
+        crate::Error::Query(crate::QueryError::Transform("stop".to_string()))
+    );
+    assert_eq!(calls.load(Ordering::Relaxed), 1);
+}

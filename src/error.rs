@@ -27,6 +27,9 @@ pub enum QueryError {
     /// [`Source`](crate::Source) 実装側で発生した読み取りエラー。
     SourceRead(String),
 
+    /// [`Query::try_filter_map`](crate::query::Query::try_filter_map) などの変換処理で発生したエラー。
+    Transform(String),
+
     /// [`CancellationToken`](crate::CancellationToken) によりキャンセルされた。
     Cancelled,
 }
@@ -152,6 +155,7 @@ impl fmt::Display for QueryError {
         match self {
             QueryError::InvalidParameter(what) => write!(f, "invalid query parameter: {what}"),
             QueryError::SourceRead(msg) => write!(f, "source read failed: {msg}"),
+            QueryError::Transform(msg) => write!(f, "query transform failed: {msg}"),
             QueryError::Cancelled => write!(f, "query execution was cancelled"),
         }
     }
