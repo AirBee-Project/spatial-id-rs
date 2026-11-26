@@ -40,6 +40,7 @@ impl FalloffAxis {
 
 /// [`Query::falloff_f`](crate::query::Query::falloff_f) などで、距離 `d` に応じて値を減らす割合。半径を `r` とする。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FalloffPattern {
     /// `(r - d) / r`。距離に比例して減る。
     Linear,
