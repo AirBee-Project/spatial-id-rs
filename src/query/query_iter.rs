@@ -74,6 +74,85 @@ impl<'a, V> QueryIter<'a, V> {
             None
         }))
     }
+
+    /// 要素ごとに独立な変換 `f` をチャンク単位で並列に適用し、順序を保ったまま返す。[`None`] を返した要素は取り除く。
+    #[cfg(feature = "rayon")]
+    pub(crate) fn par_filter_map_ordered<U: Send + 'a>(
+        self,
+        f: impl Fn(FlexId, V) -> Option<U> + Send + Sync + 'a,
+    ) -> QueryIter<'a, U>
+    where
+        V: Send + 'a,
+    {
+        self.par_try_filter_map_ordered(move |id, value| Ok(f(id, value)))
+    }
+
+    /// 要素ごとに独立な変換 `f` をチャンク単位で並列に適用し、順序を保ったまま返す。
+    /// `Ok(None)` を返した要素は取り除き、最初の [`Err`] で打ち切る。
+    #[cfg(feature = "rayon")]
+    pub(crate) fn par_try_filter_map_ordered<U: Send + 'a>(
+        self,
+        f: impl Fn(FlexId, V) -> Result<Option<U>, Error> + Send + Sync + 'a,
+    ) -> QueryIter<'a, U>
+    where
+        V: Send + 'a,
+    {
+        use alloc::vec::Vec;
+        use rayon::prelude::*;
+
+        // 遅延評価と早期打ち切りを保ちつつ並列性を確保するためのチャンクサイズ
+        const CHUNK_SIZE: usize = 1024;
+
+        let mut iter = self.fuse();
+        let mut buf: alloc::vec::IntoIter<Result<(FlexId, U), Error>> = Vec::new().into_iter();
+        let mut done = false;
+
+        QueryIter::new(core::iter::from_fn(move || {
+            loop {
+                if let Some(next) = buf.next() {
+                    return Some(next);
+                }
+                if done {
+                    return None;
+                }
+
+                let cap = iter.size_hint().1.unwrap_or(CHUNK_SIZE).min(CHUNK_SIZE);
+                let mut chunk = Vec::with_capacity(cap);
+                let mut input_err = None;
+                for item in iter.by_ref().take(CHUNK_SIZE) {
+                    match item {
+                        Ok(pair) => chunk.push(pair),
+                        Err(e) => {
+                            input_err = Some(e);
+                            break;
+                        }
+                    }
+                }
+
+                if chunk.is_empty() {
+                    done = true;
+                    return input_err.map(Err);
+                }
+
+                let mut results: Vec<Result<(FlexId, U), Error>> = chunk
+                    .into_par_iter()
+                    .filter_map(|(id, value)| {
+                        f(id, value).map(|opt| opt.map(|u| (id, u))).transpose()
+                    })
+                    .collect();
+
+                if let Some(err_pos) = results.iter().position(Result::is_err) {
+                    results.truncate(err_pos + 1);
+                    done = true;
+                } else if let Some(e) = input_err {
+                    results.push(Err(e));
+                    done = true;
+                }
+
+                buf = results.into_iter();
+            }
+        }))
+    }
 }
 
 impl<V> Iterator for QueryIter<'_, V> {

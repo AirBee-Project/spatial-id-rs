@@ -168,3 +168,124 @@ fn try_filter_map_yields_prior_ok_then_stops_at_error() {
     assert!(iter.next().is_none());
     assert_eq!(calls.load(Ordering::Relaxed), 101);
 }
+
+/// `par_filter` / `par_map` / `par_filter_map` はチャンク境界を跨いでも逐次版と同じ結果を返す。
+#[test]
+fn par_filter_and_filter_map_match_sequential_across_chunks() {
+    let mut table = SpatialIdMap::new();
+    for x in 0..2500u32 {
+        table.insert(single_at_x(x), x);
+    }
+
+    let expected: SpatialIdMap<u32> = table
+        .clone()
+        .query()
+        .filter(|_, v| *v >= 1200 && *v % 3 == 0)
+        .filter_map(|id, v| {
+            let x = id.single_ids().next().unwrap().x();
+            (v % 2 == 0).then_some(x + v)
+        })
+        .map(|_, v| v * 2)
+        .get(..)
+        .into_map()
+        .unwrap();
+
+    let actual: SpatialIdMap<u32> = table
+        .query()
+        .par_filter(|_, v| *v >= 1200 && *v % 3 == 0)
+        .par_filter_map(|id, v| {
+            let x = id.single_ids().next().unwrap().x();
+            (v % 2 == 0).then_some(x + v)
+        })
+        .par_map(|_, v| v * 2)
+        .get(..)
+        .into_map()
+        .unwrap();
+
+    assert_eq!(actual, expected);
+}
+
+/// `par_try_filter_map` は複数要素が `Err` でも入力順で最初の `Err` を返し、以降の要素を返さない。
+#[test]
+fn par_try_filter_map_stops_at_first_error_in_order() {
+    let mut table = SpatialIdMap::new();
+    for x in 0..2500u32 {
+        table.insert(single_at_x(x), x);
+    }
+
+    let query = table.query().par_try_filter_map(|id, v| {
+        let x = id.single_ids().next().unwrap().x();
+        if v == 1200 || v == 1300 {
+            Err(crate::QueryError::Transform(format!("stop at {x}")))
+        } else {
+            Ok((v % 2 == 0).then_some(v))
+        }
+    });
+
+    let mut iter = query.get(..);
+    let mut seen_ok = 0usize;
+    let mut first_err = None;
+    for item in iter.by_ref() {
+        match item {
+            Ok((_, v)) => {
+                assert!(v < 1200);
+                seen_ok += 1;
+            }
+            Err(e) => {
+                first_err = Some(e);
+                break;
+            }
+        }
+    }
+
+    assert_eq!(seen_ok, 600);
+    assert_eq!(
+        first_err,
+        Some(crate::Error::Query(crate::QueryError::Transform(
+            "stop at 1200".to_string()
+        )))
+    );
+    assert!(iter.next().is_none());
+}
+
+/// 上流で発生した `Err` の前までが並列変換された後、その `Err` が伝播する。
+#[test]
+fn par_filter_map_propagates_upstream_error_after_prior_items() {
+    let mut table = SpatialIdMap::new();
+    for x in 0..10u32 {
+        table.insert(single_at_x(x), x);
+    }
+
+    let query = table
+        .query()
+        .try_filter_map(|_, v| {
+            if v == 5 {
+                Err(crate::QueryError::Transform("upstream err".to_string()))
+            } else {
+                Ok(Some(v))
+            }
+        })
+        .par_map(|_, v| v * 10);
+
+    let mut iter = query.get(..);
+    let mut ok_values = alloc::vec::Vec::new();
+    let mut err = None;
+    for item in iter.by_ref() {
+        match item {
+            Ok((_, v)) => ok_values.push(v),
+            Err(e) => {
+                err = Some(e);
+                break;
+            }
+        }
+    }
+
+    assert_eq!(ok_values, alloc::vec![0, 10, 20, 30, 40]);
+    assert_eq!(
+        err,
+        Some(crate::Error::Query(crate::QueryError::Transform(
+            "upstream err".to_string()
+        )))
+    );
+    assert!(iter.next().is_none());
+}
