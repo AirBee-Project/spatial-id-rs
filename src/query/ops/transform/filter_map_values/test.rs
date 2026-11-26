@@ -62,9 +62,9 @@ fn map_values_to_text() {
 fn map_values_composes_with_other_operators() {
     let out: SpatialIdMap<bool> = int_table()
         .query()
-        .filter_in(10..) // 変換前: 10以上だけ残す
+        .filter_values(|v| *v >= 10) // 変換前: 10以上だけ残す
         .map_values(|v: i32| v > 10) // 型変換
-        .filter_eq(true) // 変換後: true だけ残す
+        .filter_values(|v| *v) // 変換後: true だけ残す
         .get(..)
         .into_map()
         .unwrap();

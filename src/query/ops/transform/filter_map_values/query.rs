@@ -47,12 +47,4 @@ impl<V: SafeValue + 'static> Query<V> {
     {
         self.filter_map_values(move |value| Some(f(value)))
     }
-
-    /// 各値を `f` に渡し、`true` を返した要素だけを残す。
-    pub fn filter_values<F>(self, f: F) -> Self
-    where
-        F: Fn(&V) -> bool + Send + Sync + 'static,
-    {
-        self.filter_map_values(move |value| f(&value).then_some(value))
-    }
 }
