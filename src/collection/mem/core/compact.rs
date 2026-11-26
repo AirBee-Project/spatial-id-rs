@@ -315,7 +315,6 @@ impl<V: Eq + Hash + Clone> Compactor<V> {
             (h, Entry::Vacant(entry)) => {
                 let new_arc = Arc::new(Branch {
                     dimension: orig.dimension,
-                    split_dimensions: orig.split_dimensions,
                     height: orig.height,
                     count: orig.count,
                     lower: lower_node.unwrap_or_else(|| orig.lower.clone()),
@@ -336,7 +335,6 @@ impl<V: Eq + Hash + Clone> Compactor<V> {
             (h, Entry::Vacant(entry)) => {
                 let new_arc = Arc::new(Skip {
                     path: orig.path,
-                    split_dimensions: orig.split_dimensions,
                     child: child_node,
                 });
                 entry.insert((h, Arc::clone(&new_arc)));

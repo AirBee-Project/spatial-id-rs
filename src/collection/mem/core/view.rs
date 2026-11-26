@@ -50,10 +50,11 @@ impl<'a, V> Target<'a, V> {
         }
     }
 
-    pub(super) fn split_dimensions(self) -> DimensionSet {
+    /// 最初に割る次元。Value なら空。
+    pub(super) fn head_dimensions(self) -> DimensionSet {
         match self {
             Target::Value(_) => DimensionSet::EMPTY,
-            Target::Branch(branch) => branch.split_dimensions,
+            Target::Branch(branch) => branch.dimension.into(),
         }
     }
 }
@@ -149,7 +150,7 @@ impl<'a, V> View<'a, V> {
             View::Empty | View::Value(_) => DimensionSet::EMPTY,
             View::Branch(branch) => branch.dimension.into(),
             View::Skip { region, child } => {
-                region.finer_dimensions_than(this) | child.split_dimensions()
+                region.finer_dimensions_than(this) | child.head_dimensions()
             }
         }
     }
