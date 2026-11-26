@@ -95,7 +95,7 @@ cargo run --release --example riskmap --features unstable
 spatial-id = "0.1"
 ```
 
-- `std`（デフォルト）: 標準ライブラリを使う。GeoJSON からの変換に必要
+- `std`（デフォルト）: 標準ライブラリを使う。GeoJSON と PLATEAU の CityGML からの変換に必要
 - `rayon`（デフォルト）: 並列実行
 - `temporal_id`（デフォルト）: 時空間ID。無効にすると空間IDのみ
 - `unstable`: JSON 入出力など、破壊的変更があり得る API
