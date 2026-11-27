@@ -199,33 +199,199 @@ impl<P> Falloff<P> {
 
         #[cfg(feature = "rayon")]
         {
-            use rayon::prelude::*;
-            // 入力を区切って読むので、一度に持つ入力はこの数までに収まる
-            const CHUNK: usize = 1 << 16;
-            let merge = |mut a: SpatialIdMap<A>, b: SpatialIdMap<A>| {
-                a.merge_with(&b, &resolve);
-                a
-            };
-            let mut input = input.peekable();
-            // 塊ごとに蓄積した木へ合成すると、木全体の複製が塊の数だけ走るので、最後に二分木状にまとめる
-            let mut parts = Vec::new();
-            while input.peek().is_some() {
-                let chunk: Vec<(FlexId, V)> =
-                    input.by_ref().take(CHUNK).collect::<Result<_, _>>()?;
-                parts.push(
-                    chunk
-                        .par_iter()
-                        .fold(
-                            || (SpatialIdMap::default(), Vec::new()),
-                            |(tree, mut moved), item| (spread_into(tree, &mut moved, item), moved),
-                        )
-                        .map(|(tree, _)| tree)
-                        .reduce(SpatialIdMap::default, merge),
-                );
-            }
-            Ok(parts.into_par_iter().reduce(SpatialIdMap::default, merge))
+            spread_chunks(
+                input,
+                Vec::new,
+                |slice, moved| {
+                    let mut tree = SpatialIdMap::default();
+                    for item in slice {
+                        tree = spread_into(tree, moved, item);
+                    }
+                    tree
+                },
+                |mut a, b| {
+                    a.merge_with(&b, &resolve);
+                    a
+                },
+            )
         }
     }
+}
+
+#[cfg(feature = "rayon")]
+struct CommutativeSlot<V> {
+    moved: Vec<FlexId>,
+    out: Vec<(FlexId, V)>,
+}
+
+#[cfg(feature = "rayon")]
+impl<P> Falloff<P> {
+    fn spread_commutative<V>(
+        &self,
+        input: QueryIter<'_, V>,
+        attenuator: &Attenuator<V>,
+    ) -> Result<SpatialIdMap<V>, Error>
+    where
+        V: SafeValue
+            + Add<Output = V>
+            + Sub<Output = V>
+            + Mul<Output = V>
+            + Div<Output = V>
+            + Rem<Output = V>
+            + TryFrom<u64>,
+        P: MergePolicy<V>,
+    {
+        let resolve = |a: &V, b: &V| P::resolve(a.clone(), b.clone());
+        spread_chunks(
+            input,
+            || CommutativeSlot {
+                moved: Vec::new(),
+                out: Vec::new(),
+            },
+            |slice, slot| self.run_commutative_slice(slice, slot, attenuator, &resolve),
+            |mut a, b| {
+                a.merge_with(&b, &resolve);
+                a
+            },
+        )
+    }
+
+    fn run_commutative_slice<V>(
+        &self,
+        slice: &[(FlexId, V)],
+        slot: &mut CommutativeSlot<V>,
+        attenuator: &Attenuator<V>,
+        resolve: &impl Fn(&V, &V) -> V,
+    ) -> SpatialIdMap<V>
+    where
+        V: SafeValue
+            + Add<Output = V>
+            + Sub<Output = V>
+            + Mul<Output = V>
+            + Div<Output = V>
+            + Rem<Output = V>
+            + TryFrom<u64>,
+        P: MergePolicy<V>,
+    {
+        slot.out.clear();
+        let mut first_zoom = None;
+        let mut same_zoom = true;
+        for (id, value) in slice {
+            id.falloff_each(
+                self.axis,
+                self.z,
+                self.radius,
+                self.direction,
+                attenuator,
+                value,
+                &mut slot.moved,
+                |ids, val| record_emitted(ids, val, &mut slot.out, &mut first_zoom, &mut same_zoom),
+            );
+        }
+        if slot.out.is_empty() {
+            return SpatialIdMap::default();
+        }
+        slot.out.sort_unstable_by(|a, b| {
+            a.0.zorder_key_bits()
+                .cmp(&b.0.zorder_key_bits())
+                .then_with(|| a.0.field_key().cmp(&b.0.field_key()))
+        });
+        coalesce_sorted::<V, P>(&mut slot.out);
+        if same_zoom {
+            slot.out.drain(..).collect()
+        } else {
+            let mut tree = SpatialIdMap::default();
+            for (id, val) in slot.out.drain(..) {
+                tree.insert_with(id, val, resolve);
+            }
+            tree
+        }
+    }
+}
+
+#[cfg(feature = "rayon")]
+fn record_emitted<V: Clone>(
+    ids: &[FlexId],
+    val: V,
+    out: &mut Vec<(FlexId, V)>,
+    first_zoom: &mut Option<(u8, u8, u8, u8)>,
+    same_zoom: &mut bool,
+) {
+    let mut push_one = |fid: FlexId, v: V| {
+        let zoom = (
+            fid.f_zoomlevel(),
+            fid.x_zoomlevel(),
+            fid.y_zoomlevel(),
+            fid.t_zoomlevel(),
+        );
+        match *first_zoom {
+            None => *first_zoom = Some(zoom),
+            Some(z0) if *same_zoom && z0 != zoom => *same_zoom = false,
+            _ => {}
+        }
+        out.push((fid, v));
+    };
+    if let Some((&last, rest)) = ids.split_last() {
+        for &fid in rest {
+            push_one(fid, val.clone());
+        }
+        push_one(last, val);
+    }
+}
+
+#[cfg(feature = "rayon")]
+fn spread_chunks<V, S, A>(
+    input: QueryIter<'_, V>,
+    mut init_slot: impl FnMut() -> S,
+    run_slice: impl Fn(&[(FlexId, V)], &mut S) -> SpatialIdMap<A> + Sync,
+    merge: impl Fn(SpatialIdMap<A>, SpatialIdMap<A>) -> SpatialIdMap<A> + Sync,
+) -> Result<SpatialIdMap<A>, Error>
+where
+    V: Sync,
+    S: Send,
+    A: PartialEq + Clone + Send + Sync,
+{
+    use rayon::prelude::*;
+    // 入力を区切って読むので、一度に持つ入力はこの数までに収まる
+    const CHUNK: usize = 1 << 16;
+    let mut slots: Vec<S> = (0..rayon::current_num_threads().max(1))
+        .map(|_| init_slot())
+        .collect();
+    let mut input = input.peekable();
+    // 塊ごとに蓄積した木へ合成すると、木全体の複製が塊の数だけ走るので、最後に二分木状にまとめる
+    let mut parts = Vec::new();
+    while input.peek().is_some() {
+        let chunk: Vec<(FlexId, V)> = input.by_ref().take(CHUNK).collect::<Result<_, _>>()?;
+        let step = chunk.len().div_ceil(slots.len()).max(1);
+        parts.push(
+            chunk
+                .par_chunks(step)
+                .zip(slots.par_iter_mut())
+                .map(|(slice, slot)| run_slice(slice, slot))
+                .reduce(SpatialIdMap::default, &merge),
+        );
+    }
+    Ok(parts.into_par_iter().reduce(SpatialIdMap::default, &merge))
+}
+
+#[cfg(feature = "rayon")]
+fn coalesce_sorted<V: Clone, P: MergePolicy<V>>(out: &mut Vec<(FlexId, V)>) {
+    let mut write = 0;
+    let mut read = 0;
+    let len = out.len();
+    while read < len {
+        if write != read {
+            out.swap(write, read);
+        }
+        let id = out[write].0;
+        read += 1;
+        while read < len && out[read].0 == id {
+            out[write].1 = P::resolve(out[write].1.clone(), out[read].1.clone());
+            read += 1;
+        }
+        write += 1;
+    }
+    out.truncate(write);
 }
 
 impl<V: SafeValue + 'static, P> UnaryOperator<V> for Falloff<P>
@@ -246,10 +412,15 @@ where
         let attenuator = Attenuator::new(self.radius, self.pattern)?;
 
         if P::IS_COMMUTATIVE {
-            let resolve = |a: &V, b: &V| P::resolve(a.clone(), b.clone());
-            return Ok(self
-                .spread(input, &attenuator, |value| value, resolve)?
-                .into());
+            #[cfg(feature = "rayon")]
+            return Ok(self.spread_commutative(input, &attenuator)?.into());
+            #[cfg(not(feature = "rayon"))]
+            {
+                let resolve = |a: &V, b: &V| P::resolve(a.clone(), b.clone());
+                return Ok(self
+                    .spread(input, &attenuator, |value| value, resolve)?
+                    .into());
+            }
         }
 
         // 順序を問う規則や平均のように resolve_many を持つ規則は、2件ずつ畳み込むと値が変わるので、

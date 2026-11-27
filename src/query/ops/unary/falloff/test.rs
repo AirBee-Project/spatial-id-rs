@@ -206,3 +206,50 @@ fn attenuate_matches_direct_formula() {
         }
     }
 }
+
+/// 同一ズームと混在ズーム・上下半球・X 境界跨ぎを含む可換 falloff が逐次展開と一致することを確かめる。
+#[test]
+fn falloff_commutative_matches_sequential_reference() {
+    use super::Attenuator;
+    use crate::FlexId;
+
+    let mut uniform = SpatialIdMap::new();
+    let mut mixed = SpatialIdMap::new();
+    for x in [0u32, 1, 15, 31] {
+        let up = SingleId::new(5, 3, x, x % 16).unwrap();
+        let lo = SingleId::new(5, -4, x, (x + 5) % 16).unwrap();
+        uniform.insert(up, (x as i64 + 1) * 10);
+        uniform.insert(lo, (x as i64 + 2) * 10);
+        mixed.insert(up, (x as i64 + 1) * 10);
+        mixed.insert(lo, (x as i64 + 2) * 10);
+    }
+    // 粗いセルを重ねて混在ズーム経路も通す
+    mixed.insert(SingleId::new(4, 1, 0, 0).unwrap(), 77);
+
+    let att = Attenuator::<i64>::new(3, FalloffPattern::Linear).unwrap();
+    for (name, table) in [("uniform", uniform), ("mixed", mixed)] {
+        let mut expected = SpatialIdMap::new();
+        let mut moved = alloc::vec::Vec::new();
+        for (id, value) in table.iter_flex_ids() {
+            id.falloff_each(
+                FalloffAxis::X,
+                crate::ZoomLevel::new(5).unwrap(),
+                3,
+                None,
+                &att,
+                value,
+                &mut moved,
+                |ids: &[FlexId], val| {
+                    expected.insert_with_flex_ids(ids.iter().copied(), val, |a, b| (*a).max(*b));
+                },
+            );
+        }
+        let actual = table
+            .query()
+            .falloff_x(5, 3, None, FalloffPattern::Linear, Max)
+            .get(..)
+            .into_map()
+            .unwrap();
+        assert_eq!(actual, expected, "{name}");
+    }
+}

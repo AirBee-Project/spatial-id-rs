@@ -500,6 +500,12 @@ impl FlexId {
     /// このキーの狭義の昇順に並ぶ。
     #[cfg(any(feature = "unstable", test))]
     pub fn zorder_key(&self) -> u128 {
+        self.zorder_key_bits()
+    }
+
+    #[cfg(any(feature = "unstable", feature = "rayon", test))]
+    #[inline]
+    pub(crate) fn zorder_key_bits(&self) -> u128 {
         /// 下位 30 ビットを `b_29` が bit 116、`b_0` が bit 0 に来るよう 4 ビットおきに広げる。
         #[inline(always)]
         const fn spread_4_u32(v: u32) -> u128 {
