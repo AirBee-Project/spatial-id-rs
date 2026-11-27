@@ -13,7 +13,7 @@ use zerocopy::{FromZeros, Immutable, IntoBytes, KnownLayout, TryFromBytes};
 
 /// ファイル先頭からの 0 始まりのページ番号。
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct PageId(pub(crate) u64);
 
 #[repr(C, align(4096))]

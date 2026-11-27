@@ -686,6 +686,71 @@ impl FlexId {
         self.ancestor_at(zoom)
     }
 
+    /// 領域 `self` から、行き先 `(region_a, split_a)` と `(region_b, split_b)` が途中で割らずに一緒に降りられる一番狭い領域を返す。
+    #[inline]
+    pub(crate) fn common_descent(
+        &self,
+        (region_a, split_a): (&FlexId, DimensionSet),
+        (region_b, split_b): (&FlexId, DimensionSet),
+    ) -> FlexId {
+        let splits = split_a | split_b;
+
+        #[inline(always)]
+        fn agree_u32(za: u8, ia: u32, zb: u8, ib: u32) -> u8 {
+            let deepest = za.min(zb);
+            let diff = (ia >> (za - deepest)) ^ (ib >> (zb - deepest));
+            deepest - (u32::BITS - diff.leading_zeros()) as u8
+        }
+
+        let (fa, fb) = (region_a.f_zoomlevel(), region_b.f_zoomlevel());
+        let f_agree = {
+            let deepest = fa.min(fb);
+            let diff = ((region_a.f_index() >> (fa - deepest))
+                ^ (region_b.f_index() >> (fb - deepest))) as u32;
+            deepest - (u32::BITS - diff.leading_zeros()) as u8
+        };
+        let (xa, xb) = (region_a.x_zoomlevel(), region_b.x_zoomlevel());
+        let x_agree = agree_u32(xa, region_a.x_index(), xb, region_b.x_index());
+        let (ya, yb) = (region_a.y_zoomlevel(), region_b.y_zoomlevel());
+        let y_agree = agree_u32(ya, region_a.y_index(), yb, region_b.y_index());
+        let (ta, tb) = (region_a.t_zoomlevel(), region_b.t_zoomlevel());
+        let t_agree = {
+            let deepest = ta.min(tb);
+            let diff =
+                (region_a.t_index() >> (ta - deepest)) ^ (region_b.t_index() >> (tb - deepest));
+            deepest - (u64::BITS - diff.leading_zeros()) as u8
+        };
+
+        let bound = [f_agree, x_agree, y_agree, t_agree];
+        let blocks = [
+            fa > f_agree || fb > f_agree || splits.contains(Dimension::F),
+            xa > x_agree || xb > x_agree || splits.contains(Dimension::X),
+            ya > y_agree || yb > y_agree || splits.contains(Dimension::Y),
+            ta > t_agree || tb > t_agree || splits.contains(Dimension::T),
+        ];
+
+        let mut stop_bound = u8::MAX;
+        let mut stop_dim = Dimension::F;
+        for d in Dimension::ALL {
+            let i = d as usize;
+            if blocks[i] && bound[i] < stop_bound {
+                stop_bound = bound[i];
+                stop_dim = d;
+            }
+        }
+
+        let zoom = Dimension::ALL.map(|d| {
+            let reach = if stop_bound == u8::MAX {
+                bound[d as usize]
+            } else {
+                // 止まる次元より前の次元は、同じ深さの番を1段ぶん先に済ませている
+                bound[d as usize].min(stop_bound + u8::from(d < stop_dim))
+            };
+            self.zoomlevel_on(d).max(reach)
+        });
+        region_a.ancestor_at(zoom)
+    }
+
     /// `dimensions` のうち、自身のズームが一番粗い次元を返す。同じズームなら F→X→Y→T の順。空なら [`None`]。
     #[inline]
     pub(crate) fn coarsest_dimension_in(&self, dimensions: DimensionSet) -> Option<Dimension> {

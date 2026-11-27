@@ -82,12 +82,17 @@ impl NodePage {
         }
     }
 
-    /// 1ページに収まる `node` を別のページへ出して [`Node::RefPage`] に置き換え、置き換えたあとのバイト長を返す。
+    /// 1ページに収まる `node`（Skip なら行き先）を別のページへ出して [`Node::RefPage`] に置き換え、置き換えたあとのバイト長を返す。
     fn spill(
         node: &mut Node,
         alloc: &mut impl FnMut() -> PageId,
         node_pages: &mut Vec<(PageId, Box<Self>)>,
     ) -> usize {
+        // RefPage の先が Skip だと外側の Skip と1つにまとめられず、同じ中身が別の形になるので、Skip は行き先だけを出す
+        let header = node.header_len();
+        if let Node::Skip { child, .. } = node {
+            return header + Self::spill(child, alloc, node_pages);
+        }
         let page_id = alloc();
         let split_dimensions = node.split_dimensions();
         let moved = mem::replace(

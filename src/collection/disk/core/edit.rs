@@ -4,9 +4,12 @@
 
 use super::FlexTreeCore;
 use super::node::{EncodedValue, Node};
+use super::node_page::NodePage;
+use crate::collection::disk::io::PageId;
 use crate::id::dimension::{Dimension, DimensionSet};
-use crate::{DiskError, FlexId, Side};
+use crate::{DiskError, FlexId};
 use alloc::boxed::Box;
+use std::collections::HashMap;
 
 /// 領域への操作。意味は [`SpatialIdMap`](crate::SpatialIdMap) の同名の操作と同じ。
 #[derive(Debug, Clone)]
@@ -20,50 +23,83 @@ pub(super) enum Op {
 }
 
 impl<V> FlexTreeCore<V> {
-    /// 領域 `this` の `node` の `target` に `op` を施す。空になれば [`None`]。`target` は `this` に含まれること。
+    /// 領域 `this` の `node` の `target` に `op` を施し、`(結果の Node, 変更があったか)` を返す。
+    /// 空になれば [`None`]。`target` は `this` に含まれること。
+    ///
+    /// `pages` は 1 回の編集の中で読んだページ。同じページを何度も読まないよう使い回す。
     pub(super) async fn edit_node(
-        &self,
+        &mut self,
         node: Option<Node>,
         this: &FlexId,
         target: &FlexId,
         op: &Op,
-    ) -> Result<Option<Node>, DiskError> {
+        pages: &mut HashMap<PageId, Node>,
+    ) -> Result<(Option<Node>, bool), DiskError> {
         let Some(node) = node else {
             return match op {
-                Op::Remove => Ok(None),
+                Op::Remove => Ok((None, false)),
                 Op::Insert(value) | Op::Upsert(value) => {
-                    Ok(Some(Node::Value(value.clone()).rebase(target, this)?))
+                    Ok((Some(Node::Value(value.clone()).rebase(target, this)?), true))
                 }
             };
         };
 
         if target == this {
             match op {
-                Op::Insert(value) => return Ok(Some(Node::Value(value.clone()))),
-                Op::Remove => return Ok(None),
+                Op::Insert(value) => {
+                    // 中身が Value だけのページを指す RefPage もあるので、Value かどうかではなく中身で比べる。
+                    // 中身が同じなのに変更ありとすると、片側だけ編集した両側を比べずに割ったままにしてしまう
+                    let value = Node::Value(value.clone());
+                    if self.same_content(&node, &value, pages).await? {
+                        return Ok((Some(node), false));
+                    }
+                    return Ok((Some(value), true));
+                }
+                Op::Remove => return Ok((None, true)),
                 Op::Upsert(_) => {}
             }
         }
 
-        // Branch と Skip は割った両側に同じ Node を複製しないので、RefPage が2か所から指されることはない
-        let (dimension, halves) = match node {
-            Node::RefPage { page_id, .. } => {
-                let loaded = self.read_page(page_id).await?;
-                return Box::pin(self.edit_node(Some(loaded), this, target, op)).await;
+        let node = match node {
+            Node::Value(old) if matches!(op, Op::Upsert(_)) => {
+                return Ok((Some(Node::Value(old)), false));
             }
-            Node::Value(old) => match op {
-                Op::Upsert(_) => return Ok(Some(Node::Value(old))),
-                Op::Insert(value) if *value == old => return Ok(Some(Node::Value(old))),
-                Op::Insert(_) | Op::Remove => {
-                    let dimension = this
-                        .coarsest_dimension_in(target.finer_dimensions_than(this))
-                        .expect("target == this の Insert / Remove は上で処理済み");
-                    (
-                        dimension,
-                        [Some(Node::Value(old.clone())), Some(Node::Value(old))],
-                    )
+            Node::Value(old) if matches!(op, Op::Insert(value) if *value == old) => {
+                return Ok((Some(Node::Value(old)), false));
+            }
+            Node::Skip { path, child } => {
+                let region = path.to_absolute(this).map_err(|_| DiskError::Corrupt)?;
+                if matches!(op, Op::Remove) && !region.intersects(target) {
+                    return Ok((Some(Node::Skip { path, child }), false));
                 }
-            },
+                let at = this.common_descent(
+                    (&region, child.split_dimensions()),
+                    (target, DimensionSet::EMPTY),
+                );
+                if at != *this {
+                    let child = (*child).rebase(&region, &at)?;
+                    let (edited, changed) =
+                        Box::pin(self.edit_node(Some(child), &at, target, op, pages)).await?;
+                    return Ok((edited.map(|n| n.rebase(&at, this)).transpose()?, changed));
+                }
+                Node::Skip { path, child }
+            }
+            node => node,
+        };
+
+        let splits = node.split_dimensions();
+        let dimension = this
+            .coarsest_dimension_in(splits | target.finer_dimensions_than(this))
+            .ok_or(DiskError::Corrupt)?;
+        if !splits.contains(dimension) {
+            return self
+                .edit_one_side(node, this, dimension, target, op, pages)
+                .await;
+        }
+
+        // `dimension` を割っている Node は、`dimension` より粗い次元を子孫が割る非正規形の木でも
+        // 子の座標がずれないよう、自身が割る次元で降りる。
+        let (dimension, halves) = match node {
             Node::Branch {
                 dimension,
                 lower,
@@ -72,46 +108,172 @@ impl<V> FlexTreeCore<V> {
             } => (dimension, [Some(*lower), Some(*upper)]),
             Node::Skip { path, child } => {
                 let region = path.to_absolute(this).map_err(|_| DiskError::Corrupt)?;
-                if region.contains(target) {
-                    let child = Box::pin(self.edit_node(Some(*child), &region, target, op)).await?;
-                    return child.map(|child| child.rebase(&region, this)).transpose();
-                }
-                if matches!(op, Op::Remove) && !region.intersects(target) {
-                    return Ok(Some(Node::Skip { path, child }));
-                }
-                // 行き先の外にも施すので、行き先が深い次元で割り、行き先のない側を空として扱う
                 let dimension = this
                     .coarsest_dimension_in(path.deeper_dimensions())
-                    .expect("Skip の行き先はどれかの次元で深い");
-                let side = this.side_toward(dimension, &region);
-                let half = this.halves(dimension).ok_or(DiskError::Corrupt)?[side as usize];
-                let rest = Some((*child).rebase(&region, &half)?);
-                let halves = match side {
-                    Side::Lower => [rest, None],
-                    Side::Upper => [None, rest],
-                };
+                    .ok_or(DiskError::Corrupt)?;
+                let side = this.side_toward(dimension, &region) as usize;
+                let half = this.halves(dimension).ok_or(DiskError::Corrupt)?[side];
+                let mut halves = [None, None];
+                halves[side] = Some((*child).rebase(&region, &half)?);
                 (dimension, halves)
             }
+            Node::RefPage { page_id, .. } => {
+                let loaded = self.load(page_id, pages).await?;
+                let (edited, changed) =
+                    Box::pin(self.edit_node(Some(loaded), this, target, op, pages)).await?;
+                return Ok(if changed {
+                    (edited, true)
+                } else {
+                    (Some(node), false)
+                });
+            }
+            Node::Value(_) => unreachable!("Value は何も割らないので片側だけの編集になる"),
         };
 
         let regions = this.halves(dimension).ok_or(DiskError::Corrupt)?;
         let [mut lower, mut upper] = halves;
-        if let Some(sub) = target.intersection(&regions[0]) {
-            lower = Box::pin(self.edit_node(lower, &regions[0], &sub, op)).await?;
+        let mut changed = false;
+        for (half, region) in [&mut lower, &mut upper].into_iter().zip(&regions) {
+            if let Some(sub) = target.intersection(region) {
+                let (edited, did_change) =
+                    Box::pin(self.edit_node(half.take(), region, &sub, op, pages)).await?;
+                *half = edited;
+                changed |= did_change;
+            }
         }
-        if let Some(sub) = target.intersection(&regions[1]) {
-            upper = Box::pin(self.edit_node(upper, &regions[1], &sub, op)).await?;
+        if changed
+            && let (Some(l), Some(u)) = (&lower, &upper)
+            && !l.split_dimensions().contains(dimension)
+            && self.same_content(l, u, pages).await?
+        {
+            // ページへ書き出すバイトが少ないほう（RefPage として既にファイルにあるほう）を残す
+            return Ok((if u.len() < l.len() { upper } else { lower }, true));
         }
-        Node::join(this, dimension, [lower, upper], &regions)
+        Ok((
+            Node::join(this, dimension, [lower, upper], &regions)?,
+            changed,
+        ))
+    }
+
+    /// `dimension` を割っていない `node` を `dimension` で割り、`target` のある側だけを編集する。
+    ///
+    /// 反対側には `node` をそのまま置く。変更があったときの両側は必ず異なるので、中身は比べない。
+    async fn edit_one_side(
+        &mut self,
+        node: Node,
+        this: &FlexId,
+        dimension: Dimension,
+        target: &FlexId,
+        op: &Op,
+        pages: &mut HashMap<PageId, Node>,
+    ) -> Result<(Option<Node>, bool), DiskError> {
+        let regions = this.halves(dimension).ok_or(DiskError::Corrupt)?;
+        let side = this.side_toward(dimension, target) as usize;
+        let (edited, changed) =
+            Box::pin(self.edit_node(Some(node.clone()), &regions[side], target, op, pages)).await?;
+        if !changed {
+            return Ok((Some(node), false));
+        }
+        let mut halves = [None, None];
+        halves[side] = edited;
+        halves[1 - side] = Some(self.share(node).await?);
+        Ok((Node::join(this, dimension, halves, &regions)?, true))
+    }
+
+    /// 編集の前後で両側に置く `node`。1 ページに 2 つ収まらない大きさなら、両側で同じ中身を
+    /// 2 度書き出さないよう、先に 1 度だけページへ書いて [`Node::RefPage`] にする。
+    ///
+    /// Skip は行き先だけをページへ書く。RefPage の先が Skip だと、外側の Skip と1つにまとめられず、
+    /// 同じ中身が別の形になって [`same_content`](Self::same_content) で比べられなくなる。
+    async fn share(&mut self, node: Node) -> Result<Node, DiskError> {
+        if 2 * node.len() <= NodePage::BODY_LEN {
+            return Ok(node);
+        }
+        let (path, node) = match node {
+            Node::Skip { path, child } => (Some(path), *child),
+            node => (None, node),
+        };
+        let split_dimensions = node.split_dimensions();
+        let ref_page = Node::RefPage {
+            page_id: self.store(node).await?,
+            split_dimensions,
+        };
+        Ok(match path {
+            Some(path) => Node::Skip {
+                path,
+                child: Box::new(ref_page),
+            },
+            None => ref_page,
+        })
+    }
+
+    /// `a` と `b` が、[`Node::RefPage`] の先まで含めて同じ中身か。ページは違いが見つかるまでの分だけ読む。
+    async fn same_content(
+        &self,
+        a: &Node,
+        b: &Node,
+        pages: &mut HashMap<PageId, Node>,
+    ) -> Result<bool, DiskError> {
+        if a.split_dimensions() != b.split_dimensions() {
+            return Ok(false);
+        }
+        Ok(match (a, b) {
+            (Node::RefPage { page_id: p, .. }, Node::RefPage { page_id: q, .. }) if p == q => true,
+            (Node::RefPage { page_id, .. }, other) | (other, Node::RefPage { page_id, .. }) => {
+                let loaded = self.load(*page_id, pages).await?;
+                Box::pin(self.same_content(&loaded, other, pages)).await?
+            }
+            (Node::Value(a), Node::Value(b)) => a == b,
+            (
+                Node::Branch {
+                    dimension: da,
+                    lower: la,
+                    upper: ua,
+                    ..
+                },
+                Node::Branch {
+                    dimension: db,
+                    lower: lb,
+                    upper: ub,
+                    ..
+                },
+            ) => {
+                da == db
+                    && Box::pin(self.same_content(la, lb, pages)).await?
+                    && Box::pin(self.same_content(ua, ub, pages)).await?
+            }
+            (
+                Node::Skip {
+                    path: pa,
+                    child: ca,
+                },
+                Node::Skip {
+                    path: pb,
+                    child: cb,
+                },
+            ) => pa == pb && Box::pin(self.same_content(ca, cb, pages)).await?,
+            _ => false,
+        })
+    }
+
+    /// ページ `page_id` の Node。`pages` に読んであればファイルを読まない。
+    async fn load(
+        &self,
+        page_id: PageId,
+        pages: &mut HashMap<PageId, Node>,
+    ) -> Result<Node, DiskError> {
+        if let Some(node) = pages.get(&page_id) {
+            return Ok(node.clone());
+        }
+        let node = self.read_page(page_id).await?;
+        pages.insert(page_id, node.clone());
+        Ok(node)
     }
 }
 
 impl Node {
-    /// 領域 `this` を `dimension` で割った `[下, 上]` の Node を1つの Node に合わせる。
-    ///
-    /// 左右が同じで `dimension` で割っていなければ1つにまとめる。
-    /// 割っている Node を広い領域へ持ち上げると意味が変わるので、そのときは割ったままにする。
-    fn join(
+    /// 領域 `this` を `dimension` で割った `[下, 上]` の Node を1つの Node に合わせる。片側だけなら Skip にする。
+    pub(super) fn join(
         this: &FlexId,
         dimension: Dimension,
         [lower, upper]: [Option<Node>; 2],
@@ -121,25 +283,19 @@ impl Node {
             (None, None) => None,
             (Some(lower), None) => Some(lower.rebase(lower_region, this)?),
             (None, Some(upper)) => Some(upper.rebase(upper_region, this)?),
-            (Some(lower), Some(upper)) => {
-                if lower == upper && !lower.split_dimensions().contains(dimension) {
-                    Some(lower)
-                } else {
-                    Some(Node::Branch {
-                        dimension,
-                        split_dimensions: DimensionSet::from(dimension)
-                            | lower.split_dimensions()
-                            | upper.split_dimensions(),
-                        lower: Box::new(lower),
-                        upper: Box::new(upper),
-                    })
-                }
-            }
+            (Some(lower), Some(upper)) => Some(Node::Branch {
+                dimension,
+                split_dimensions: DimensionSet::from(dimension)
+                    | lower.split_dimensions()
+                    | upper.split_dimensions(),
+                lower: Box::new(lower),
+                upper: Box::new(upper),
+            }),
         })
     }
 
     /// 領域 `from` の自身を、`from` を含む領域 `to` から見た Node に張り直す。Skip の先へさらに Skip しないよう統合する。
-    fn rebase(self, from: &FlexId, to: &FlexId) -> Result<Node, DiskError> {
+    pub(super) fn rebase(self, from: &FlexId, to: &FlexId) -> Result<Node, DiskError> {
         if from == to {
             return Ok(self);
         }

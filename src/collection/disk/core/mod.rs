@@ -11,6 +11,7 @@ use crate::{DiskError, Error, FlexId, SpatialId};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
+use std::collections::HashMap;
 use std::path::Path;
 use zerocopy::byteorder::{BigEndian, U32, U64};
 use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
@@ -19,10 +20,11 @@ mod tests;
 
 /// 空間IDごとに値 `V` を持つ、ファイルに残るマップ。
 ///
-/// 書き換えた Node は、ファイル上のページを上書きせず、ファイルの末尾へすぐ書き足す（追記のみ）。
+/// 書き換えた Node は、ファイル上のページを上書きせず、ファイルの末尾へすぐ書き足す。
+/// 書き換えていない部分木のページは、複数の親から共有されることがある。
 /// [`commit`](Self::commit) でメタページを書き換えるまでは直前のコミットの状態がファイルに残るので、
 /// 途中で落ちても直前のコミットに戻る。参照されなくなったページはファイルにそのまま残り、
-/// [`compact`](Self::compact) を呼んだときにだけ、ページを書き直して取り除く。
+/// [`compact`](Self::compact) を呼んだときにだけ、生きているページを先頭へ詰め直してファイルを切り詰める。
 #[derive(Debug)]
 pub struct FlexTreeCore<V> {
     file: PagedFile,
@@ -175,6 +177,7 @@ impl<V> FlexTreeCore<V> {
     /// `target` の領域に `op` を施す。
     async fn edit(&mut self, target: impl SpatialId, op: Op) -> Result<(), DiskError> {
         let mut roots = self.roots;
+        let mut pages = HashMap::new();
         for ((root, region), targets) in roots
             .iter_mut()
             .zip(&FlexId::ROOTS)
@@ -187,13 +190,20 @@ impl<V> FlexTreeCore<V> {
                 Some(page_id) => Some(self.read_page(page_id).await?),
                 None => None,
             };
+            let mut changed = false;
             for target in &targets {
-                node = self.edit_node(node, region, target, &op).await?;
+                let (edited, did_change) = self
+                    .edit_node(node, region, target, &op, &mut pages)
+                    .await?;
+                node = edited;
+                changed |= did_change;
             }
-            *root = match node {
-                Some(node) => Some(self.store(node).await?),
-                None => None,
-            };
+            if changed {
+                *root = match node {
+                    Some(node) => Some(self.store(node).await?),
+                    None => None,
+                };
+            }
         }
         self.roots = roots;
         Ok(())
@@ -201,6 +211,10 @@ impl<V> FlexTreeCore<V> {
 
     /// `node` をページに収まるよう分けて書き、ルートのページ番号を返す。
     async fn store(&mut self, node: Node) -> Result<PageId, DiskError> {
+        // ルートが RefPage のページは読むときに弾くので、行き先のページをそのままルートにする
+        if let Node::RefPage { page_id, .. } = node {
+            return Ok(page_id);
+        }
         let (root_id, node_pages) = NodePage::split(node, || self.file.alloc());
         for (page_id, node_page) in node_pages {
             self.file.write(page_id, Page::of(&*node_page)).await?;

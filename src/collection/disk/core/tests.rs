@@ -184,6 +184,16 @@ fn has_ref_page(node: &Node) -> bool {
     }
 }
 
+/// ルート以外のページ（RefPage の行き先）が Skip で始まらないことを確かめる。
+async fn assert_ref_pages_never_point_to_skip<V>(tree: &FlexTreeCore<V>) {
+    for (page_id, node) in tree.live_pages_in_preorder().await.unwrap() {
+        assert!(
+            tree.roots.contains(&Some(page_id)) || !matches!(node, Node::Skip { .. }),
+            "RefPage の先が Skip になっている: {page_id:?}"
+        );
+    }
+}
+
 fn value_node(value: u64) -> Node {
     Node::Value(EncodedValue::from_bytes(&value.to_be_bytes()))
 }
@@ -620,6 +630,7 @@ fn spills_large_tree_across_pages() {
         let mut tree = Tree::open(&file.0).await.unwrap();
         assert_cells(&tree, &expected).await;
         assert_roots(&tree, &expected).await;
+        assert_ref_pages_never_point_to_skip(&tree).await;
 
         for root in FlexId::ROOTS {
             tree.remove(root).await.unwrap();
@@ -1269,4 +1280,485 @@ fn paged_file_read_sync_round_trips() {
         assert_eq!(got.try_head_as::<MetaPage>().unwrap().generation.get(), 10);
         paged.close().await.unwrap();
     });
+}
+
+/// 粗い次元での後から挿入（Skip・Branch・RefPage を別次元で割る経路）でも、メモリ版と同じカノニカル形・
+/// 厳密 Z-order 昇順を保ち、複数の親から共有された RefPage を含んでも compact が通る。
+#[test]
+fn edit_preserves_canonical_zorder_and_matches_mem() {
+    let file = TempFile::new();
+    let x_half = FlexId::new(0, 0, 1, 0, 0, 0).unwrap();
+    let x_upper = FlexId::new(0, 0, 1, 1, 0, 0).unwrap();
+    let f_lower = FlexId::new(1, 0, 0, 0, 0, 0).unwrap();
+
+    block_on(async {
+        let mut disk = Tree::open(&file.0).await.unwrap();
+        let mut mem = crate::collection::core::FlexTreeCore::<u64>::default();
+        disk.insert(x_half, 1).await.unwrap();
+        mem.insert(x_half, 1);
+        disk.insert(f_lower, 2).await.unwrap();
+        mem.insert(f_lower, 2);
+
+        let disk_items = disk.get(FlexId::UPPER_MAX).await.unwrap();
+        let mem_items: Vec<(FlexId, u64)> = mem.iter().map(|(id, &v)| (id, v)).collect();
+        assert_eq!(disk_items, mem_items);
+        assert!(disk_items.windows(2).all(|w| w[0].0 < w[1].0));
+
+        disk.insert(x_upper, 3).await.unwrap();
+        mem.insert(x_upper, 3);
+        disk.insert(f_lower, 4).await.unwrap();
+        mem.insert(f_lower, 4);
+
+        let disk_items = disk.get(FlexId::UPPER_MAX).await.unwrap();
+        let mem_items: Vec<(FlexId, u64)> = mem.iter().map(|(id, &v)| (id, v)).collect();
+        assert_eq!(disk_items, mem_items);
+        assert!(disk_items.windows(2).all(|w| w[0].0 < w[1].0));
+        disk.compact().await.unwrap();
+        disk.close().await.unwrap();
+    });
+
+    // RefPage を跨ぐ規模でも別次元分割後にメモリ版と完全一致し、compact が通る
+    let file = TempFile::new();
+    block_on(async {
+        let mut disk = Tree::open(&file.0).await.unwrap();
+        let mut mem = crate::collection::core::FlexTreeCore::<u64>::default();
+
+        // F=0 のまま X/Y を細かく埋めて RefPage を作ってから、F=1 の粗い領域を上書きする
+        let mut next = 1u64;
+        for x in 0..32u32 {
+            for y in 0..16u32 {
+                let id = FlexId::new(0, 0, 5, x, 4, y).unwrap();
+                disk.insert(id, next).await.unwrap();
+                mem.insert(id, next);
+                next += 1;
+            }
+        }
+        assert!(has_ref_page(
+            &disk.read_page(disk.roots[0].unwrap()).await.unwrap()
+        ));
+
+        let coarse_f = FlexId::new(1, 0, 2, 1, 2, 1).unwrap();
+        disk.insert(coarse_f, 999_999).await.unwrap();
+        mem.insert(coarse_f, 999_999);
+        disk.upsert(FlexId::new(1, 1, 0, 0, 0, 0).unwrap(), 777)
+            .await
+            .unwrap();
+        mem.insert_with(FlexId::new(1, 1, 0, 0, 0, 0).unwrap(), 777, |old, _| *old);
+
+        let disk_items = disk.get(FlexId::UPPER_MAX).await.unwrap();
+        let mem_items: Vec<(FlexId, u64)> = mem.iter().map(|(id, &v)| (id, v)).collect();
+        assert_eq!(disk_items, mem_items);
+        assert!(disk_items.windows(2).all(|w| w[0].0 < w[1].0));
+
+        disk.compact().await.unwrap();
+        assert_eq!(disk.get(FlexId::UPPER_MAX).await.unwrap(), mem_items);
+        disk.close().await.unwrap();
+    });
+}
+
+/// 順序規則に反した非正規形の木（旧フォーマットや壊れた順序のファイル）を編集しても、
+/// `side_toward` のアンダーフローや子孫の座標ずれを起こさず正しく動作する。
+#[test]
+fn non_canonical_tree_edits_without_underflow_or_corruption() {
+    // (1) Skip(x+1/0, Branch(F, Value(1), Value(2))) に target == UPPER_MAX で upsert してもアンダーフローしない
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        let x0 = FlexId::new(0, 0, 1, 0, 0, 0).unwrap();
+        let skip_path = x0.relative_to(&FlexId::UPPER_MAX).unwrap();
+        let non_canonical = Node::Skip {
+            path: skip_path,
+            child: Box::new(Node::Branch {
+                dimension: Dimension::F,
+                split_dimensions: DimensionSet::from(Dimension::F),
+                lower: Box::new(value_node(1)),
+                upper: Box::new(value_node(2)),
+            }),
+        };
+        let root_id = tree.store(non_canonical).await.unwrap();
+        tree.roots = [Some(root_id), None];
+        tree.commit().await.unwrap();
+
+        tree.upsert(FlexId::UPPER_MAX, 9).await.unwrap();
+        assert_eq!(
+            tree.get(FlexId::new(1, 0, 1, 0, 0, 0).unwrap())
+                .await
+                .unwrap(),
+            [(FlexId::new(1, 0, 1, 0, 0, 0).unwrap(), 1)]
+        );
+        assert_eq!(
+            tree.get(FlexId::new(1, 1, 1, 0, 0, 0).unwrap())
+                .await
+                .unwrap(),
+            [(FlexId::new(1, 1, 1, 0, 0, 0).unwrap(), 2)]
+        );
+        assert_eq!(
+            tree.get(FlexId::new(0, 0, 1, 1, 0, 0).unwrap())
+                .await
+                .unwrap(),
+            [(FlexId::new(0, 0, 1, 1, 0, 0).unwrap(), 9)]
+        );
+        tree.close().await.unwrap();
+    });
+
+    // (2) Branch(X, Branch(F, 1, 2), Skip(f+1/0, 3)) に対して f=1/0 へ insert しても f=1/1 側が1段ずれない
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        let f_lower_rel = FlexId::new(1, 0, 1, 1, 0, 0)
+            .unwrap()
+            .relative_to(&FlexId::new(0, 0, 1, 1, 0, 0).unwrap())
+            .unwrap();
+        let non_canonical = Node::Branch {
+            dimension: Dimension::X,
+            split_dimensions: DimensionSet::from(Dimension::X) | DimensionSet::from(Dimension::F),
+            lower: Box::new(Node::Branch {
+                dimension: Dimension::F,
+                split_dimensions: DimensionSet::from(Dimension::F),
+                lower: Box::new(value_node(1)),
+                upper: Box::new(value_node(2)),
+            }),
+            upper: Box::new(Node::Skip {
+                path: f_lower_rel,
+                child: Box::new(value_node(3)),
+            }),
+        };
+        let root_id = tree.store(non_canonical).await.unwrap();
+        tree.roots = [Some(root_id), None];
+        tree.commit().await.unwrap();
+
+        let target = FlexId::new(1, 0, 0, 0, 0, 0).unwrap();
+        tree.insert(target, 7).await.unwrap();
+        // f=1/0 は全域 7 に上書きされ、f=1/1 は元の (x=0 -> 2, x=1 -> 空) のまま座標がずれない
+        assert_eq!(
+            tree.get(FlexId::new(1, 0, 1, 0, 0, 0).unwrap())
+                .await
+                .unwrap(),
+            [(FlexId::new(1, 0, 1, 0, 0, 0).unwrap(), 7)]
+        );
+        assert_eq!(
+            tree.get(FlexId::new(1, 0, 1, 1, 0, 0).unwrap())
+                .await
+                .unwrap(),
+            [(FlexId::new(1, 0, 1, 1, 0, 0).unwrap(), 7)]
+        );
+        assert_eq!(
+            tree.get(FlexId::new(1, 1, 1, 0, 0, 0).unwrap())
+                .await
+                .unwrap(),
+            [(FlexId::new(1, 1, 1, 0, 0, 0).unwrap(), 2)]
+        );
+        assert!(
+            tree.get(FlexId::new(1, 1, 1, 1, 0, 0).unwrap())
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        tree.close().await.unwrap();
+    });
+}
+
+/// 粗い次元の編集で未変更の RefPage を丸ごと書き直さず、変更なしの編集は追記せず、
+/// 通常の編集で未編集側の RefPage を読み込まない。
+#[test]
+fn edits_share_ref_pages_and_avoid_unnecessary_io() {
+    // (1) F=0 で複数 RefPage を作った後、F=1 の狭い範囲を1件挿入しても全ページ追記にならず、無変更編集は0追記
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = FlexTreeCore::<[u8; 32]>::open(&file.0).await.unwrap();
+        let mut next = 1u64;
+        for x in 0..32u32 {
+            for y in 0..32u32 {
+                let id = FlexId::new(0, 0, 5, x, 5, y).unwrap();
+                let mut val = [0u8; 32];
+                val[..8].copy_from_slice(&next.to_be_bytes());
+                tree.insert(id, val).await.unwrap();
+                next += 1;
+            }
+        }
+        tree.compact().await.unwrap();
+        let live_before = tree.live_pages_in_preorder().await.unwrap().len();
+        assert!(live_before >= 10, "live_before={live_before}");
+
+        let len_before = tree.file.len();
+        let updated = [0xAA; 32];
+        tree.insert(FlexId::new(1, 0, 5, 0, 5, 0).unwrap(), updated)
+            .await
+            .unwrap();
+        let appended = (tree.file.len() - len_before) as usize;
+        assert!(
+            appended < live_before / 2,
+            "未変更 RefPage の共有が効いていない: appended={appended}, live_before={live_before}"
+        );
+
+        let len_after_insert = tree.file.len();
+        tree.upsert(FlexId::new(1, 1, 0, 0, 0, 0).unwrap(), [0xBB; 32])
+            .await
+            .unwrap();
+        tree.insert(FlexId::new(1, 0, 5, 0, 5, 0).unwrap(), updated)
+            .await
+            .unwrap();
+        assert_eq!(tree.file.len(), len_after_insert);
+
+        tree.compact().await.unwrap();
+        tree.close().await.unwrap();
+    });
+
+    // (2) f=1/0 と f=1/1 で割っている次元が違えば中身が等しくなりえないので、f=1/1 側のページが壊れていても
+    // f=1/0 側の編集はそれを読まずに完了する
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        let mut next = 1u64;
+        for x in 0..32u32 {
+            for y in 0..16u32 {
+                tree.insert(FlexId::new(1, 0, 5, x, 4, y).unwrap(), next)
+                    .await
+                    .unwrap();
+                next += 1;
+            }
+        }
+        for x in 0..512u32 {
+            tree.insert(FlexId::new(1, 1, 9, x, 0, 0).unwrap(), next)
+                .await
+                .unwrap();
+            next += 1;
+        }
+        tree.compact().await.unwrap();
+        let root = tree.read_page(tree.roots[0].unwrap()).await.unwrap();
+        let Node::Branch {
+            dimension: Dimension::F,
+            upper,
+            ..
+        } = root
+        else {
+            panic!("ルートが F 分岐になっていない");
+        };
+        fn first_ref_page(node: &Node) -> Option<PageId> {
+            match node {
+                Node::RefPage { page_id, .. } => Some(*page_id),
+                Node::Branch { lower, upper, .. } => {
+                    first_ref_page(lower).or_else(|| first_ref_page(upper))
+                }
+                Node::Skip { child, .. } => first_ref_page(child),
+                Node::Value(_) => None,
+            }
+        }
+        let upper_page =
+            first_ref_page(&upper).expect("upper 側の部分木に RefPage が含まれているはず");
+        tree.close().await.unwrap();
+
+        flip_byte(&file.0, page_offset(upper_page) + 5);
+
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        // lower 側(f=1/0)の編集は upper 側ページを一切読まないため成功する
+        tree.insert(FlexId::new(1, 0, 5, 0, 4, 0).unwrap(), 888_888)
+            .await
+            .unwrap();
+        assert_eq!(
+            tree.get(FlexId::new(1, 0, 5, 0, 4, 0).unwrap())
+                .await
+                .unwrap(),
+            [(FlexId::new(1, 0, 5, 0, 4, 0).unwrap(), 888_888)]
+        );
+        tree.close().await.unwrap();
+    });
+}
+
+/// 複数ホップの循環参照（A -> B -> A）も compact が Corrupt で弾く。
+#[test]
+fn compact_rejects_multi_hop_cyclic_ref_page() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        let page_a = tree.file.alloc();
+        let page_b = tree.file.alloc();
+        let node_a = Node::Branch {
+            dimension: Dimension::X,
+            split_dimensions: DimensionSet::from(Dimension::X),
+            lower: Box::new(Node::RefPage {
+                page_id: page_b,
+                split_dimensions: DimensionSet::from(Dimension::X),
+            }),
+            upper: Box::new(value_node(1)),
+        };
+        let node_b = Node::Branch {
+            dimension: Dimension::X,
+            split_dimensions: DimensionSet::from(Dimension::X),
+            lower: Box::new(Node::RefPage {
+                page_id: page_a,
+                split_dimensions: DimensionSet::from(Dimension::X),
+            }),
+            upper: Box::new(value_node(2)),
+        };
+        tree.file
+            .write(page_a, Page::of(&*NodePage::encode(&node_a)))
+            .await
+            .unwrap();
+        tree.file
+            .write(page_b, Page::of(&*NodePage::encode(&node_b)))
+            .await
+            .unwrap();
+        tree.roots = [Some(page_a), None];
+        tree.commit().await.unwrap();
+
+        assert!(is_corrupt(tree.compact().await));
+        tree.close().await.unwrap();
+    });
+}
+
+/// 乱択操作列で disk::FlexTreeCore と mem::FlexTreeCore の全要素・Z-order 順序が完全一致する。
+#[test]
+fn canonical_output_matches_mem_on_random_ops() {
+    for seed in 0..4 {
+        let mut rng = ChaCha8Rng::seed_from_u64(100 + seed);
+        let file = TempFile::new();
+        block_on(async {
+            let mut disk = Tree::open(&file.0).await.unwrap();
+            let mut mem = crate::collection::core::FlexTreeCore::<u64>::default();
+            for _ in 0..120 {
+                let target = random_target(&mut rng);
+                let value = rng.random_range(0..4u64);
+                match rng.random_range(0..3) {
+                    0 => {
+                        disk.insert(target, value).await.unwrap();
+                        mem.insert(target, value);
+                    }
+                    1 => {
+                        disk.upsert(target, value).await.unwrap();
+                        mem.insert_with(target, value, |old, _| *old);
+                    }
+                    _ => {
+                        disk.remove(target).await.unwrap();
+                        mem.remove(target);
+                    }
+                }
+            }
+            let mut disk_all = disk.get(FlexId::UPPER_MAX).await.unwrap();
+            disk_all.extend(disk.get(FlexId::LOWER_MAX).await.unwrap());
+            let mem_all: Vec<(FlexId, u64)> = mem.iter().map(|(id, &v)| (id, v)).collect();
+            assert_eq!(disk_all, mem_all);
+            assert!(disk_all.windows(2).all(|w| w[0].0 < w[1].0));
+            assert_ref_pages_never_point_to_skip(&disk).await;
+
+            disk.compact().await.unwrap();
+            disk.close().await.unwrap();
+        });
+    }
+}
+
+/// 片側だけ書き換えて RefPage と分かれた半分も、中身が元に戻ればメモリ版と同じく1つにまとまる。
+#[test]
+fn halves_merge_again_when_contents_become_equal() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut disk = Tree::open(&file.0).await.unwrap();
+        let mut mem = crate::collection::core::FlexTreeCore::<u64>::default();
+        let mut next = 1u64;
+        for x in 0..32u32 {
+            for y in 0..16u32 {
+                let id = FlexId::new(0, 0, 5, x, 4, y).unwrap();
+                disk.insert(id, next).await.unwrap();
+                mem.insert(id, next);
+                next += 1;
+            }
+        }
+        disk.compact().await.unwrap();
+
+        let assert_matches_mem =
+            async |disk: &Tree, mem: &crate::collection::core::FlexTreeCore<u64>| {
+                let disk_items = disk.get(FlexId::UPPER_MAX).await.unwrap();
+                let mem_items: Vec<(FlexId, u64)> = mem.iter().map(|(id, &v)| (id, v)).collect();
+                assert_eq!(disk_items, mem_items);
+            };
+
+        let lower = FlexId::new(1, 0, 5, 3, 4, 2).unwrap();
+        let upper = FlexId::new(1, 1, 5, 3, 4, 2).unwrap();
+        let original = disk.get(lower).await.unwrap()[0].1;
+        for (target, value) in [(lower, 999), (lower, original), (upper, 999), (lower, 999)] {
+            disk.insert(target, value).await.unwrap();
+            mem.insert(target, value);
+            assert_matches_mem(&disk, &mem).await;
+        }
+        assert_ref_pages_never_point_to_skip(&disk).await;
+        disk.compact().await.unwrap();
+        assert_matches_mem(&disk, &mem).await;
+        disk.close().await.unwrap();
+    });
+}
+
+/// 中身が Value だけのページを指す RefPage に同じ値を書いても、変更なしとして扱い、片側だけ割らない。
+#[test]
+fn inserting_same_value_over_value_page_changes_nothing() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        let value_page = tree.store(value_node(5)).await.unwrap();
+        let root = tree
+            .store(Node::Branch {
+                dimension: Dimension::X,
+                split_dimensions: DimensionSet::from(Dimension::X),
+                lower: Box::new(Node::RefPage {
+                    page_id: value_page,
+                    split_dimensions: DimensionSet::EMPTY,
+                }),
+                upper: Box::new(value_node(3)),
+            })
+            .await
+            .unwrap();
+        tree.roots = [Some(root), None];
+        tree.commit().await.unwrap();
+
+        let len_before = tree.file.len();
+        tree.insert(FlexId::new(1, 0, 1, 0, 0, 0).unwrap(), 5)
+            .await
+            .unwrap();
+        assert_eq!(tree.file.len(), len_before);
+        assert_eq!(
+            tree.get(FlexId::UPPER_MAX).await.unwrap(),
+            [
+                (FlexId::new(0, 0, 1, 0, 0, 0).unwrap(), 5),
+                (FlexId::new(0, 0, 1, 1, 0, 0).unwrap(), 3),
+            ]
+        );
+        tree.close().await.unwrap();
+    });
+}
+
+/// ページへ出す子が Skip なら行き先だけを出し、ルート以外のページが Skip で始まらない。
+#[test]
+fn split_never_spills_skip_as_page_root() {
+    let mut next = 0;
+    let path = FlexId::new(0, 0, 1, 0, 1, 0)
+        .unwrap()
+        .relative_to(&FlexId::UPPER_MAX)
+        .unwrap();
+    let lower = Node::Skip {
+        path,
+        child: Box::new(balanced(9, &mut next)),
+    };
+    let upper = balanced(9, &mut next);
+    let node = Node::Branch {
+        dimension: Dimension::F,
+        split_dimensions: DimensionSet::from(Dimension::F)
+            | lower.split_dimensions()
+            | upper.split_dimensions(),
+        lower: Box::new(lower),
+        upper: Box::new(upper),
+    };
+    let mut ids = 0;
+    let (root_id, node_pages) = NodePage::split(node.clone(), || {
+        ids += 1;
+        PageId(ids)
+    });
+    let pages: HashMap<u64, Node> = node_pages
+        .into_iter()
+        .map(|(id, page)| (id.0, page.decode().unwrap()))
+        .collect();
+    assert!(
+        pages
+            .iter()
+            .all(|(&id, node)| id == root_id.0 || !matches!(node, Node::Skip { .. }))
+    );
+    assert_eq!(resolve(pages[&root_id.0].clone(), &pages), node);
 }

@@ -6,7 +6,7 @@ use super::{FlexTreeCore, MetaPage};
 use crate::collection::disk::io::{Page, PageId};
 use crate::{DiskError, Error};
 use alloc::vec::Vec;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 impl<V> FlexTreeCore<V> {
     /// ここまでの変更をコミットし、ファイルを生きているページだけに詰める。
@@ -30,33 +30,71 @@ impl<V> FlexTreeCore<V> {
 
     /// ルートから辿れるページと、その中の Node を、行きがけ順（lower 側を先）に並べたもの。
     ///
-    /// 同じ深さのページはまとめて読む。
+    /// 同じ深さのページはまとめて読む。複数箇所から共有されるページは最初の出現位置に 1 度だけ並べ、
+    /// 循環参照は [`DiskError::Corrupt`] で弾く。
     pub(super) async fn live_pages_in_preorder(&self) -> Result<Vec<(PageId, Node)>, DiskError> {
         let mut nodes = HashMap::new();
-        let mut frontier: Vec<PageId> = self.roots.iter().flatten().copied().collect();
+        let mut queued = HashSet::new();
+        let mut frontier: Vec<PageId> = Vec::new();
+        for page_id in self.roots.iter().flatten().copied() {
+            if queued.insert(page_id.0) {
+                frontier.push(page_id);
+            }
+        }
         while !frontier.is_empty() {
             let mut next = Vec::new();
             for (page_id, page) in frontier.iter().zip(self.file.read_many(&frontier).await?) {
                 let mut node = page.try_head_as::<NodePage>()?.decode()?;
-                node.for_each_ref_page(&mut |child| next.push(*child));
-                // 木なので同じページには1度しか辿り着かない。2度目は壊れた参照の循環
-                if nodes.insert(page_id.0, node).is_some() {
-                    return Err(DiskError::Corrupt);
-                }
+                node.for_each_ref_page(&mut |child| {
+                    if queued.insert(child.0) {
+                        next.push(*child);
+                    }
+                });
+                nodes.insert(page_id.0, node);
             }
             frontier = next;
         }
 
+        enum Visit {
+            Active,
+            Done,
+        }
+        enum Frame {
+            Enter(PageId),
+            Exit(PageId),
+        }
+
         let mut pages = Vec::with_capacity(nodes.len());
-        let mut stack: Vec<PageId> = self.roots.iter().rev().flatten().copied().collect();
-        while let Some(page_id) = stack.pop() {
-            let mut node = nodes
-                .remove(&page_id.0)
-                .expect("ルートから辿れるページはすべて読んである");
-            let children_start = stack.len();
-            node.for_each_ref_page(&mut |child| stack.push(*child));
-            stack[children_start..].reverse();
-            pages.push((page_id, node));
+        let mut state: HashMap<u64, Visit> = HashMap::with_capacity(nodes.len());
+        let mut stack: Vec<Frame> = self
+            .roots
+            .iter()
+            .rev()
+            .flatten()
+            .copied()
+            .map(Frame::Enter)
+            .collect();
+        while let Some(frame) = stack.pop() {
+            match frame {
+                Frame::Exit(page_id) => {
+                    state.insert(page_id.0, Visit::Done);
+                }
+                Frame::Enter(page_id) => match state.get(&page_id.0) {
+                    Some(Visit::Active) => return Err(DiskError::Corrupt),
+                    Some(Visit::Done) => {}
+                    None => {
+                        state.insert(page_id.0, Visit::Active);
+                        stack.push(Frame::Exit(page_id));
+                        let mut node = nodes
+                            .remove(&page_id.0)
+                            .expect("ルートから辿れるページはすべて読んである");
+                        let children_start = stack.len();
+                        node.for_each_ref_page(&mut |child| stack.push(Frame::Enter(*child)));
+                        stack[children_start..].reverse();
+                        pages.push((page_id, node));
+                    }
+                },
+            }
         }
         Ok(pages)
     }
