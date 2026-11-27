@@ -1,4 +1,5 @@
 use super::node::{Branch, Node};
+use super::value::CompactValue;
 use crate::{
     FlexId, Side,
     id::dimension::{Dimension, DimensionSet},
@@ -9,7 +10,7 @@ use triomphe::Arc;
 /// 領域 `this` の上の Node を借りて見たもの。
 pub(super) enum View<'a, V> {
     Empty,
-    Value(&'a V),
+    Value(&'a CompactValue<V>),
     Branch(&'a Arc<Branch<V>>),
     /// 領域のうち `region` だけに `child` があり、外側は空。
     Skip {
@@ -20,7 +21,7 @@ pub(super) enum View<'a, V> {
 
 /// Skip の先にある、空でも Skip でもない Node を借りたもの。
 pub(super) enum Target<'a, V> {
-    Value(&'a V),
+    Value(&'a CompactValue<V>),
     Branch(&'a Arc<Branch<V>>),
 }
 
@@ -100,7 +101,7 @@ impl<'a, V> View<'a, V> {
     /// Value ならその値。
     pub(super) fn value(&self) -> Option<&'a V> {
         match self {
-            View::Value(value) => Some(value),
+            View::Value(value) => Some(value.as_ref()),
             _ => None,
         }
     }

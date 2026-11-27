@@ -244,7 +244,7 @@ fn f_zero_goes_to_upper_root() {
 fn insert_whole_root_becomes_single_leaf() {
     let mut tree = FlexTreeCore::<u64>::default();
     tree.insert(FlexId::UPPER_MAX, 7u64);
-    assert!(matches!(tree.upper_root, Some(Node::Value(7))));
+    assert!(matches!(&tree.upper_root, Some(Node::Value(v)) if **v == 7));
 }
 
 #[test]
@@ -252,7 +252,7 @@ fn sibling_halves_with_same_value_merge() {
     let mut tree = FlexTreeCore::<u64>::default();
     tree.insert(FlexId::new(1, 0, 0, 0, 0, 0).unwrap(), 5u64);
     tree.insert(FlexId::new(1, 1, 0, 0, 0, 0).unwrap(), 5u64);
-    assert!(matches!(tree.upper_root, Some(Node::Value(5))));
+    assert!(matches!(&tree.upper_root, Some(Node::Value(v)) if **v == 5));
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn overwrite_inside_filled_leaf_splits() {
     assert!(matches!(tree.upper_root, Some(Node::Branch(_))));
 
     tree.insert(FlexId::new(2, 1, 2, 3, 2, 0).unwrap(), 1u64);
-    assert!(matches!(tree.upper_root, Some(Node::Value(1))));
+    assert!(matches!(&tree.upper_root, Some(Node::Value(v)) if **v == 1));
 }
 
 /// 空の FlexTreeCore へ細かい点を入れても、一本道の Branch を作らず Skip 1 つで降りる。
@@ -274,7 +274,7 @@ fn deep_point_in_empty_tree_skips_levels() {
     let mut tree = FlexTreeCore::<u64>::default();
     tree.insert(FlexId::new(20, 12345, 20, 54321, 20, 999).unwrap(), 1u64);
     assert!(
-        matches!(&tree.upper_root, Some(Node::LongSkip(skip)) if matches!(skip.child, Node::Value(1)))
+        matches!(&tree.upper_root, Some(Node::LongSkip(skip)) if matches!(&skip.child, Node::Value(v) if **v == 1))
     );
 }
 
@@ -393,8 +393,8 @@ fn set_operations_match_model() {
 /// 参照実装：再帰でたどって、値を持つ領域を下側から順に集める。
 fn collect_recursive<'a, V>(node: &'a Node<V>, this: FlexId, out: &mut Vec<(FlexId, &'a V)>) {
     match node {
-        Node::Value(value) => out.push((this, value)),
-        Node::ShortSkipValue(path, value) => out.push((path.to_absolute(&this), value)),
+        Node::Value(value) => out.push((this, value.as_ref())),
+        Node::ShortSkipValue(path, value) => out.push((path.to_absolute(&this), value.as_ref())),
         Node::ShortSkipBranch(path, branch) => {
             let this = path.to_absolute(&this);
             let dimension = branch.dimension;
@@ -1320,4 +1320,198 @@ fn compact_handles_large_values_safely() {
     assert_eq!(tree, snapshot);
     let (total, unique) = arc_counts(&tree);
     assert!(unique < total);
+}
+
+/// 値型が大きくても `Node`・`Option<Node>`・`Branch` のサイズは `()` のときと変わらない。
+#[test]
+fn node_and_branch_sizes_are_independent_of_value_size() {
+    use core::mem::size_of;
+
+    #[repr(align(32))]
+    #[derive(Clone, PartialEq, Eq, Debug)]
+    struct AlignedLarge([u64; 16]);
+
+    assert_eq!(size_of::<Node<u32>>(), size_of::<Node<()>>());
+    assert_eq!(size_of::<Node<u64>>(), size_of::<Node<()>>());
+    assert_eq!(size_of::<Node<String>>(), size_of::<Node<()>>());
+    assert_eq!(size_of::<Node<[u64; 64]>>(), size_of::<Node<()>>());
+    assert_eq!(size_of::<Node<AlignedLarge>>(), size_of::<Node<()>>());
+
+    assert_eq!(
+        size_of::<Option<Node<[u64; 64]>>>(),
+        size_of::<Option<Node<()>>>()
+    );
+    assert_eq!(size_of::<Branch<String>>(), size_of::<Branch<()>>());
+    assert_eq!(size_of::<Branch<[u64; 64]>>(), size_of::<Branch<()>>());
+    assert_eq!(size_of::<Branch<AlignedLarge>>(), size_of::<Branch<()>>());
+}
+
+std::thread_local! {
+    static LIVE_TRACKED_LARGE: core::cell::Cell<isize> = const { core::cell::Cell::new(0) };
+    static CLONE_TRACKED_LARGE: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+/// 非インライン格納される大きい追跡型。生存数と `Clone` 回数を数える。
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct TrackedLarge([u64; 8]);
+
+impl TrackedLarge {
+    fn new(v: u64) -> Self {
+        LIVE_TRACKED_LARGE.with(|live| live.set(live.get() + 1));
+        TrackedLarge([v; 8])
+    }
+}
+
+impl Clone for TrackedLarge {
+    fn clone(&self) -> Self {
+        CLONE_TRACKED_LARGE.with(|c| c.set(c.get() + 1));
+        TrackedLarge::new(self.0[0])
+    }
+}
+
+impl Drop for TrackedLarge {
+    fn drop(&mut self) {
+        LIVE_TRACKED_LARGE.with(|live| live.set(live.get() - 1));
+    }
+}
+
+/// 退避された大きい値は1回の複数領域挿入や木のクローンで複製されず、操作後も漏れなく解放される。
+#[test]
+fn large_values_share_arc_and_drop_exactly_once() {
+    CLONE_TRACKED_LARGE.with(|c| c.set(0));
+
+    let ids = [
+        FlexId::new(10, 0, 10, 0, 10, 0).unwrap(),
+        FlexId::new(10, 0, 10, 2, 10, 0).unwrap(),
+        FlexId::new(10, 0, 10, 4, 10, 0).unwrap(),
+        FlexId::new(10, 0, 10, 6, 10, 0).unwrap(),
+    ];
+    let mut tree = FlexTreeCore::default();
+    tree.insert(ids, TrackedLarge::new(7));
+    assert_eq!(CLONE_TRACKED_LARGE.with(core::cell::Cell::get), 0);
+
+    // 同じ `insert` で入った全葉は同一の `Arc` を指す
+    let ptrs: Vec<*const TrackedLarge> = tree.iter().map(|(_, v)| v as *const _).collect();
+    assert_eq!(ptrs.len(), ids.len());
+    assert!(ptrs.iter().all(|&p| p == ptrs[0]));
+
+    // 木のクローンや和集合でも値自体は複製されない
+    let cloned = tree.clone();
+    let merged = tree.union(&cloned);
+    assert_eq!(CLONE_TRACKED_LARGE.with(core::cell::Cell::get), 0);
+
+    // 単独所有の葉が1つだけ残る木を `into_iter` で消費しても複製しない
+    drop(cloned);
+    drop(merged);
+    tree.remove([ids[1], ids[2], ids[3]]);
+    let clones_before = CLONE_TRACKED_LARGE.with(core::cell::Cell::get);
+    let owned: Vec<_> = tree.into_iter().collect();
+    assert_eq!(owned.len(), 1);
+    assert_eq!(owned[0].1.0[0], 7);
+    assert_eq!(
+        CLONE_TRACKED_LARGE.with(core::cell::Cell::get),
+        clones_before
+    );
+    drop(owned);
+    assert_eq!(LIVE_TRACKED_LARGE.with(core::cell::Cell::get), 0);
+}
+
+/// 大きい値に対するランダム更新・集合演算・`compact`・`into_iter` で値がちょうど1回ずつ解放される。
+#[test]
+fn large_values_random_ops_drop_exactly_once() {
+    let mut next = rng(0x1a2b_3c4d);
+    for max_zoom in [5, 20] {
+        let mut tree = FlexTreeCore::<TrackedLarge>::default();
+        let mut other = FlexTreeCore::<TrackedLarge>::default();
+        for _ in 0..200 {
+            let id = random_id(&mut next, max_zoom);
+            let value = TrackedLarge::new(next(3));
+            match next(4) {
+                0 => tree.insert(id, value),
+                1 => tree.insert_with(id, value, |old, new| TrackedLarge::new(old.0[0] + new.0[0])),
+                2 => other.insert(id, value),
+                _ => {
+                    let _ = tree.remove(id);
+                }
+            }
+            if next(12) == 0 {
+                let snapshot = tree.clone();
+                tree.compact();
+                assert_rules(&tree);
+                assert_eq!(tree, snapshot);
+                tree = tree.union(&other);
+                tree = tree.difference(&snapshot.intersection(&other));
+            }
+        }
+        assert_rules(&tree);
+        let expected: Vec<_> = tree.iter().map(|(id, v)| (id, v.0[0])).collect();
+        let owned: Vec<_> = tree.into_iter().map(|(id, v)| (id, v.0[0])).collect();
+        assert_eq!(owned, expected);
+    }
+    assert_eq!(LIVE_TRACKED_LARGE.with(core::cell::Cell::get), 0);
+}
+
+/// `compact` は別々に挿入された同値の大きい値も同一の `Arc` へ共有し、クローン側には影響しない。
+#[test]
+fn compact_interns_large_value_arcs() {
+    use hashbrown::HashSet;
+
+    fn value_arc_ptrs<V>(tree: &FlexTreeCore<V>) -> (usize, usize) {
+        fn visit<V>(node: &Node<V>, total: &mut usize, set: &mut HashSet<*const V>) {
+            match node {
+                Node::Value(v) | Node::ShortSkipValue(_, v) => {
+                    if let Some(arc) = v.as_arc() {
+                        *total += 1;
+                        set.insert(Arc::as_ptr(arc));
+                    }
+                }
+                Node::Branch(b) | Node::ShortSkipBranch(_, b) => {
+                    visit(&b.lower, total, set);
+                    visit(&b.upper, total, set);
+                }
+                Node::LongSkip(s) => visit(&s.child, total, set),
+            }
+        }
+        let mut total = 0;
+        let mut set = HashSet::new();
+        if let Some(u) = &tree.upper_root {
+            visit(u, &mut total, &mut set);
+        }
+        if let Some(l) = &tree.lower_root {
+            visit(l, &mut total, &mut set);
+        }
+        (total, set.len())
+    }
+
+    #[derive(Clone, PartialEq, Eq, Hash, Debug)]
+    struct Big([u64; 16]);
+
+    let mut tree = FlexTreeCore::default();
+    // 同じ値だが別々の `insert` で別 `Arc` として入れる（かつ構造も非対称にして Branch 共有だけでは揃わないようにする）
+    tree.insert(FlexId::new(15, 0, 15, 0, 15, 0).unwrap(), Big([1; 16]));
+    tree.insert(FlexId::new(15, 0, 15, 2, 15, 1).unwrap(), Big([2; 16]));
+    tree.insert(FlexId::new(15, 0, 15, 100, 15, 3).unwrap(), Big([1; 16]));
+    tree.insert(FlexId::new(15, -1, 15, 50, 15, 5).unwrap(), Big([1; 16]));
+    tree.insert(FlexId::new(15, -1, 15, 52, 15, 5).unwrap(), Big([2; 16]));
+
+    let snapshot = tree.clone();
+    let (total_before, unique_before) = value_arc_ptrs(&tree);
+    assert_eq!(total_before, 5);
+    assert_eq!(unique_before, 5);
+
+    tree.compact();
+    assert_rules(&tree);
+    assert_eq!(tree, snapshot);
+
+    let (total_after, unique_after) = value_arc_ptrs(&tree);
+    assert_eq!(total_after, 5);
+    assert_eq!(unique_after, 2);
+
+    // snapshot 側のポインタ構成は変わらない
+    let (_, snap_unique) = value_arc_ptrs(&snapshot);
+    assert_eq!(snap_unique, 5);
+
+    // 再度 compact しても冪等
+    tree.compact();
+    assert_eq!(value_arc_ptrs(&tree), (5, 2));
 }

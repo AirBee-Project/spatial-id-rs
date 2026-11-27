@@ -4,6 +4,7 @@ use triomphe::Arc;
 
 use super::FlexTreeCore;
 use super::node::{Branch, Node};
+use super::value::CompactValue;
 use crate::{FlexId, Side, id::dimension::Dimension};
 
 /// [FlexTreeCore]の値を持つ領域と値への参照を、Node を辿りながら1つずつ返すイテレーター。
@@ -41,11 +42,11 @@ impl<'a, V> Iterator for Iter<'a, V> {
             match node {
                 Node::Value(value) => {
                     self.remaining -= 1;
-                    return Some((this, value));
+                    return Some((this, value.as_ref()));
                 }
                 Node::ShortSkipValue(path, value) => {
                     self.remaining -= 1;
-                    return Some((path.to_absolute(&this), value));
+                    return Some((path.to_absolute(&this), value.as_ref()));
                 }
                 Node::Branch(branch) => {
                     (node, this) = push_upper_ref(&mut self.stack, this, branch);
@@ -103,8 +104,10 @@ where
 {
     loop {
         match node {
-            Node::Value(value) => return f(acc, (this, value)),
-            Node::ShortSkipValue(path, value) => return f(acc, (path.to_absolute(&this), value)),
+            Node::Value(value) => return f(acc, (this, value.as_ref())),
+            Node::ShortSkipValue(path, value) => {
+                return f(acc, (path.to_absolute(&this), value.as_ref()));
+            }
             Node::Branch(branch) => {
                 branch.upper.prefetch();
                 let dimension = branch.dimension;
@@ -161,11 +164,11 @@ impl<V: Clone> Iterator for IntoIter<V> {
             match node {
                 Node::Value(value) => {
                     self.remaining -= 1;
-                    return Some((this, value));
+                    return Some((this, value.into_inner()));
                 }
                 Node::ShortSkipValue(path, value) => {
                     self.remaining -= 1;
-                    return Some((path.to_absolute(&this), value));
+                    return Some((path.to_absolute(&this), value.into_inner()));
                 }
                 Node::Branch(branch) => {
                     (node, this) = push_upper_owned(&mut self.stack, this, branch);
@@ -225,8 +228,10 @@ where
 {
     loop {
         match node {
-            Node::Value(value) => return f(acc, (this, value)),
-            Node::ShortSkipValue(path, value) => return f(acc, (path.to_absolute(&this), value)),
+            Node::Value(value) => return f(acc, (this, value.into_inner())),
+            Node::ShortSkipValue(path, value) => {
+                return f(acc, (path.to_absolute(&this), value.into_inner()));
+            }
             Node::Branch(branch) => {
                 let (dimension, lower, upper) = unwrap_branch(branch);
                 upper.prefetch();
@@ -317,7 +322,7 @@ impl<V: PartialEq + Clone> OrderedRootBuilder<V> {
             root_id,
             prev_id: id,
             cur_region: id,
-            cur_node: Some(Node::Value(value)),
+            cur_node: Some(Node::Value(CompactValue::new(value))),
             stack: Vec::new(),
         }
     }
@@ -343,7 +348,7 @@ impl<V: PartialEq + Clone> OrderedRootBuilder<V> {
         self.stack.push((fork, split_dim, agree, lower));
         self.prev_id = id;
         self.cur_region = id;
-        self.cur_node = Some(Node::Value(value));
+        self.cur_node = Some(Node::Value(CompactValue::new(value)));
         Ok(())
     }
 

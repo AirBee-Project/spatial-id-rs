@@ -1,3 +1,4 @@
+use super::value::CompactValue;
 use super::view::{Target, View};
 use crate::{
     FlexId, Side,
@@ -15,12 +16,12 @@ use triomphe::Arc;
 /// Node は自分の領域を持たず、親から渡される領域 `this`との相対的な位置で意味を持つ。辿る関数が`this`を持つことで様々な操作を行う。
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Node<V> {
-    Value(V),
+    Value(CompactValue<V>),
     Branch(Arc<Branch<V>>),
     /// 行き先を [ShortRelativeFlexId] で表せない Skip。
     LongSkip(Arc<Skip<V>>),
     /// 行き先を [ShortRelativeFlexId] で表せて、先が Value の Skip。確保せずに Node に埋め込む。
-    ShortSkipValue(ShortRelativeFlexId, V),
+    ShortSkipValue(ShortRelativeFlexId, CompactValue<V>),
     /// 行き先を [ShortRelativeFlexId] で表せて、先が Branch の Skip。
     ShortSkipBranch(ShortRelativeFlexId, Arc<Branch<V>>),
 }
@@ -69,13 +70,16 @@ pub(super) enum Decision {
 }
 
 impl<V> Node<V> {
-    /// 行き先が確保した Branch や Skip なら、その中身をキャッシュに読み込んでおく。
+    /// 行き先が確保した Branch・Skip・退避済みの Value なら、その中身をキャッシュに読み込んでおく。
     #[inline(always)]
     pub(super) fn prefetch(&self) {
         let ptr: *const u8 = match self {
             Node::Branch(branch) | Node::ShortSkipBranch(_, branch) => Arc::as_ptr(branch).cast(),
             Node::LongSkip(skip) => Arc::as_ptr(skip).cast(),
-            Node::Value(_) | Node::ShortSkipValue(..) => return,
+            Node::Value(value) | Node::ShortSkipValue(_, value) => match value.as_arc() {
+                Some(arc) => Arc::as_ptr(arc).cast(),
+                None => return,
+            },
         };
         #[cfg(target_arch = "x86_64")]
         // SAFETY: プリフェッチは読み込みの予告だけで、アドレスの参照外しをしない
@@ -185,9 +189,11 @@ impl<V> Node<V> {
         children.into_iter().flatten()
     }
 
-    /// 同じ Branch・Skip の Arc を指しているなら true。値の型が違う Node とも比べられる。
+    /// 同じ Branch・Skip・退避済み Value の Arc を指しているなら true。値の型が違う Node とも比べられる。
     pub(super) fn ptr_eq<W>(&self, other: &Node<W>) -> bool {
         match (self, other) {
+            (Node::Value(a), Node::Value(b)) => a.ptr_eq(b),
+            (Node::ShortSkipValue(p, a), Node::ShortSkipValue(q, b)) => p == q && a.ptr_eq(b),
             (Node::Branch(a), Node::Branch(b)) => ptr::addr_eq(Arc::as_ptr(a), Arc::as_ptr(b)),
             (Node::LongSkip(a), Node::LongSkip(b)) => ptr::addr_eq(Arc::as_ptr(a), Arc::as_ptr(b)),
             (Node::ShortSkipBranch(p, a), Node::ShortSkipBranch(q, b)) => {
@@ -484,10 +490,10 @@ impl<V: PartialEq + Clone> Node<V> {
         keep: &impl Fn(&FlexId, &V) -> bool,
     ) -> Option<Option<Self>> {
         match self {
-            Node::Value(value) => (!keep(this, value)).then_some(None),
+            Node::Value(value) => (!keep(this, value.as_ref())).then_some(None),
             Node::ShortSkipValue(path, value) => {
                 let region = path.to_absolute(this);
-                (!keep(&region, value)).then_some(None)
+                (!keep(&region, value.as_ref())).then_some(None)
             }
             Node::Branch(branch) => Node::filter_branch(branch, this, classify, keep),
             Node::ShortSkipBranch(path, branch) => {

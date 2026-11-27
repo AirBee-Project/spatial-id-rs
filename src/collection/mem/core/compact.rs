@@ -1,11 +1,9 @@
 use super::{
     FlexTreeCore,
     node::{Branch, Node, Skip},
+    value::CompactValue,
 };
-use crate::id::{
-    dimension::Dimension,
-    relative_flex_id::{RelativeFlexId, ShortRelativeFlexId},
-};
+use crate::id::{dimension::Dimension, relative_flex_id::RelativeFlexId};
 use core::{
     hash::{BuildHasher, Hash, Hasher},
     mem::discriminant,
@@ -14,7 +12,7 @@ use hashbrown::{DefaultHashBuilder, HashTable, hash_table::Entry};
 use triomphe::Arc;
 
 impl<V: Eq + Hash + Clone> FlexTreeCore<V> {
-    /// 同じ形状と値を持つ [`Branch`] と [`LongSkip`](Node::LongSkip) を探索し、同一の `Arc` を共有するよう圧縮する。
+    /// 同じ形状と値を持つ [`Branch`]・[`LongSkip`](Node::LongSkip)・退避済みの値を探索し、同一の `Arc` を共有するよう圧縮する。
     ///
     /// 保持している [`FlexId`](crate::FlexId) と値の対応は変わらない。他の [`FlexTreeCore`] と共有されている `Node` は書き換えず、
     /// 新しい `Branch` や `LongSkip` のみを組み立てて共有する。
@@ -31,33 +29,29 @@ impl<V: Eq + Hash + Clone> FlexTreeCore<V> {
     }
 }
 
-/// 再帰フレームが `V` の大きさに依存しないよう、`Value` を除いた差し替え結果だけを表す。
-enum SharedNode<V> {
-    Branch(Arc<Branch<V>>),
-    ShortSkipBranch(ShortRelativeFlexId, Arc<Branch<V>>),
-    LongSkip(Arc<Skip<V>>),
-}
-
-impl<V> From<SharedNode<V>> for Node<V> {
-    fn from(shared: SharedNode<V>) -> Self {
-        match shared {
-            SharedNode::Branch(arc) => Node::Branch(arc),
-            SharedNode::ShortSkipBranch(path, arc) => Node::ShortSkipBranch(path, arc),
-            SharedNode::LongSkip(arc) => Node::LongSkip(arc),
-        }
-    }
-}
-
-/// 既に正規化済みの子孫について、同じ `Arc` ポインタまたは同じ値を同一とみなすビュー。
+/// 既に正規化済みの子孫について、同じ `Arc` ポインタまたは同じインライン値を同一とみなすビュー。
 struct ShallowNode<'a, V>(&'a Node<V>);
 
 impl<V: PartialEq> PartialEq for ShallowNode<'_, V> {
     fn eq(&self, other: &Self) -> bool {
         match (self.0, other.0) {
-            (Node::Value(a), Node::Value(b)) => a == b,
+            (Node::Value(a), Node::Value(b)) => {
+                if CompactValue::<V>::IS_INLINE {
+                    a == b
+                } else {
+                    a.ptr_eq(b)
+                }
+            }
             (Node::Branch(a), Node::Branch(b)) => Arc::ptr_eq(a, b),
             (Node::LongSkip(a), Node::LongSkip(b)) => Arc::ptr_eq(a, b),
-            (Node::ShortSkipValue(pa, va), Node::ShortSkipValue(pb, vb)) => pa == pb && va == vb,
+            (Node::ShortSkipValue(pa, va), Node::ShortSkipValue(pb, vb)) => {
+                pa == pb
+                    && if CompactValue::<V>::IS_INLINE {
+                        va == vb
+                    } else {
+                        va.ptr_eq(vb)
+                    }
+            }
             (Node::ShortSkipBranch(pa, ba), Node::ShortSkipBranch(pb, bb)) => {
                 pa == pb && Arc::ptr_eq(ba, bb)
             }
@@ -72,12 +66,18 @@ impl<V: Hash> Hash for ShallowNode<'_, V> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         discriminant(self.0).hash(state);
         match self.0 {
-            Node::Value(v) => v.hash(state),
+            Node::Value(v) => match v.as_arc() {
+                Some(arc) => Arc::as_ptr(arc).hash(state),
+                None => v.hash(state),
+            },
             Node::Branch(arc) => Arc::as_ptr(arc).hash(state),
             Node::LongSkip(arc) => Arc::as_ptr(arc).hash(state),
             Node::ShortSkipValue(path, v) => {
                 path.hash(state);
-                v.hash(state);
+                match v.as_arc() {
+                    Some(arc) => Arc::as_ptr(arc).hash(state),
+                    None => v.hash(state),
+                }
             }
             Node::ShortSkipBranch(path, arc) => {
                 path.hash(state);
@@ -135,7 +135,7 @@ impl<V: Eq + Hash> Internable<V> for Skip<V> {
 
 struct Pool<T> {
     hasher: DefaultHashBuilder,
-    // 表の拡張時に全エントリのキー（`V` を含みうる）を再ハッシュしないよう、ハッシュ値を併せて持つ
+    // 表の拡張時に全エントリのキーを再ハッシュしないよう、ハッシュ値を併せて持つ
     interned: HashTable<(u64, Arc<T>)>,
     // 元の `Arc` を保持して解放を防ぎ、探索中のポインタアドレス再利用（ABA問題）を避ける
     visited: HashTable<(Arc<T>, Arc<T>)>,
@@ -198,6 +198,8 @@ impl<T> Pool<T> {
 struct Compactor<V> {
     branches: Pool<Branch<V>>,
     skips: Pool<Skip<V>>,
+    values_hasher: DefaultHashBuilder,
+    values: HashTable<(u64, Arc<V>)>,
 }
 
 impl<V: Eq + Hash + Clone> Compactor<V> {
@@ -205,25 +207,54 @@ impl<V: Eq + Hash + Clone> Compactor<V> {
         Self {
             branches: Pool::new(),
             skips: Pool::new(),
+            values_hasher: DefaultHashBuilder::default(),
+            values: HashTable::new(),
         }
     }
 
     fn compact_node(&mut self, node: &mut Node<V>) {
         match node {
-            Node::Value(_) | Node::ShortSkipValue(..) => {}
+            Node::Value(value) | Node::ShortSkipValue(_, value) => self.compact_value_mut(value),
             Node::Branch(arc) | Node::ShortSkipBranch(_, arc) => self.compact_branch_mut(arc),
             Node::LongSkip(arc) => self.compact_skip_mut(arc),
         }
     }
 
-    fn compact_node_shared(&mut self, node: &Node<V>) -> Option<SharedNode<V>> {
+    fn compact_node_shared(&mut self, node: &Node<V>) -> Option<Node<V>> {
         match node {
-            Node::Value(_) | Node::ShortSkipValue(..) => None,
-            Node::Branch(arc) => self.compact_branch_ref(arc).map(SharedNode::Branch),
+            Node::Value(value) => self.compact_value_ref(value).map(Node::Value),
+            Node::ShortSkipValue(path, value) => self
+                .compact_value_ref(value)
+                .map(|v| Node::ShortSkipValue(*path, v)),
+            Node::Branch(arc) => self.compact_branch_ref(arc).map(Node::Branch),
             Node::ShortSkipBranch(path, arc) => self
                 .compact_branch_ref(arc)
-                .map(|b| SharedNode::ShortSkipBranch(*path, b)),
-            Node::LongSkip(arc) => self.compact_skip_ref(arc).map(SharedNode::LongSkip),
+                .map(|b| Node::ShortSkipBranch(*path, b)),
+            Node::LongSkip(arc) => self.compact_skip_ref(arc).map(Node::LongSkip),
+        }
+    }
+
+    fn compact_value_mut(&mut self, value: &mut CompactValue<V>) {
+        if let Some(canonical) = self.compact_value_ref(value) {
+            *value = canonical;
+        }
+    }
+
+    fn compact_value_ref(&mut self, value: &CompactValue<V>) -> Option<CompactValue<V>> {
+        let arc = value.as_arc()?;
+        let h = self.values_hasher.hash_one(&**arc);
+        match self
+            .values
+            .entry(h, |(_, existing)| **existing == **arc, |&(h, _)| h)
+        {
+            Entry::Occupied(entry) => {
+                let (_, found) = entry.get();
+                (!Arc::ptr_eq(found, arc)).then(|| CompactValue::from_arc(Arc::clone(found)))
+            }
+            Entry::Vacant(entry) => {
+                entry.insert((h, Arc::clone(arc)));
+                None
+            }
         }
     }
 
@@ -295,16 +326,12 @@ impl<V: Eq + Hash + Clone> Compactor<V> {
         )
     }
 
-    // 再帰中のスタックフレームに大きな `V` の一時領域が載らないよう、値を含みうる構築を分離する
-    #[inline(never)]
     fn intern_rebuilt_branch(
         &mut self,
         orig: &Branch<V>,
-        lower_opt: Option<SharedNode<V>>,
-        upper_opt: Option<SharedNode<V>>,
+        lower_node: Option<Node<V>>,
+        upper_node: Option<Node<V>>,
     ) -> Arc<Branch<V>> {
-        let lower_node = lower_opt.map(Node::from);
-        let upper_node = upper_opt.map(Node::from);
         let key = (
             orig.dimension,
             ShallowNode(lower_node.as_ref().unwrap_or(&orig.lower)),
@@ -327,9 +354,7 @@ impl<V: Eq + Hash + Clone> Compactor<V> {
         }
     }
 
-    #[inline(never)]
-    fn intern_rebuilt_skip(&mut self, orig: &Skip<V>, child: SharedNode<V>) -> Arc<Skip<V>> {
-        let child_node = Node::from(child);
+    fn intern_rebuilt_skip(&mut self, orig: &Skip<V>, child_node: Node<V>) -> Arc<Skip<V>> {
         let key = (orig.path, ShallowNode(&child_node));
         match self.skips.entry(&key) {
             (_, Entry::Occupied(entry)) => Arc::clone(&entry.get().1),

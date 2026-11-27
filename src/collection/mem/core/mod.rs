@@ -9,6 +9,7 @@ use core::ops::RangeBounds;
 pub use iter::IntoIter;
 pub(crate) use iter::Iter;
 use node::{Decision, Node};
+use value::CompactValue;
 use view::View;
 
 #[cfg(any(feature = "unstable", test))]
@@ -17,6 +18,7 @@ mod iter;
 mod node;
 #[cfg(test)]
 mod tests;
+mod value;
 mod view;
 
 /// [FlexId]に対して割り当てられている値`V`を管理するためのインデックス構造。
@@ -85,11 +87,13 @@ impl<V> FlexTreeCore<V> {
             from_fn(move || {
                 while let Some((node, this)) = stack.pop() {
                     match node {
-                        Node::Value(value) => return Some((this.intersection(&t)?, value)),
+                        Node::Value(value) => {
+                            return Some((this.intersection(&t)?, value.as_ref()));
+                        }
                         // 積んだ領域が `t` と重なっていても、埋め込んだ行き先は重ならないことがある
                         Node::ShortSkipValue(path, value) => {
                             if let Some(region) = path.to_absolute(&this).intersection(&t) {
-                                return Some((region, value));
+                                return Some((region, value.as_ref()));
                             }
                         }
                         Node::Branch(branch) => push_overlapping(&mut stack, branch, this, &t),
@@ -190,11 +194,11 @@ impl<V> FlexTreeCore<V> {
             while let Some((mut node, mut this)) = stack.pop() {
                 loop {
                     match node {
-                        Node::Value(value) => return Some((this, value)),
+                        Node::Value(value) => return Some((this, value.as_ref())),
                         Node::ShortSkipValue(path, value) => {
                             let region = path.to_absolute(&this);
                             if overlaps(&region) {
-                                return Some((region, value));
+                                return Some((region, value.as_ref()));
                             }
                             break;
                         }
@@ -341,7 +345,7 @@ impl<V: PartialEq + Clone> FlexTreeCore<V> {
                 _ if written.is_empty() => {}
                 (None, _) => *existing = written.to_node(this),
                 (Some(Node::Value(old)), Some(new)) => {
-                    *existing = Some(Node::Value(resolve(old, new)))
+                    *existing = Some(Node::Value(CompactValue::new(resolve(old.as_ref(), new))))
                 }
                 _ => return false,
             }
@@ -354,7 +358,7 @@ impl<V: PartialEq + Clone> FlexTreeCore<V> {
     /// 1回の降下で、`target` に覆われた Node をその領域ごと抜き取り、あとで取り除いた部分に組み直す。
     pub fn remove(&mut self, target: impl IntoIterator<Item = FlexId>) -> Self {
         let cut = RefCell::new(Vec::new());
-        let whole = Node::<()>::Value(());
+        let whole = Node::<()>::Value(CompactValue::new(()));
         let rule = |this: &FlexId, a: &mut Option<Node<V>>, b: View<'_, ()>| {
             if b.value().is_some() {
                 if let Some(node) = a.take() {
@@ -436,7 +440,7 @@ impl<V: PartialEq + Clone> FlexTreeCore<V> {
         value: V,
         rule: &impl Fn(&FlexId, &mut Option<Node<V>>, View<'_, V>) -> bool,
     ) {
-        let value_node = Node::Value(value);
+        let value_node = Node::Value(CompactValue::new(value));
         for id in target {
             let (root, root_id) = self.root_for(&id);
             Node::merge(&root_id, root, View::skip(&root_id, id, &value_node), rule);
