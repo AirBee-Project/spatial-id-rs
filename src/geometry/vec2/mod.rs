@@ -120,6 +120,26 @@ impl Vec2 {
                 .all(|(&a, &b)| Self::ring_contains_point(outer, a.midpoint(b)))
     }
 
+    /// `inner` が境界への接触も含めず `outer` の真の内部に完全に収まっているかを判定する。
+    #[cfg(feature = "unstable")]
+    pub(crate) fn ring_is_strictly_inside(inner: &[Self], outer: &[Self], eps: f64) -> bool {
+        if inner.len() < 3 || outer.len() < 3 {
+            return false;
+        }
+        let eps2 = eps * eps;
+        if !inner.iter().all(|&p| Self::ring_contains_point(outer, p)) {
+            return false;
+        }
+        for (&c, &d) in inner.iter().zip(inner.iter().cycle().skip(1)) {
+            for (&a, &b) in outer.iter().zip(outer.iter().cycle().skip(1)) {
+                if Self::segments_touch_or_cross(c, d, a, b, eps2) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     /// 近接頂点の重複と、ほぼ共線な中間頂点を除去する。
     #[cfg(feature = "unstable")]
     pub(crate) fn simplify_ring(pts: &mut Vec<Self>, dedup_eps2: f64, collinear_eps2: f64) {
