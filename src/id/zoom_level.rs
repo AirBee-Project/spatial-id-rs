@@ -81,6 +81,28 @@ impl<const LIMIT: u8> Zoom<LIMIT> {
         self.0
     }
 
+    /// ズーム範囲を `0..=LIMIT` に収め、`start > end` の場合は `end..=end` に正規化する。
+    #[cfg(any(test, feature = "random"))]
+    pub(crate) fn clamp_range(
+        range: core::ops::RangeInclusive<u8>,
+    ) -> core::ops::RangeInclusive<u8> {
+        let start = *range.start();
+        let end = (*range.end()).min(LIMIT);
+        if start > end { end..=end } else { start..=end }
+    }
+
+    /// 指定範囲からランダムなズームレベルを選ぶ。
+    #[cfg(any(test, feature = "random"))]
+    pub(crate) fn random_in<R: rand::Rng>(
+        rng: &mut R,
+        range: core::ops::RangeInclusive<u8>,
+    ) -> Self {
+        use rand::RngExt;
+        let clamped = Self::clamp_range(range);
+        // SAFETY: clamp_range は LIMIT 以下に収める。
+        unsafe { Self::new_unchecked(rng.random_range(clamped)) }
+    }
+
     /// このズームレベルにおけるインデックスの最大値（`2^z - 1`）。
     /// 空間軸のX/Yと時間軸の `TimeSegment` とで共有する式。
     const fn max_index_u64(self) -> u64 {

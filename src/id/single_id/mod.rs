@@ -4,6 +4,7 @@ pub mod convert;
 pub mod encode;
 pub mod impls;
 pub mod ops;
+#[cfg(any(test, feature = "random"))]
 pub mod random;
 #[cfg(test)]
 mod test;
