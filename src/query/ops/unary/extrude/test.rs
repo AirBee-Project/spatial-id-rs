@@ -23,3 +23,22 @@ fn extrude_x_reverse_target_overlaps_wrapped_bounds() {
         "折り返した bounds との重なりを見落としている"
     );
 }
+
+#[test]
+fn extrude_x_wrapped_emits_both_boundary_sides() {
+    use crate::{SingleId, Source, SpatialIdMap};
+
+    let mut table = SpatialIdMap::new();
+    table.insert(SingleId::new(3, 0, 0, 0).unwrap(), 10u32);
+
+    let out = table
+        .query()
+        .extrude_x(3, 6, 1, Sum)
+        .get(..)
+        .into_map()
+        .unwrap();
+
+    let xs: alloc::collections::BTreeSet<u32> =
+        out.flat_single_ids(None).map(|(sid, _)| sid.x()).collect();
+    assert_eq!(xs, alloc::collections::BTreeSet::from([0, 1, 6, 7]));
+}

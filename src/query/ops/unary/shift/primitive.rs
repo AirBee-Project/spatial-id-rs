@@ -1,8 +1,8 @@
+use crate::query::ops::unary::wrapped_x_ranges;
 use crate::{
     Error, FlexId, SpatialIdError, ZoomLevel,
     id::range_id::convert::{split_f, split_xy},
 };
-use alloc::vec::Vec;
 
 impl FlexId {
     /// このFlexIdを高さ（F）方向へ、ズームレベル `z` のインデックス値 `index` 個分だけ平行移動した結果を返す。
@@ -90,16 +90,9 @@ impl FlexId {
         let left = self.x_index() as i64 * segment_scale + delta_index;
         let right = left + segment_scale - 1;
 
-        let left_wrapped = left.rem_euclid(circumference);
-        let right_wrapped = right.rem_euclid(circumference);
-        let ranges: Vec<[u32; 2]> = if left_wrapped <= right_wrapped {
-            vec![[left_wrapped as u32, right_wrapped as u32]]
-        } else {
-            vec![
-                [left_wrapped as u32, (circumference - 1) as u32],
-                [0, right_wrapped as u32],
-            ]
-        };
+        let left_wrapped = left.rem_euclid(circumference) as u32;
+        let right_wrapped = right.rem_euclid(circumference) as u32;
+        let ranges = wrapped_x_ranges(left_wrapped, right_wrapped, (circumference - 1) as u32);
 
         let f_zoomlevel = self.f_zoomlevel();
         let f_index = self.f_index();
@@ -108,7 +101,6 @@ impl FlexId {
         let (t_zoomlevel, t_index) = (self.t_zoomlevel(), self.t_index());
 
         Ok(ranges
-            .into_iter()
             .flat_map(move |range| split_xy(max_z, range))
             .map(move |(seg_z, seg_index)| {
                 // SAFETY: 空間成分は範囲内検証済み、時間成分は元の有効な FlexId を継承

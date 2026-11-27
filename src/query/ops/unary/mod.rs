@@ -16,3 +16,18 @@ pub(crate) fn sort_by_flex_id<T: Send + Sync>(items: &mut [(FlexId, T)]) {
     #[cfg(not(feature = "rayon"))]
     items.sort_by_key(|a| a.0.field_key());
 }
+
+/// 東西へ巡回する X 範囲 `[start, end]` を、経度 180 度跨ぎの有無に応じて 1〜2 区間へ分ける。
+#[inline]
+pub(crate) fn wrapped_x_ranges(
+    start: u32,
+    end: u32,
+    xy_max: u32,
+) -> impl Iterator<Item = [u32; 2]> {
+    let ranges = if start <= end {
+        [Some([start, end]), None]
+    } else {
+        [Some([start, xy_max]), Some([0, end])]
+    };
+    ranges.into_iter().flatten()
+}

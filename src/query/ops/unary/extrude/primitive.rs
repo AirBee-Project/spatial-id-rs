@@ -1,8 +1,8 @@
+use crate::query::ops::unary::wrapped_x_ranges;
 use crate::{
     Error, FlexId, SpatialIdError, ZoomLevel,
     id::range_id::convert::{split_f, split_xy},
 };
-use alloc::vec::Vec;
 
 impl FlexId {
     /// このFlexIdのF方向の占有を、ズーム `z` の絶対座標範囲 `[start_f, end_f]` に置き換える。
@@ -58,11 +58,7 @@ impl FlexId {
         }
 
         // start_x から東向きに end_x まで。境界跨ぎ（start_x > end_x）は2区間へ分ける。
-        let ranges: Vec<[u32; 2]> = if start_x <= end_x {
-            vec![[start_x, end_x]]
-        } else {
-            vec![[start_x, xy_max], [0, end_x]]
-        };
+        let ranges = wrapped_x_ranges(start_x, end_x, xy_max);
         let f_zoomlevel = self.f_zoomlevel();
         let f_index = self.f_index();
         let y_zoomlevel = self.y_zoomlevel();
@@ -70,7 +66,6 @@ impl FlexId {
         let (t_zoomlevel, t_index) = (self.t_zoomlevel(), self.t_index());
 
         Ok(ranges
-            .into_iter()
             .flat_map(move |range| split_xy(z, range))
             .map(move |(seg_z, seg_index)| {
                 // SAFETY: 空間成分は範囲内検証済み、時間成分は元の有効な FlexId を継承
