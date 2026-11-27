@@ -1,13 +1,30 @@
 use alloc::vec::Vec;
 
+#[cfg(feature = "unstable")]
+use i_triangle::float::triangulatable::Triangulatable;
+
 use crate::{
     Coordinate, Ecef, ExpandCoordinates, ExpandLines, ExpandTriangles, Line, Polygon, Triangle,
     Vec2,
 };
+#[cfg(feature = "unstable")]
+use crate::{Vec3, Vec3Ecef};
 
 impl ExpandCoordinates for Polygon {
     fn expand_coordinates(&self) -> impl Iterator<Item = Coordinate> {
-        self.vertices.clone().into_iter()
+        #[cfg(feature = "unstable")]
+        {
+            self.vertices
+                .iter()
+                .chain(self.holes.iter().flatten())
+                .copied()
+                .collect::<Vec<_>>()
+                .into_iter()
+        }
+        #[cfg(not(feature = "unstable"))]
+        {
+            self.vertices.clone().into_iter()
+        }
     }
 }
 
@@ -23,6 +40,11 @@ impl ExpandTriangles for Polygon {
         let n = self.vertices.len();
         if n < 3 {
             return Vec::<Triangle>::new().into_iter();
+        }
+
+        #[cfg(feature = "unstable")]
+        if !self.holes.is_empty() {
+            return self.triangulate_with_holes().into_iter();
         }
 
         if n == 3 {
@@ -41,18 +63,16 @@ impl ExpandTriangles for Polygon {
         let (u_axis, v_axis) = get_projection_axes(&ecef_points);
 
         // 2D投影
-        let points_2d: Vec<(f64, f64)> = ecef_points
+        let points_2d: Vec<Vec2> = ecef_points
             .iter()
-            .map(|p| p.project_2d(u_axis, v_axis))
+            .map(|p| {
+                let (x, y) = p.project_2d(u_axis, v_axis);
+                Vec2::new(x, y)
+            })
             .collect();
 
         // 回転方向の検知
-        let area = Vec2::signed_area(
-            &points_2d
-                .iter()
-                .map(|&(x, y)| Vec2::new(x, y))
-                .collect::<Vec<_>>(),
-        );
+        let area = Vec2::signed_area(&points_2d);
         let area_sign = if area > 0.0 { 1.0 } else { -1.0 };
 
         // 耳切りループ
@@ -101,6 +121,60 @@ impl ExpandTriangles for Polygon {
     }
 }
 
+#[cfg(feature = "unstable")]
+impl Polygon {
+    /// 穴付きポリゴンを 2D 平面へ投影し、`i_triangle` で三角形分割して 3D `Triangle` 列を返す。
+    fn triangulate_with_holes(&self) -> Vec<Triangle> {
+        let origin = Vec3Ecef::from(self.vertices[0]);
+        let rel: Vec<Vec3Ecef> = self
+            .vertices
+            .iter()
+            .map(|&c| Vec3Ecef::from(c) - origin)
+            .collect();
+        let normal = Self::newell_normal(&rel).unwrap_or_else(|| Vec3Ecef::new(0.0, 0.0, 1.0));
+        let [u, v] = normal.create_orthonormal_basis();
+
+        let project = |ring: &[Coordinate]| -> Vec<Vec2> {
+            ring.iter()
+                .map(|&c| {
+                    let r = Vec3Ecef::from(c) - origin;
+                    Vec2::new(r.dot(&u), r.dot(&v))
+                })
+                .collect()
+        };
+
+        let mut outer = project(&self.vertices);
+        Vec2::ensure_ccw(&mut outer);
+
+        let mut contours: Vec<Vec<[f64; 2]>> = Vec::with_capacity(1 + self.holes.len());
+        contours.push(outer.into_iter().map(|p| [p.x, p.y]).collect());
+        for hole in &self.holes {
+            let mut pts = project(hole);
+            if Vec2::signed_area(&pts) > 0.0 {
+                pts.reverse();
+            }
+            contours.push(pts.into_iter().map(|p| [p.x, p.y]).collect());
+        }
+
+        let tri = contours.triangulate_as::<i64>().to_triangulation::<usize>();
+        let coords: Vec<Coordinate> = tri
+            .points
+            .into_iter()
+            .filter_map(|[x, y]| Coordinate::try_from(origin + u.scale(x) + v.scale(y)).ok())
+            .collect();
+        if coords.len() < tri.indices.iter().copied().max().map_or(0, |m| m + 1) {
+            return Vec::new();
+        }
+
+        tri.indices
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|&[a, b, c]| Triangle::new([coords[a], coords[b], coords[c]]))
+            .collect()
+    }
+}
+
 /// Newell's Method による法線概算と投影軸の選択
 pub(crate) fn get_projection_axes(pts: &[Ecef]) -> (usize, usize) {
     let mut nx = 0.0;
@@ -131,27 +205,16 @@ pub(crate) fn get_projection_axes(pts: &[Ecef]) -> (usize, usize) {
     }
 }
 
-fn is_ear(
-    p: usize,
-    c: usize,
-    n: usize,
-    indices: &[usize],
-    pts: &[(f64, f64)],
-    area_sign: f64,
-) -> bool {
+fn is_ear(p: usize, c: usize, n: usize, indices: &[usize], pts: &[Vec2], area_sign: f64) -> bool {
     let a = pts[p];
     let b = pts[c];
     let c_pt = pts[n];
 
-    // 2D外積 (z成分)
-    let cross = (b.0 - a.0) * (c_pt.1 - b.1) - (b.1 - a.1) * (c_pt.0 - b.0);
-
-    // 凹判定
+    let cross = (b - a).cross(c_pt - b);
     if cross * area_sign <= -1e-10 {
         return false;
     }
 
-    // 包含判定
     for &idx in indices {
         if idx == p || idx == c || idx == n {
             continue;
@@ -163,12 +226,12 @@ fn is_ear(
     true
 }
 
-fn is_point_in_triangle(p: (f64, f64), a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> bool {
-    let area2 = 0.5 * (-b.1 * c.0 + a.1 * (-b.0 + c.0) + a.0 * (b.1 - c.1) + b.0 * c.1);
+fn is_point_in_triangle(p: Vec2, a: Vec2, b: Vec2, c: Vec2) -> bool {
+    let area2 = (b - a).cross(c - a);
     if libm::fabs(area2) < 1e-12 {
         return false;
     }
-    let s = 1.0 / (2.0 * area2) * (a.1 * c.0 - a.0 * c.1 + (c.1 - a.1) * p.0 + (a.0 - c.0) * p.1);
-    let t = 1.0 / (2.0 * area2) * (a.0 * b.1 - a.1 * b.0 + (a.1 - b.1) * p.0 + (b.0 - a.0) * p.1);
+    let s = (p - a).cross(c - a) / area2;
+    let t = (b - a).cross(p - a) / area2;
     s > 0.0 && t > 0.0 && (1.0 - s - t) > 0.0
 }

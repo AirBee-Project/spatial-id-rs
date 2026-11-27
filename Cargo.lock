@@ -483,6 +483,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "048af31de955890c62a8506fec511335a5089e91e1c516537add16f96c507d84"
 
 [[package]]
+name = "i_triangle"
+version = "0.51.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5810bd8c70d8eeb3b0cdf997d98576a244c3c4353e09aaf90ee1374cfdcff9ba"
+dependencies = [
+ "i_key_sort",
+ "i_overlay",
+ "i_tree",
+]
+
+[[package]]
 name = "id-arena"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -918,6 +929,7 @@ dependencies = [
  "geojson",
  "hashbrown 0.17.1",
  "i_overlay",
+ "i_triangle",
  "insta",
  "libm",
  "proptest",
