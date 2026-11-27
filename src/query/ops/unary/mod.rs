@@ -16,3 +16,17 @@ pub(crate) fn sort_by_flex_id<T: Send + Sync>(items: &mut [(FlexId, T)]) {
     #[cfg(not(feature = "rayon"))]
     items.sort_by_key(|a| a.0.field_key());
 }
+
+/// `input` から最大 `limit` 件を `chunk` へ読み直す。1 件も読めなければ `false` を返す。
+#[cfg(feature = "rayon")]
+pub(crate) fn next_chunk<V>(
+    input: &mut crate::query::QueryIter<'_, V>,
+    chunk: &mut alloc::vec::Vec<(FlexId, V)>,
+    limit: usize,
+) -> Result<bool, crate::Error> {
+    chunk.clear();
+    for item in input.by_ref().take(limit) {
+        chunk.push(item?);
+    }
+    Ok(!chunk.is_empty())
+}

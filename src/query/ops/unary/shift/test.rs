@@ -97,3 +97,19 @@ fn shift_fxy_partial_get_matches_whole() {
     }
     assert!(compared >= 50, "空でない比較が {compared} 件だけ");
 }
+
+#[test]
+fn shift_across_multiple_chunks_matches_count() {
+    use crate::SingleId;
+
+    // `CHUNK = 65536` を跨ぐ件数で `next_chunk` の再利用経路を通す
+    let table: SpatialIdMap<u32> = (0..70_000u32)
+        .map(|i| {
+            let x = i >> 2;
+            let y = i & 3;
+            (SingleId::new(20, 0, x, y).unwrap(), i)
+        })
+        .collect();
+    let shifted = table.query().shift_x(20, 1).get(..).into_map().unwrap();
+    assert_eq!(shifted.count(), 70_000);
+}

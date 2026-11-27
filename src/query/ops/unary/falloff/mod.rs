@@ -206,12 +206,11 @@ impl<P> Falloff<P> {
                 a.merge_with(&b, &resolve);
                 a
             };
-            let mut input = input.peekable();
+            let mut input = input;
+            let mut chunk = Vec::new();
             // 塊ごとに蓄積した木へ合成すると、木全体の複製が塊の数だけ走るので、最後に二分木状にまとめる
             let mut parts = Vec::new();
-            while input.peek().is_some() {
-                let chunk: Vec<(FlexId, V)> =
-                    input.by_ref().take(CHUNK).collect::<Result<_, _>>()?;
+            while crate::query::ops::unary::next_chunk(&mut input, &mut chunk, CHUNK)? {
                 parts.push(
                     chunk
                         .par_iter()

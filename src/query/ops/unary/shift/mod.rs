@@ -73,12 +73,11 @@ impl<V: SafeValue + 'static> UnaryOperator<V> for Shift {
             // 入力を区切って読むので、一度に持つ入力はこの数までに収まる
             const CHUNK: usize = 1 << 16;
             let union = |a: SpatialIdMap<V>, b: SpatialIdMap<V>| a.union(&b);
-            let mut input = input.peekable();
+            let mut input = input;
+            let mut chunk = Vec::new();
             // 塊ごとに蓄積した木へ union すると、木全体の複製が塊の数だけ走るので、最後に二分木状にまとめる
             let mut parts = Vec::new();
-            while input.peek().is_some() {
-                let chunk: Vec<(FlexId, V)> =
-                    input.by_ref().take(CHUNK).collect::<Result<_, _>>()?;
+            while crate::query::ops::unary::next_chunk(&mut input, &mut chunk, CHUNK)? {
                 parts.push(
                     chunk
                         .par_iter()
