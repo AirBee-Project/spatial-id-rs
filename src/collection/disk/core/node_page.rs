@@ -102,7 +102,7 @@ impl NodePage {
     }
 
     /// 1 ページに収まる `node` を NodePage へ書き出す。
-    fn encode(node: &Node) -> Box<Self> {
+    pub(super) fn encode(node: &Node) -> Box<Self> {
         let len = node.len();
         assert!(len <= Self::BODY_LEN);
         let mut node_page = Self::new_box_zeroed().unwrap_or_else(|_| {

@@ -1,3 +1,4 @@
+mod compact;
 mod edit;
 mod node;
 mod node_page;
@@ -20,7 +21,8 @@ mod tests;
 ///
 /// 書き換えた Node は、ファイル上のページを上書きせず、ファイルの末尾へすぐ書き足す（追記のみ）。
 /// [`commit`](Self::commit) でメタページを書き換えるまでは直前のコミットの状態がファイルに残るので、
-/// 途中で落ちても直前のコミットに戻る。参照されなくなったページはファイルにそのまま残る。
+/// 途中で落ちても直前のコミットに戻る。参照されなくなったページはファイルにそのまま残り、
+/// [`compact`](Self::compact) を呼んだときにだけ、ページを書き直して取り除く。
 #[derive(Debug)]
 pub struct FlexTreeCore<V> {
     file: PagedFile,

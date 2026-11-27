@@ -161,6 +161,15 @@ impl PagedFile {
         self.call(|reply| Request::Write { id, page, reply }).await
     }
 
+    /// ファイルを先頭の `len` ページに切り詰める。
+    ///
+    /// 切り詰めは永続化を待たない。落ちて切り詰めが消えても、残るのはどこからも辿られないページだけになる。
+    pub(crate) async fn truncate(&mut self, len: u64) -> Result<(), DiskError> {
+        self.call(|reply| Request::Truncate { len, reply }).await?;
+        self.len = len;
+        Ok(())
+    }
+
     /// ここまでに書いたページを永続化する。
     pub(crate) async fn sync(&self) -> Result<(), DiskError> {
         self.call(Request::Sync).await
@@ -252,6 +261,9 @@ impl PagedFile {
                     Request::Write { id, page, reply } => {
                         let _ = reply.send(file.write_all_at(page, Page::offset(id)).await.0);
                     }
+                    Request::Truncate { len, reply } => {
+                        let _ = reply.send(file.set_len(len * Page::SIZE as u64).await);
+                    }
                     Request::Sync(reply) => {
                         let _ = reply.send(file.sync_data().await);
                     }
@@ -277,6 +289,10 @@ enum Request {
     Write {
         id: PageId,
         page: Box<Page>,
+        reply: Reply<()>,
+    },
+    Truncate {
+        len: u64,
         reply: Reply<()>,
     },
     Sync(Reply<()>),

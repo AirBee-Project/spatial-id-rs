@@ -987,3 +987,260 @@ fn standard_disk_values_round_trip() {
     ];
     assert_eq!(names.iter().collect::<HashSet<_>>().len(), names.len());
 }
+
+/// ランダムな insert / upsert / remove を `count` 回施し、同じ操作を施した期待値を返す。
+async fn apply_random_operations(
+    tree: &mut Tree,
+    rng: &mut ChaCha8Rng,
+    expected: &mut HashMap<FlexId, u64>,
+    count: usize,
+) {
+    for _ in 0..count {
+        let target = random_target(rng);
+        let value = rng.random_range(0..4u64);
+        let cells = grid().filter(|cell| target.contains(cell));
+        match rng.random_range(0..3) {
+            0 => {
+                tree.insert(target, value).await.unwrap();
+                cells.for_each(|cell| {
+                    expected.insert(cell, value);
+                });
+            }
+            1 => {
+                tree.upsert(target, value).await.unwrap();
+                cells.for_each(|cell| {
+                    expected.entry(cell).or_insert(value);
+                });
+            }
+            _ => {
+                tree.remove(target).await.unwrap();
+                cells.for_each(|cell| {
+                    expected.remove(&cell);
+                });
+            }
+        }
+    }
+}
+
+/// 全セルに異なる値を書いた、RefPage を含む木。
+async fn insert_distinct_values(tree: &mut Tree) -> HashMap<FlexId, u64> {
+    let expected: HashMap<FlexId, u64> = grid().zip(0..).collect();
+    for (&cell, &value) in &expected {
+        tree.insert(cell, value).await.unwrap();
+    }
+    expected
+}
+
+/// compact したファイルは、生きているページだけが行きがけ順にページ 2 から並び、その長さに切り詰められている。
+async fn assert_compacted(tree: &Tree, path: &Path) {
+    let pages = tree.live_pages_in_preorder().await.unwrap();
+    let slot_count = MetaPage::SLOTS.len() as u64;
+    let ids: Vec<u64> = pages.iter().map(|(id, _)| id.0).collect();
+    let preorder: Vec<u64> = (slot_count..slot_count + pages.len() as u64).collect();
+    assert_eq!(ids, preorder);
+    assert_eq!(tree.file.len(), slot_count + pages.len() as u64);
+    assert_eq!(
+        fs::metadata(path).unwrap().len(),
+        (slot_count + pages.len() as u64) * Page::SIZE as u64
+    );
+}
+
+/// 乱択の書き換えとコミットを重ねたファイルを compact しても内容は変わらず、ファイルは縮み、開き直しても読める。
+#[test]
+fn compact_keeps_contents_and_shrinks_file() {
+    for seed in 0..4 {
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let file = TempFile::new();
+        let mut expected = HashMap::new();
+        block_on(async {
+            let mut tree = Tree::open(&file.0).await.unwrap();
+            for _ in 0..4 {
+                apply_random_operations(&mut tree, &mut rng, &mut expected, 40).await;
+                tree.commit().await.unwrap();
+            }
+            let before = fs::metadata(&file.0).unwrap().len();
+
+            tree.compact().await.unwrap();
+            assert!(fs::metadata(&file.0).unwrap().len() < before);
+            assert_compacted(&tree, &file.0).await;
+            assert_roots(&tree, &expected).await;
+            tree.close().await.unwrap();
+
+            let tree = Tree::open(&file.0).await.unwrap();
+            assert_cells(&tree, &expected).await;
+            tree.close().await.unwrap();
+        });
+    }
+}
+
+/// RefPage が続く木も行きがけ順に並び、compact の後も書き換えと compact を続けられる。
+#[test]
+fn compact_orders_multi_page_tree_and_allows_further_edits() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        let mut expected = insert_distinct_values(&mut tree).await;
+        tree.compact().await.unwrap();
+        assert!(tree.live_pages_in_preorder().await.unwrap().len() > 2);
+        assert_compacted(&tree, &file.0).await;
+        assert_cells(&tree, &expected).await;
+
+        for cell in grid().step_by(5) {
+            tree.remove(cell).await.unwrap();
+            expected.remove(&cell);
+        }
+        tree.compact().await.unwrap();
+        assert_compacted(&tree, &file.0).await;
+        tree.close().await.unwrap();
+
+        let tree = Tree::open(&file.0).await.unwrap();
+        assert_cells(&tree, &expected).await;
+        tree.close().await.unwrap();
+    });
+}
+
+/// 2回続けて compact しても、ファイルの長さと内容は変わらない。
+#[test]
+fn compact_is_idempotent() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        let expected = insert_distinct_values(&mut tree).await;
+        tree.compact().await.unwrap();
+        let len = fs::metadata(&file.0).unwrap().len();
+        tree.compact().await.unwrap();
+        assert_eq!(fs::metadata(&file.0).unwrap().len(), len);
+        assert_compacted(&tree, &file.0).await;
+        assert_roots(&tree, &expected).await;
+        tree.close().await.unwrap();
+    });
+}
+
+/// 空の木の compact はメタページ2枚だけのファイルにし、その後も書き込める。
+#[test]
+fn compact_empty_tree() {
+    let file = TempFile::new();
+    let id = FlexId::new(3, 1, 3, 2, 3, 4).unwrap();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        tree.insert(id, 1).await.unwrap();
+        tree.remove(id).await.unwrap();
+        tree.compact().await.unwrap();
+        assert_compacted(&tree, &file.0).await;
+        assert_eq!(tree.file.len(), MetaPage::SLOTS.len() as u64);
+
+        tree.insert(id, 2).await.unwrap();
+        tree.commit().await.unwrap();
+        tree.close().await.unwrap();
+
+        let tree = Tree::open(&file.0).await.unwrap();
+        assert_eq!(tree.get(id).await.unwrap(), [(id, 2)]);
+        tree.close().await.unwrap();
+    });
+}
+
+/// compact はコミットを兼ね、まだコミットしていない変更もファイルに残す。
+#[test]
+fn compact_commits_pending_changes() {
+    let file = TempFile::new();
+    let id = FlexId::new(3, 1, 3, 2, 3, 4).unwrap();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        tree.insert(id, 1).await.unwrap();
+        tree.compact().await.unwrap();
+        tree.close().await.unwrap();
+
+        let tree = Tree::open(&file.0).await.unwrap();
+        assert_eq!(tree.get(id).await.unwrap(), [(id, 1)]);
+        tree.close().await.unwrap();
+    });
+}
+
+/// compact 後は両方のメタページが同じ木を指すので、片方が壊れても同じ内容で開ける。
+#[test]
+fn compact_leaves_both_meta_slots_valid() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        let expected = insert_distinct_values(&mut tree).await;
+        tree.compact().await.unwrap();
+        tree.close().await.unwrap();
+
+        for slot in MetaPage::SLOTS {
+            flip_byte(&file.0, page_offset(slot));
+            let tree = Tree::open(&file.0).await.unwrap();
+            assert_roots(&tree, &expected).await;
+            tree.close().await.unwrap();
+            flip_byte(&file.0, page_offset(slot));
+        }
+    });
+}
+
+/// compact の各手順の後で落ちても、同じ内容で開け、そこから compact し直せる。
+///
+/// 止める位置は、末尾へ写した後（メタページは元の木）、メタページを写しに向けた後、先頭へ書き戻した後
+/// （メタページはまだ写し）、メタページを書き戻した先に向けた後（切り詰める前）の4つ。
+#[test]
+fn compact_survives_interruption_at_each_step() {
+    for stop in 1..=4 {
+        let file = TempFile::new();
+        block_on(async {
+            let mut tree = Tree::open(&file.0).await.unwrap();
+            let expected = insert_distinct_values(&mut tree).await;
+            tree.commit().await.unwrap();
+
+            let roots = tree.roots;
+            let pages = tree.live_pages_in_preorder().await.unwrap();
+            let copy = tree.relocate(roots, &pages, tree.file.len()).await.unwrap();
+            if stop >= 2 {
+                tree.roots = copy;
+                tree.persist_to_both_slots().await.unwrap();
+            }
+            if stop >= 3 {
+                tree.roots = tree
+                    .relocate(roots, &pages, MetaPage::SLOTS.len() as u64)
+                    .await
+                    .unwrap();
+            }
+            if stop >= 4 {
+                tree.persist_to_both_slots().await.unwrap();
+            }
+            tree.close().await.unwrap();
+
+            let mut tree = Tree::open(&file.0).await.unwrap();
+            assert_cells(&tree, &expected).await;
+            tree.compact().await.unwrap();
+            assert_compacted(&tree, &file.0).await;
+            assert_roots(&tree, &expected).await;
+            tree.close().await.unwrap();
+        });
+    }
+}
+
+/// RefPage が自分のページを指す（循環した）壊れた木は、辿り続けずに Corrupt を返す。
+#[test]
+fn compact_rejects_cyclic_ref_page() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut tree = Tree::open(&file.0).await.unwrap();
+        let page_id = tree.file.alloc();
+        let node = Node::Branch {
+            dimension: Dimension::X,
+            split_dimensions: DimensionSet::from(Dimension::X),
+            lower: Box::new(Node::RefPage {
+                page_id,
+                split_dimensions: DimensionSet::from(Dimension::X),
+            }),
+            upper: Box::new(value_node(1)),
+        };
+        tree.file
+            .write(page_id, Page::of(&*NodePage::encode(&node)))
+            .await
+            .unwrap();
+        tree.roots = [Some(page_id), None];
+        tree.commit().await.unwrap();
+
+        assert!(is_corrupt(tree.compact().await));
+        tree.close().await.unwrap();
+    });
+}
