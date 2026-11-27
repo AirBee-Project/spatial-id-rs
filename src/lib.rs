@@ -33,6 +33,9 @@ mod id;
 pub mod query;
 pub mod time;
 
+#[cfg(any(doc, doctest))]
+pub mod _tutorial;
+
 pub use error::Error;
 pub use id::{
     FlexId, IntoRange, RangeId, Side, SingleId, SpatialId, SpatialIdError, Zoom, ZoomLevel,
