@@ -33,6 +33,8 @@ mod id;
 pub mod query;
 pub mod time;
 
+#[cfg(feature = "disk")]
+pub use error::DiskError;
 pub use error::Error;
 pub use id::{
     FlexId, IntoRange, RangeId, Side, SingleId, SpatialId, SpatialIdError, Zoom, ZoomLevel,

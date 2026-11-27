@@ -86,6 +86,47 @@ impl RelativeFlexId {
         };
         Ok(absolute)
     }
+
+    /// [`encode`](Self::encode) / [`decode`](Self::decode) が扱う固定長バイト列の長さ。
+    #[cfg(feature = "disk")]
+    pub(crate) const ENCODED_LEN: usize = 20;
+
+    /// 自身を固定長バイト列に変換する。
+    #[cfg(feature = "disk")]
+    pub(crate) fn encode(&self) -> [u8; Self::ENCODED_LEN] {
+        let r = &self.0;
+        let z = u32::from(ZoomLevel::MAX.get());
+        // 各次元の下位ビットを、F / X / Y は最大ズーム、T は残りの幅で F から順に下位へ詰める
+        // relative_to が下位ビットだけを残すので F は非負。符号拡張で上位の次元を汚さないよう u32 を経由する
+        let index = u128::from(r.f_index() as u32)
+            | u128::from(r.x_index()) << z
+            | u128::from(r.y_index()) << (2 * z)
+            | u128::from(r.t_index()) << (3 * z);
+        let mut out = [0; Self::ENCODED_LEN];
+        out[..4].copy_from_slice(&[
+            r.f_zoomlevel(),
+            r.x_zoomlevel(),
+            r.y_zoomlevel(),
+            r.t_zoomlevel(),
+        ]);
+        out[4..].copy_from_slice(&index.to_be_bytes());
+        out
+    }
+
+    /// 固定長バイト列から [`RelativeFlexId`] を復元する（[`encode`](Self::encode) の逆変換）。
+    #[cfg(feature = "disk")]
+    pub(crate) fn decode(bytes: &[u8; Self::ENCODED_LEN]) -> Result<Self, Error> {
+        let [fz, xz, yz, tz, ..] = *bytes;
+        let index = u128::from_be_bytes(bytes[4..].try_into().unwrap());
+        let z = u32::from(ZoomLevel::MAX.get());
+        let field = |shift: u32, bits: u32| index >> shift & ((1 << bits) - 1);
+        let f = field(0, z) as i32;
+        let x = field(z, z) as u32;
+        let y = field(2 * z, z) as u32;
+        let t = field(3 * z, u32::from(TZoomLevel::MAX.get())) as u64;
+        let relative = FlexId::new(fz, f, xz, x, yz, y)?.time_with_segment(tz, t)?;
+        Ok(RelativeFlexId(relative))
+    }
 }
 
 impl From<ShortRelativeFlexId> for RelativeFlexId {
@@ -98,6 +139,15 @@ impl From<ShortRelativeFlexId> for RelativeFlexId {
             FlexId::new_unchecked(zf, low(0, zf) as i32, zx, low(zf, zx), zy, low(zf + zx, zy))
         };
         RelativeFlexId(relative)
+    }
+}
+
+/// [`ShortRelativeFlexId::from_bits`] の逆。
+#[cfg(feature = "disk")]
+impl From<ShortRelativeFlexId> for u16 {
+    #[inline]
+    fn from(short: ShortRelativeFlexId) -> u16 {
+        short.0
     }
 }
 
@@ -124,6 +174,13 @@ impl ShortRelativeFlexId {
         Some(ShortRelativeFlexId(
             u16::from(zf) | u16::from(zx) << 3 | u16::from(zy) << 6 | bits << 9,
         ))
+    }
+
+    /// `u16::from` の逆。深さの合計が [`Self::MAX_STEPS`] 段を超えるなら [`None`]。
+    #[cfg(feature = "disk")]
+    pub(crate) fn from_bits(bits: u16) -> Option<Self> {
+        let short = ShortRelativeFlexId(bits);
+        (short.zooms().into_iter().sum::<u8>() <= Self::MAX_STEPS).then_some(short)
     }
 
     #[inline]
@@ -219,6 +276,16 @@ mod tests {
         assert_eq!(rel.depth_on(Dimension::X), 3);
         assert_eq!(rel.depth_on(Dimension::Y), 0);
         assert_eq!(rel.to_absolute(&ancestor).unwrap(), descendant);
+    }
+
+    #[cfg(feature = "disk")]
+    #[test]
+    fn encode_round_trips() {
+        let ancestor = FlexId::new(2, 1, 1, 0, 3, 5).unwrap();
+        let descendant = FlexId::new(5, 12, 4, 7, 3, 5).unwrap();
+        let rel = descendant.relative_to(&ancestor).unwrap();
+        let encoded = rel.encode();
+        assert_eq!(RelativeFlexId::decode(&encoded).unwrap(), rel);
     }
 
     /// ShortRelativeFlexId に詰めた相対 ID は、元の相対 ID に戻せる。

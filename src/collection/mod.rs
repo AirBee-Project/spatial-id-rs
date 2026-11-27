@@ -2,6 +2,9 @@
 
 pub mod mem;
 
+#[cfg(feature = "disk")]
+pub mod disk;
+
 pub use self::mem::{IntoIter, SpatialIdMap, SpatialIdSet};
 
 #[cfg(test)]

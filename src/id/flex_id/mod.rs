@@ -85,6 +85,18 @@ impl FlexId {
         usize::from(self.f_index.is_negative())
     }
 
+    /// `target` を構成する FlexId を、含まれる [`ROOTS`](Self::ROOTS) ごとに振り分ける。
+    ///
+    /// どの FlexId も F の符号でどちらか一方のルートに丸ごと収まるので、振り分けた先で切り取らなくてよい。
+    #[cfg(feature = "disk")]
+    pub(crate) fn group_by_root(target: impl crate::SpatialId) -> [alloc::vec::Vec<FlexId>; 2] {
+        let mut groups = [alloc::vec::Vec::new(), alloc::vec::Vec::new()];
+        for id in target.flex_ids() {
+            groups[id.root_index()].push(id);
+        }
+        groups
+    }
+
     /// F/X/Y のズームレベルのうち、最も高いもの。
     pub(crate) fn spatial_max_zoomlevel(&self) -> ZoomLevel {
         self.f_zoomlevel.max(self.x_zoomlevel).max(self.y_zoomlevel)
@@ -457,6 +469,16 @@ impl FlexId {
             Dimension::Y => self.split_y(side),
             Dimension::T => self.split_t(side),
         }
+    }
+
+    /// `dimension` 方向で二つに切り分けた `[Lower 側, Upper 側]`。その軸が最大ズームなら [`None`]。
+    #[cfg(feature = "disk")]
+    #[inline]
+    pub(crate) fn halves(&self, dimension: Dimension) -> Option<[FlexId; 2]> {
+        Some([
+            self.split_on(dimension, Side::Lower)?,
+            self.split_on(dimension, Side::Upper)?,
+        ])
     }
 
     /// `dimension` 方向で二つに切り分けた側のうち、`target` を含む側を返す。その次元が最大ズームなら [`None`]。
