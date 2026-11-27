@@ -30,3 +30,10 @@
 | 付けない | `contains`, `intersects`, `single_ids`, `seconds_range`, `t_index` |
 
 接頭辞の直後に動詞・述語を置く（`spatial_is_face_neighbor`, `time_is_whole`）。
+
+## 4. `_epsilon` 接尾辞
+
+許容誤差（`Epsilon`）を指定するバリエーションには、元のメソッド名の末尾に `_epsilon` を付ける。デフォルト許容誤差（`Epsilon::DEFAULT`）を使う基本メソッドと対にする。
+
+- コンストラクタは `new` と `new_epsilon` の対にする（`Polygon::new` / `Polygon::new_epsilon`、`Solid::new` / `Solid::new_epsilon`）。
+- 比較などその他の操作でも同様に `_epsilon` を付ける（`Point::eq_epsilon`）。

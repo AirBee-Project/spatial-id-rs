@@ -50,7 +50,7 @@ mod cover_single_ids {
     }
 
     #[test]
-    fn solid_with_epsilon() {
+    fn solid_new_epsilon() {
         use crate::Epsilon;
         let p0 = Coordinate::new(35.000, 139.000, 0.0).unwrap();
         let p1 = Coordinate::new(35.001, 139.000, 0.0).unwrap();
@@ -63,7 +63,7 @@ mod cover_single_ids {
             Polygon::new(vec![p1, p2, p3]).unwrap(),
             Polygon::new(vec![p2, p0, p3]).unwrap(),
         ];
-        let solid = Solid::with_epsilon(faces, Epsilon::from_meters(0.001).unwrap());
+        let solid = Solid::new_epsilon(faces, Epsilon::from_meters(0.001).unwrap());
         assert!(solid.is_ok());
     }
 }

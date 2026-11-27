@@ -34,7 +34,7 @@ impl Solid {
     /// # 引数
     /// - `polygons` - 立体を構成する面のリスト。
     pub fn new(polygons: Vec<Polygon>) -> Result<Self, Error> {
-        Self::with_epsilon(polygons, Epsilon::DEFAULT)
+        Self::new_epsilon(polygons, Epsilon::DEFAULT)
     }
 
     /// 構成する面のリストと指定された許容誤差から [Solid] を作成。
@@ -47,7 +47,7 @@ impl Solid {
     /// # 引数
     /// - `polygons` - 立体を構成する面のリスト。
     /// - `epsilon` - 同一点とみなす許容誤差。
-    pub fn with_epsilon(polygons: Vec<Polygon>, epsilon: Epsilon) -> Result<Self, Error> {
+    pub fn new_epsilon(polygons: Vec<Polygon>, epsilon: Epsilon) -> Result<Self, Error> {
         let filtered_polygons: Vec<Polygon> = polygons
             .into_iter()
             .filter(|p| !p.vertices().is_empty()) // 無効な面は除外
