@@ -1,6 +1,9 @@
 //! 空間IDの集合 [`SpatialIdSet`] と、空間IDごとに値を持つマップ [`SpatialIdMap`]。
 
+#[cfg(feature = "unstable")]
+pub(crate) mod json;
 pub mod mem;
+pub(crate) mod time_reconstruct;
 
 pub use self::mem::{IntoIter, MapIter, SetIter, SpatialIdMap, SpatialIdSet};
 
@@ -8,4 +11,4 @@ pub use self::mem::{IntoIter, MapIter, SetIter, SpatialIdMap, SpatialIdSet};
 #[allow(unused_imports)]
 pub(crate) use self::mem::set;
 #[allow(unused_imports)]
-pub(crate) use self::mem::{core, time_reconstruct, traits};
+pub(crate) use self::mem::{core, traits};
