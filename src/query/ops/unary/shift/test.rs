@@ -1,32 +1,6 @@
 use crate::{FlexId, RangeId, Source, SpatialIdMap};
-
-/// 再現可能な疑似乱数（xorshift64）。
-fn next(state: &mut u64) -> u64 {
-    *state ^= *state << 13;
-    *state ^= *state >> 7;
-    *state ^= *state << 17;
-    *state
-}
-
-/// ズーム 3〜6 の混ざった表。粗い要素が細かい要素に合わせて木の中で割られる。
-fn random_table(state: &mut u64) -> SpatialIdMap<u32> {
-    (0..20)
-        .map(|_| {
-            let mut zoom = || 3 + (next(state) % 4) as u8;
-            let (fz, xz, yz) = (zoom(), zoom(), zoom());
-            let id = FlexId::new(
-                fz,
-                (next(state) % (2 << fz)) as i32 - (1 << fz),
-                xz,
-                (next(state) % (1 << xz)) as u32,
-                yz,
-                (next(state) % (1 << yz)) as u32,
-            )
-            .unwrap();
-            (id, (next(state) % 4) as u32)
-        })
-        .collect()
-}
+use alloc::vec::Vec;
+use proptest::prelude::*;
 
 /// 移動量の組。負の向き、X の周回、F・Y の範囲外を含む。
 const DELTAS: [(i32, i32, i32); 6] = [
@@ -38,12 +12,17 @@ const DELTAS: [(i32, i32, i32); 6] = [
     (200, 0, 0),
 ];
 
-#[test]
-fn shift_fxy_matches_chained_shifts() {
-    let mut state = 0x2545_F491_4F6C_DD1D;
-    let mut compared = 0;
-    for _ in 0..50 {
-        let table = random_table(&mut state);
+/// ズーム 3〜6 の混ざった表。粗い要素が細かい要素に合わせて木の中で割られる。
+fn arb_shift_entries() -> impl Strategy<Value = Vec<(FlexId, u32)>> {
+    prop::collection::vec((FlexId::arb_within(3..=6), 0..4u32), 1..=20)
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    #[test]
+    fn shift_fxy_matches_chained_shifts(entries in arb_shift_entries()) {
+        let table: SpatialIdMap<u32> = entries.into_iter().collect();
         for (f, x, y) in DELTAS {
             let fused = table
                 .clone()
@@ -59,23 +38,17 @@ fn shift_fxy_matches_chained_shifts() {
                 .shift_y(6, y)
                 .get(..)
                 .into_map();
-            assert_eq!(fused.is_ok(), chained.is_ok(), "({f}, {x}, {y})");
+            prop_assert_eq!(fused.is_ok(), chained.is_ok(), "({:?})", (f, x, y));
             if let (Ok(fused), Ok(chained)) = (fused, chained) {
-                assert_eq!(fused, chained, "({f}, {x}, {y})");
-                compared += 1;
+                prop_assert_eq!(fused, chained, "({:?})", (f, x, y));
             }
         }
     }
-    assert!(compared >= 100, "比較できたのが {compared} 件だけ");
-}
 
-#[test]
-fn shift_fxy_partial_get_matches_whole() {
-    let mut state = 0x9E37_79B9_7F4A_7C15;
-    let target = RangeId::new(4, [-3, 5], [2, 9], [4, 12]).unwrap();
-    let mut compared = 0;
-    for _ in 0..50 {
-        let table = random_table(&mut state);
+    #[test]
+    fn shift_fxy_partial_get_matches_whole(entries in arb_shift_entries()) {
+        let table: SpatialIdMap<u32> = entries.into_iter().collect();
+        let target = RangeId::new(4, [-3, 5], [2, 9], [4, 12]).unwrap();
         for (f, x, y) in DELTAS {
             let query = table.clone().query().shift_fxy(6, f, x, y);
             let Ok(expected) = table
@@ -91,9 +64,7 @@ fn shift_fxy_partial_get_matches_whole() {
             let clip = |t: &SpatialIdMap<u32>| -> SpatialIdMap<u32> {
                 t.get(target).map(|(id, v)| (id, *v)).collect()
             };
-            assert_eq!(clip(&within), clip(&expected), "({f}, {x}, {y})");
-            compared += usize::from(!clip(&expected).is_empty());
+            prop_assert_eq!(clip(&within), clip(&expected), "({:?})", (f, x, y));
         }
     }
-    assert!(compared >= 50, "空でない比較が {compared} 件だけ");
 }

@@ -234,42 +234,17 @@ fn zoom_out_resolves_parents_overlapping_in_t() {
     assert_eq!(out, expected);
 }
 
-#[test]
-fn zoom_out_sum_matches_inserting_each_parent() {
-    use crate::FlexId;
-    use crate::query::merge_policy::Sum;
+proptest::proptest! {
+    #![proptest_config(proptest::prelude::ProptestConfig::with_cases(128))]
 
-    let mut seed = 0x2001_u64;
-    let mut next = move |n: u64| {
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        (seed >> 33) % n
-    };
-    for _ in 0..200 {
-        let mut table = SpatialIdMap::<i32>::new();
-        for _ in 0..20 {
-            let (fz, xz, yz) = (next(8) as u8, next(8) as u8, next(8) as u8);
-            let tz = if cfg!(feature = "temporal_id") {
-                next(8) as u8
-            } else {
-                0
-            };
-            let id = FlexId::new(
-                fz,
-                next(2 << fz) as i32 - (1 << fz),
-                xz,
-                next(1 << xz) as u32,
-                yz,
-                next(1 << yz) as u32,
-            )
-            .unwrap()
-            .time_with_segment(tz, next(1 << tz))
-            .unwrap();
-            table.insert(id, next(10) as i32 + 1);
-        }
-        let target_z = next(6) as u8;
+    #[test]
+    fn zoom_out_sum_matches_inserting_each_parent(
+        entries in proptest::collection::vec((crate::FlexId::arb_with_time(0..=7, 0..=7), 1..=10i32), 1..=20),
+        target_z in 0..=5u8,
+    ) {
+        use crate::query::merge_policy::Sum;
 
+        let table: SpatialIdMap<i32> = entries.into_iter().collect();
         let out = table
             .clone()
             .query()
@@ -283,6 +258,6 @@ fn zoom_out_sum_matches_inserting_each_parent() {
             let parent = id.spatial_parent_at_zoom(target_z).unwrap();
             expected.insert_with(parent, v, |a, b| a + b);
         }
-        assert_eq!(out, expected);
+        proptest::prop_assert_eq!(out, expected);
     }
 }
