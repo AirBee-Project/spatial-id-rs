@@ -61,6 +61,45 @@ impl<'a, V: SafeValue + 'static> QueryOutput<'a, V> {
             .collect()
     }
 
+    /// 結果をディスク版の [`crate::collection::disk::SpatialIdMap`] へ書き出し、コミットして返す（unstable: `disk` feature）。
+    ///
+    /// 指定したパスに既存のファイルがある場合は内容を置き換える。
+    #[cfg(all(feature = "disk", feature = "unstable"))]
+    pub async fn into_disk_map(
+        self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<crate::collection::disk::SpatialIdMap<V>, Error>
+    where
+        V: crate::collection::disk::DiskValue,
+    {
+        let mut map = crate::collection::disk::SpatialIdMap::open(path).await?;
+        map.clear();
+        for item in self.into_flex_ids() {
+            let (id, value) = item?;
+            map.insert(id, value).await?;
+        }
+        map.commit().await?;
+        Ok(map)
+    }
+
+    /// 結果をディスク版の [`crate::collection::disk::SpatialIdSet`] へ書き出し、コミットして返す（unstable: `disk` feature）。
+    ///
+    /// 指定したパスに既存のファイルがある場合は内容を置き換える。
+    #[cfg(all(feature = "disk", feature = "unstable"))]
+    pub async fn into_disk_set(
+        self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<crate::collection::disk::SpatialIdSet, Error> {
+        let mut set = crate::collection::disk::SpatialIdSet::open(path).await?;
+        set.clear();
+        for item in self.into_flex_ids() {
+            let (id, _) = item?;
+            set.insert(id).await?;
+        }
+        set.commit().await?;
+        Ok(set)
+    }
+
     /// 結果を [`FlexId`] で順に返すイテレーターにする。
     ///
     /// 要素の順序や評価の進み方、エラーの返し方は、この [`QueryOutput`] 自身を読む場合と同じ。

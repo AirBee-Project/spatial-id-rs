@@ -33,7 +33,7 @@ mod id;
 pub mod query;
 pub mod time;
 
-#[cfg(feature = "disk")]
+#[cfg(all(feature = "disk", feature = "unstable"))]
 pub use error::DiskError;
 pub use error::Error;
 pub use id::{

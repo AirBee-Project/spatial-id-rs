@@ -256,6 +256,31 @@ impl<V: SafeValue + 'static> Query<V> {
         self.get(..).into_set()
     }
 
+    /// Query を全体で評価し、結果をディスク版の [`crate::collection::disk::SpatialIdMap`] へ書き出して返す（unstable: `disk` feature）。
+    ///
+    /// `self.get(..).into_disk_map(path).await` と同じ。
+    #[cfg(all(feature = "disk", feature = "unstable"))]
+    pub async fn into_disk_map(
+        self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<crate::collection::disk::SpatialIdMap<V>, Error>
+    where
+        V: crate::collection::disk::DiskValue,
+    {
+        self.get(..).into_disk_map(path).await
+    }
+
+    /// Query を全体で評価し、結果をディスク版の [`crate::collection::disk::SpatialIdSet`] へ書き出して返す（unstable: `disk` feature）。
+    ///
+    /// `self.get(..).into_disk_set(path).await` と同じ。
+    #[cfg(all(feature = "disk", feature = "unstable"))]
+    pub async fn into_disk_set(
+        self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<crate::collection::disk::SpatialIdSet, Error> {
+        self.get(..).into_disk_set(path).await
+    }
+
     /// [`get`](Self::get) と同じく評価する。`token` がキャンセルされると、評価の途中で気づき次第 [`QueryError::Cancelled`] を返す。
     ///
     /// ```

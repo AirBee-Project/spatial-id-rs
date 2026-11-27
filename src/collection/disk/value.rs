@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 /// 1ページに入る Node も減るので、短い値に限る。
 pub const MAX_VALUE_LEN: usize = 128;
 
-/// [`FlexTreeCore`](super::FlexTreeCore) に格納できる値。値とバイト列を相互に変換する。
+/// [`SpatialIdMap`](super::SpatialIdMap) に格納できる値。値とバイト列を相互に変換する。
 pub trait DiskValue: Sized {
     /// ファイルに記録し、別の型で開こうとしたときに見つけるための名前。型ごとに一意にし、後から変えないこと。
     fn type_name() -> String;

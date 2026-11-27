@@ -44,7 +44,7 @@ impl<V> FlexTreeCore<V> {
         while !frontier.is_empty() {
             let mut next = Vec::new();
             for (page_id, page) in frontier.iter().zip(self.file.read_many(&frontier).await?) {
-                let mut node = page.try_head_as::<NodePage>()?.decode()?;
+                let mut node = NodePage::read(&page)?;
                 node.for_each_ref_page(&mut |child| {
                     if queued.insert(child.0) {
                         next.push(*child);

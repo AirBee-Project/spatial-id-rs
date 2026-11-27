@@ -101,6 +101,7 @@ spatial-id = "0.1"
 - `unstable`: JSON 入出力など、破壊的変更があり得る API
 - `random`: ランダムな空間IDの生成
 - `geojson`: GeoJSON からの変換（`std` と `unstable` も有効になる）
+- `disk`: ディスク永続化コレクション（`std` と `unstable` も有効になる）
 
 ## ライセンスと特許
 

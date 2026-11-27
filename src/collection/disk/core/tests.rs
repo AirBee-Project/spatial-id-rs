@@ -4,7 +4,7 @@ use super::{FlexTreeCore, MetaPage};
 use crate::collection::disk::io::{Page, PageId, PagedFile};
 use crate::collection::disk::{DiskValue, MAX_VALUE_LEN};
 use crate::id::dimension::{Dimension, DimensionSet};
-use crate::{DiskError, Error, FlexId, RangeId};
+use crate::{AllowedIntervals, DiskError, Error, FlexId, RangeId};
 use compio::buf::{IoBuf, IoBufMut};
 use core::fmt::Debug;
 use core::mem::MaybeUninit;
@@ -548,7 +548,7 @@ fn handles_target_spanning_both_roots() {
     let positive = FlexId::new(1, 0, 1, 0, 1, 0).unwrap();
     block_on(async {
         let mut tree = Tree::open(&file.0).await.unwrap();
-        tree.insert(range, 9).await.unwrap();
+        tree.insert(range.flex_ids(), 9).await.unwrap();
         assert!(tree.roots.iter().all(Option::is_some));
         tree.commit().await.unwrap();
         tree.close().await.unwrap();
@@ -556,7 +556,7 @@ fn handles_target_spanning_both_roots() {
         let tree = Tree::open(&file.0).await.unwrap();
         assert_eq!(tree.get(negative).await.unwrap(), [(negative, 9)]);
         assert_eq!(tree.get(positive).await.unwrap(), [(positive, 9)]);
-        assert_eq!(tree.get(range).await.unwrap().len(), 2);
+        assert_eq!(tree.get(range.flex_ids()).await.unwrap().len(), 2);
         tree.close().await.unwrap();
     });
 }
@@ -1260,24 +1260,30 @@ fn compact_rejects_cyclic_ref_page() {
     });
 }
 
-/// `PagedFile::read_sync` で書いたページを同期的に読み戻せる。
+/// `PagedFile::read_many_sync` で書いたページを同期的に順に読み戻せ、ファイルにないページを含めば Corrupt を返す。
 #[test]
-fn paged_file_read_sync_round_trips() {
+fn paged_file_read_many_sync_round_trips() {
     let file = TempFile::new();
     block_on(async {
         let mut paged = PagedFile::open(&file.0).await.unwrap();
         assert!(matches!(
-            paged.read_sync(PageId(0)),
+            paged.read_many_sync(&[PageId(0)]),
             Err(DiskError::Corrupt)
         ));
 
-        let id = paged.alloc();
-        let meta = MetaPage::new(10, [Some(PageId(3)), None], 1);
-        paged.write(id, Page::of(&meta)).await.unwrap();
+        let ids = [paged.alloc(), paged.alloc()];
+        for (id, generation) in ids.into_iter().zip([10, 11]) {
+            let meta = MetaPage::new(generation, [Some(PageId(3)), None], 1);
+            paged.write(id, Page::of(&meta)).await.unwrap();
+        }
         paged.sync().await.unwrap();
 
-        let got = paged.read_sync(id).unwrap();
-        assert_eq!(got.try_head_as::<MetaPage>().unwrap().generation.get(), 10);
+        let got = paged.read_many_sync(&ids).unwrap();
+        let generations: Vec<u64> = got
+            .iter()
+            .map(|page| page.try_head_as::<MetaPage>().unwrap().generation.get())
+            .collect();
+        assert_eq!(generations, [10, 11]);
         paged.close().await.unwrap();
     });
 }
@@ -1761,4 +1767,258 @@ fn split_never_spills_skip_as_page_root() {
             .all(|(&id, node)| id == root_id.0 || !matches!(node, Node::Skip { .. }))
     );
     assert_eq!(resolve(pages[&root_id.0].clone(), &pages), node);
+}
+
+/// is_empty / clear / count / max_zoomlevel がメモリ版と一致し、clear は commit でのみ永続化される。
+#[test]
+fn is_empty_clear_count_and_max_zoomlevel() {
+    let file = TempFile::new();
+    let a = FlexId::new(2, 1, 4, 3, 3, 2).unwrap();
+    let b = FlexId::new(5, -3, 1, 0, 2, 1).unwrap();
+    block_on(async {
+        let mut disk = Tree::open(&file.0).await.unwrap();
+        let mut mem = crate::collection::core::FlexTreeCore::<u64>::default();
+        assert!(disk.is_empty());
+        assert_eq!(disk.count().await.unwrap(), 0);
+        assert_eq!(disk.max_zoomlevel().await.unwrap(), None);
+
+        disk.insert(a, 10).await.unwrap();
+        mem.insert(a, 10);
+        disk.insert(b, 20).await.unwrap();
+        mem.insert(b, 20);
+        disk.commit().await.unwrap();
+
+        assert!(!disk.is_empty());
+        assert_eq!(disk.count().await.unwrap(), mem.count());
+        assert_eq!(disk.max_zoomlevel().await.unwrap(), mem.max_zoomlevel());
+
+        // commit 前の clear は閉じると戻る
+        disk.clear();
+        assert!(disk.is_empty());
+        assert_eq!(disk.count().await.unwrap(), 0);
+        assert_eq!(disk.max_zoomlevel().await.unwrap(), None);
+        disk.close().await.unwrap();
+
+        let mut disk = Tree::open(&file.0).await.unwrap();
+        assert!(!disk.is_empty());
+        assert_eq!(disk.count().await.unwrap(), mem.count());
+
+        // commit した clear は永続化される
+        disk.clear();
+        disk.commit().await.unwrap();
+        disk.close().await.unwrap();
+
+        let disk = Tree::open(&file.0).await.unwrap();
+        assert!(disk.is_empty());
+        assert_eq!(disk.count().await.unwrap(), 0);
+        disk.close().await.unwrap();
+    });
+}
+
+/// iter / into_iter は RefPage を跨ぐ木でもメモリ版と同じ Z-order 昇順を返し、エラー後は None を返し続ける。
+#[test]
+fn iter_and_into_iter_match_mem_and_are_fused() {
+    let file = TempFile::new();
+    let mut mem = crate::collection::core::FlexTreeCore::<u64>::default();
+    block_on(async {
+        let mut disk = Tree::open(&file.0).await.unwrap();
+        assert!(disk.iter().next().is_none());
+
+        for (i, cell) in grid().enumerate() {
+            let v = i as u64;
+            disk.insert(cell, v).await.unwrap();
+            mem.insert(cell, v);
+        }
+        disk.commit().await.unwrap();
+
+        let mem_all: Vec<(FlexId, u64)> = mem.iter().map(|(id, &v)| (id, v)).collect();
+        let disk_iter: Vec<(FlexId, u64)> = disk.iter().map(Result::unwrap).collect();
+        assert_eq!(disk_iter, mem_all);
+        assert!(disk_iter.windows(2).all(|w| w[0].0 < w[1].0));
+
+        let disk_into: Vec<(FlexId, u64)> = disk.into_iter().map(Result::unwrap).collect();
+        assert_eq!(disk_into, mem_all);
+
+        // 壊れたルートページに対して Err を1回返した後、None で終了する
+        let reopened = Tree::open(&file.0).await.unwrap();
+        let root_page = reopened.roots[0].unwrap();
+        reopened.close().await.unwrap();
+        flip_byte(&file.0, page_offset(root_page) + 5);
+
+        let broken = Tree::open(&file.0).await.unwrap();
+        let mut iter = broken.iter();
+        assert!(matches!(
+            iter.next(),
+            Some(Err(Error::Disk(DiskError::Corrupt)))
+        ));
+        assert!(iter.next().is_none());
+        assert!(iter.next().is_none());
+        broken.close().await.unwrap();
+    });
+}
+
+/// get_overlapping はメモリ版と一致し、交差しない RefPage を読まない。
+#[test]
+fn get_overlapping_prunes_unrelated_pages() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut disk = Tree::open(&file.0).await.unwrap();
+        let mut mem = crate::collection::core::FlexTreeCore::<u64>::default();
+        let mut next = 1u64;
+        for f in [0i32, 1i32] {
+            for x in 0..32u32 {
+                for y in 0..16u32 {
+                    let id = FlexId::new(1, f, 5, x, 4, y).unwrap();
+                    disk.insert(id, next).await.unwrap();
+                    mem.insert(id, next);
+                    next += 1;
+                }
+            }
+        }
+        disk.compact().await.unwrap();
+
+        let t1 = RangeId::new(1, [0, 0], [0, 0], [0, 0]).unwrap();
+        let t2 = RangeId::new(5, [0, 15], [0, 3], [0, 3]).unwrap();
+        let cases: &[&[RangeId]] = &[&[], &[t1], &[t2], &[t1, t2], &[RangeId::WHOLE]];
+        for &targets in cases {
+            let expected: Vec<(FlexId, u64)> = mem
+                .get_overlapping(targets.iter().copied())
+                .map(|(id, &v)| (id, v))
+                .collect();
+            let got = disk.get_overlapping(targets.iter().copied()).await.unwrap();
+            assert_eq!(got, expected);
+            assert!(got.windows(2).all(|w| w[0].0 < w[1].0));
+        }
+
+        // upper 側(f=1/1)の RefPage を壊しても、f=1/0 への get_overlapping は読まずに成功する
+        let root = disk.read_page(disk.roots[0].unwrap()).await.unwrap();
+        let Node::Branch {
+            dimension: Dimension::F,
+            upper,
+            ..
+        } = root
+        else {
+            panic!("ルートが F 分岐になっていない");
+        };
+        fn first_ref_page(node: &Node) -> Option<PageId> {
+            match node {
+                Node::RefPage { page_id, .. } => Some(*page_id),
+                Node::Branch { lower, upper, .. } => {
+                    first_ref_page(lower).or_else(|| first_ref_page(upper))
+                }
+                Node::Skip { child, .. } => first_ref_page(child),
+                Node::Value(_) => None,
+            }
+        }
+        let upper_page = first_ref_page(&upper).expect("upper 側に RefPage があるはず");
+        disk.close().await.unwrap();
+
+        flip_byte(&file.0, page_offset(upper_page) + 5);
+
+        let disk = Tree::open(&file.0).await.unwrap();
+        let expected_lower: Vec<(FlexId, u64)> =
+            mem.get_overlapping([t1]).map(|(id, &v)| (id, v)).collect();
+        assert_eq!(disk.get_overlapping([t1]).await.unwrap(), expected_lower);
+        disk.close().await.unwrap();
+    });
+}
+
+/// value_range / reconstructed_time_ranges / flat_single_ids がメモリ版と一致する。
+#[test]
+fn value_range_reconstructed_time_ranges_and_flat_single_ids_match_mem() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut disk = Tree::open(&file.0).await.unwrap();
+        let mut mem = crate::collection::core::FlexTreeCore::<u64>::default();
+        assert_eq!(disk.value_range().await.unwrap(), None);
+        assert!(
+            disk.reconstructed_time_ranges(None)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(disk.flat_single_ids(None).await.unwrap().is_empty());
+
+        let a = crate::SingleId::new(4, 0, 2, 1).unwrap();
+        let b = crate::SingleId::new(5, 0, 6, 3).unwrap();
+        disk.insert(a.flex_ids(), 30).await.unwrap();
+        mem.insert(a.flex_ids(), 30);
+        disk.insert(b.flex_ids(), 10).await.unwrap();
+        mem.insert(b.flex_ids(), 10);
+
+        #[cfg(feature = "temporal_id")]
+        {
+            let c = crate::SingleId::new(5, 1, 1, 1)
+                .unwrap()
+                .time_with(1800, 809712)
+                .unwrap();
+            let d = crate::SingleId::new(5, 1, 2, 1)
+                .unwrap()
+                .time_with(crate::Interval::HOUR, 0)
+                .unwrap();
+            let e = crate::SingleId::new(5, 1, 2, 1)
+                .unwrap()
+                .time_with(crate::Interval::HOUR, 1)
+                .unwrap();
+            for (id, val) in [(c, 50), (d, 20), (e, 20)] {
+                disk.insert(id.flex_ids(), val).await.unwrap();
+                mem.insert(id.flex_ids(), val);
+            }
+        }
+
+        assert_eq!(
+            disk.value_range().await.unwrap(),
+            mem.value_range().map(|(&lo, &hi)| (lo, hi))
+        );
+        let default_intervals = AllowedIntervals::default();
+        for allowed in [None, Some(&default_intervals)] {
+            let expected_ranges: Vec<_> = mem
+                .reconstructed_time_ranges(allowed)
+                .map(|(r, &v)| (r, v))
+                .collect();
+            assert_eq!(
+                disk.reconstructed_time_ranges(allowed).await.unwrap(),
+                expected_ranges
+            );
+            let expected_singles: Vec<_> =
+                mem.flat_single_ids(allowed).map(|(s, &v)| (s, v)).collect();
+            assert_eq!(
+                disk.flat_single_ids(allowed).await.unwrap(),
+                expected_singles
+            );
+        }
+        disk.close().await.unwrap();
+    });
+}
+
+/// メモリ版から作ると、ページを1度ずつしか書かず（生きているページだけのファイルになり）、中身はメモリ版と一致する。
+/// 別の値の型で作ったファイルも置き換える。
+#[test]
+fn create_from_mem_writes_each_page_once_and_replaces_any_file() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut other = FlexTreeCore::<String>::open(&file.0).await.unwrap();
+        other.insert(FlexId::ROOTS, "old".into()).await.unwrap();
+        other.commit().await.unwrap();
+        other.close().await.unwrap();
+
+        let mut mem = crate::collection::core::FlexTreeCore::<u64>::default();
+        for (cell, value) in grid().zip(0..) {
+            mem.insert(cell, value);
+        }
+        let disk = Tree::create_from_mem(&file.0, &mem).await.unwrap();
+        let live = disk.live_pages_in_preorder().await.unwrap().len() as u64;
+        assert_eq!(disk.file.len(), MetaPage::SLOTS.len() as u64 + live);
+        assert_ref_pages_never_point_to_skip(&disk).await;
+
+        let mut disk_all = disk.get(FlexId::UPPER_MAX).await.unwrap();
+        disk_all.extend(disk.get(FlexId::LOWER_MAX).await.unwrap());
+        let mem_all: Vec<(FlexId, u64)> = mem.iter().map(|(id, &v)| (id, v)).collect();
+        assert_eq!(disk_all, mem_all);
+        disk.close().await.unwrap();
+
+        let reopened = Tree::open(&file.0).await.unwrap();
+        assert_eq!(reopened.count().await.unwrap(), mem_all.len());
+        reopened.close().await.unwrap();
+    });
 }

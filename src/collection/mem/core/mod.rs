@@ -14,7 +14,7 @@ use view::View;
 #[cfg(any(feature = "unstable", test))]
 mod compact;
 mod iter;
-mod node;
+pub(crate) mod node;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -22,8 +22,8 @@ mod view;
 /// [FlexId]に対して割り当てられている値`V`を管理するためのインデックス構造。
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct FlexTreeCore<V> {
-    upper_root: Option<Node<V>>,
-    lower_root: Option<Node<V>>,
+    pub(crate) upper_root: Option<Node<V>>,
+    pub(crate) lower_root: Option<Node<V>>,
 }
 
 impl<V: Clone> Clone for FlexTreeCore<V> {

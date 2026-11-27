@@ -27,6 +27,11 @@ impl NodePage {
     /// ルートの Node に使えるバイト長。
     pub(super) const BODY_LEN: usize = Page::CAPACITY - 2;
 
+    /// `page` に書いた NodePage から Node を読み出す。
+    pub(super) fn read(page: &Page) -> Result<Node, DiskError> {
+        page.try_head_as::<Self>()?.decode()
+    }
+
     /// この NodePage から Node を読み出す。
     pub(super) fn decode(&self) -> Result<Node, DiskError> {
         let head = self.head.get();

@@ -89,9 +89,11 @@ impl FlexId {
     ///
     /// どの FlexId も F の符号でどちらか一方のルートに丸ごと収まるので、振り分けた先で切り取らなくてよい。
     #[cfg(feature = "disk")]
-    pub(crate) fn group_by_root(target: impl crate::SpatialId) -> [alloc::vec::Vec<FlexId>; 2] {
+    pub(crate) fn group_by_root(
+        target: impl IntoIterator<Item = FlexId>,
+    ) -> [alloc::vec::Vec<FlexId>; 2] {
         let mut groups = [alloc::vec::Vec::new(), alloc::vec::Vec::new()];
-        for id in target.flex_ids() {
+        for id in target {
             groups[id.root_index()].push(id);
         }
         groups

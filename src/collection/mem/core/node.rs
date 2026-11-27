@@ -39,23 +39,23 @@ impl<V: Clone> Clone for Node<V> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Branch<V> {
-    pub(super) dimension: Dimension,
+    pub(crate) dimension: Dimension,
     /// 自身と子孫が割っている次元の集合。自身の `dimension` とlowerとupperの集合を合わせたもの。
-    pub(super) split_dimensions: DimensionSet,
+    pub(crate) split_dimensions: DimensionSet,
     /// 自身と子孫で Branch が縦に何段続くかの最大。Node を辿るスタックの大きさに使う。
     pub(super) height: u8,
     /// 子孫に含まれる、値を持つ[FlexId]の数。
     pub(super) count: u32,
-    pub(super) lower: Node<V>,
-    pub(super) upper: Node<V>,
+    pub(crate) lower: Node<V>,
+    pub(crate) upper: Node<V>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Skip<V> {
-    pub(super) path: RelativeFlexId,
+    pub(crate) path: RelativeFlexId,
     /// 自身と子孫が割っている次元の集合。行き先が狭い次元（`path` の深くなっている次元）と `child` の集合を合わせたもの。
     pub(super) split_dimensions: DimensionSet,
-    pub(super) child: Node<V>,
+    pub(crate) child: Node<V>,
 }
 
 /// [`Node::filter`] で、Branch の領域から子孫をまとめて判断した結果。

@@ -70,6 +70,7 @@ unstable = ["dep:serde", "dep:serde_json"]
 disk = [
     "std",
     "unstable",
+    "serde_json/std",
     "dep:zerocopy",
     "dep:compio",
     "dep:flume",

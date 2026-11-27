@@ -16,13 +16,13 @@ pub enum Error {
     /// クエリまわりのエラー。
     Query(QueryError),
 
-    /// ディスクI/Oまわりのエラー。
-    #[cfg(feature = "disk")]
+    /// ディスクI/Oまわりのエラー（`unstable`: `disk` feature）。
+    #[cfg(all(feature = "disk", feature = "unstable"))]
     Disk(DiskError),
 }
 
-/// ディスク関連で発生するエラー。
-#[cfg(feature = "disk")]
+/// ディスク関連で発生するエラー（`unstable`: `disk` feature）。
+#[cfg(all(feature = "disk", feature = "unstable"))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DiskError {
     /// I/O エラー。
@@ -159,14 +159,14 @@ impl From<QueryError> for Error {
     }
 }
 
-#[cfg(feature = "disk")]
+#[cfg(all(feature = "disk", feature = "unstable"))]
 impl From<DiskError> for Error {
     fn from(value: DiskError) -> Self {
         Self::Disk(value)
     }
 }
 
-#[cfg(feature = "disk")]
+#[cfg(all(feature = "disk", feature = "unstable"))]
 impl From<std::io::Error> for DiskError {
     fn from(err: std::io::Error) -> Self {
         Self::Io(alloc::format!("{err}"))
@@ -189,7 +189,7 @@ impl fmt::Display for Error {
             Error::SpatialId(inner) => inner.fmt(f),
             Error::Geometry(inner) => inner.fmt(f),
             Error::Query(inner) => inner.fmt(f),
-            #[cfg(feature = "disk")]
+            #[cfg(all(feature = "disk", feature = "unstable"))]
             Error::Disk(inner) => inner.fmt(f),
         }
     }
@@ -358,7 +358,7 @@ impl fmt::Display for SpatialIdError {
     }
 }
 
-#[cfg(feature = "disk")]
+#[cfg(all(feature = "disk", feature = "unstable"))]
 impl fmt::Display for DiskError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -379,5 +379,5 @@ impl error::Error for SpatialIdError {}
 
 impl error::Error for QueryError {}
 
-#[cfg(feature = "disk")]
+#[cfg(all(feature = "disk", feature = "unstable"))]
 impl error::Error for DiskError {}

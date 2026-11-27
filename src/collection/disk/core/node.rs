@@ -1,6 +1,7 @@
 // ビットの位置は、バイト列をビッグエンディアンの整数として読んだときの最下位ビットを bit 0 として数える。
 use crate::collection::disk::io::PageId;
 use crate::collection::disk::{DiskValue, MAX_VALUE_LEN};
+use crate::collection::mem::core::node::{Branch as MemBranch, Node as MemNode};
 use crate::id::dimension::{Dimension, DimensionSet};
 use crate::id::relative_flex_id::{RelativeFlexId, ShortRelativeFlexId};
 use crate::{DiskError, FlexId};
@@ -76,6 +77,31 @@ pub(super) enum Node {
 }
 
 impl Node {
+    /// メモリ版の Node と同じ形の Node。どちらも同じ規則で正規化されているので、形をそのまま写せばよい。
+    pub(super) fn from_mem<V: DiskValue>(node: &MemNode<V>) -> Result<Self, DiskError> {
+        let branch = |branch: &MemBranch<V>| -> Result<Self, DiskError> {
+            Ok(Node::Branch {
+                dimension: branch.dimension,
+                split_dimensions: branch.split_dimensions,
+                lower: Box::new(Node::from_mem(&branch.lower)?),
+                upper: Box::new(Node::from_mem(&branch.upper)?),
+            })
+        };
+        let skip = |path: RelativeFlexId, child: Self| Node::Skip {
+            path,
+            child: Box::new(child),
+        };
+        Ok(match node {
+            MemNode::Value(value) => Node::Value(EncodedValue::encode(value)?),
+            MemNode::Branch(b) => branch(b)?,
+            MemNode::LongSkip(s) => skip(s.path, Node::from_mem(&s.child)?),
+            MemNode::ShortSkipValue(path, value) => {
+                skip((*path).into(), Node::Value(EncodedValue::encode(value)?))
+            }
+            MemNode::ShortSkipBranch(path, b) => skip((*path).into(), branch(b)?),
+        })
+    }
+
     /// 種類 `kind` の Node のバイト列 `bytes` を読み出す。別のページへは辿らない。
     ///
     /// 領域が最大ズームを超えないかは、辿るときに [`FlexId::halves`] と [`RelativeFlexId::to_absolute`] で確かめる。

@@ -137,34 +137,33 @@ impl PagedFile {
         self.call(|reply| Request::Read { id, reply }).await
     }
 
-    /// `id` が示すページを同期的に読み出す。
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn read_sync(&self, id: PageId) -> Result<Box<Page>, DiskError> {
-        if id.0 >= self.len {
-            return Err(DiskError::Corrupt);
-        }
-        Ok(self
-            .send(|reply| Request::Read { id, reply })?
-            .recv()
-            .map_err(|_| DiskError::WorkerStopped)??)
-    }
-
     /// `ids` が示すページを、`ids` の順に読み出す。
     ///
     /// 要求をすべて送ってから応答を待つので、各ページの読み込みは並行に進む。
     pub(crate) async fn read_many(&self, ids: &[PageId]) -> Result<Vec<Box<Page>>, DiskError> {
-        if ids.iter().any(|id| id.0 >= self.len) {
-            return Err(DiskError::Corrupt);
-        }
-        let responses = ids
-            .iter()
-            .map(|&id| self.send(|reply| Request::Read { id, reply }))
-            .collect::<Result<Vec<_>, _>>()?;
         let mut pages = Vec::with_capacity(ids.len());
-        for response in responses {
+        for response in self.send_reads(ids)? {
             pages.push(Self::receive(response).await?);
         }
         Ok(pages)
+    }
+
+    /// [`read_many`](Self::read_many) と同じだが、応答を待つ間は呼び出したスレッドを止める。
+    pub(crate) fn read_many_sync(&self, ids: &[PageId]) -> Result<Vec<Box<Page>>, DiskError> {
+        self.send_reads(ids)?
+            .into_iter()
+            .map(|response| Ok(response.recv().map_err(|_| DiskError::WorkerStopped)??))
+            .collect()
+    }
+
+    /// `ids` が示すページの読み込みをすべて専用スレッドへ送り、応答を待つ受け口を `ids` の順に返す。
+    fn send_reads(&self, ids: &[PageId]) -> Result<Vec<Response<Box<Page>>>, DiskError> {
+        if ids.iter().any(|id| id.0 >= self.len) {
+            return Err(DiskError::Corrupt);
+        }
+        ids.iter()
+            .map(|&id| self.send(|reply| Request::Read { id, reply }))
+            .collect()
     }
 
     /// 割り当て済みの `id` が示すページに書く。ファイルの末尾より先なら、ファイルを伸ばす。
