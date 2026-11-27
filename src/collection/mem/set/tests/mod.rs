@@ -15,8 +15,6 @@ pub(crate) mod merge_probe;
 pub(crate) mod union;
 
 #[cfg(test)]
-use crate::ZoomLevel;
-#[cfg(test)]
 use crate::{RangeId, SingleId, SpatialIdSet};
 #[cfg(test)]
 use hashbrown::HashSet;
@@ -36,11 +34,8 @@ const RANDOM_SET_MIN_INSERTS: usize = 1;
 /// 1ケースあたりの最大挿入回数。
 const RANDOM_SET_MAX_INSERTS: usize = 4;
 #[cfg(test)]
-/// RangeId 生成時に許可する F 方向の長さの最大値。
-const RANDOM_SET_MAX_RANGE_SPAN_F: i32 = 6;
-#[cfg(test)]
-/// RangeId 生成時に許可する X/Y 方向の長さの最大値。
-const RANDOM_SET_MAX_RANGE_SPAN_XY: u32 = 6;
+/// RangeId 生成時に許可する各軸のスパン上限。
+const RANDOM_SET_MAX_RANGE_SPAN: u32 = 6;
 
 /// テスト用のランダム Set 生成で使う挿入パターン。
 #[cfg(test)]
@@ -126,47 +121,7 @@ impl RandomSetCase {
     }
 }
 
-#[cfg(test)]
-fn arb_compact_range_id(max_zoom: u8) -> impl Strategy<Value = RangeId> {
-    (RANDOM_SET_MIN_ZOOM..=max_zoom).prop_flat_map(|z| {
-        let idx = z as usize;
-
-        let f_min = ZoomLevel::new(idx as u8).unwrap().f_min();
-        let f_max = ZoomLevel::new(idx as u8).unwrap().f_max();
-        let xy_max = ZoomLevel::new(idx as u8).unwrap().xy_max();
-
-        let span_f_max = (f_max - f_min).clamp(0, RANDOM_SET_MAX_RANGE_SPAN_F) as u32;
-        let span_xy_max = xy_max.min(RANDOM_SET_MAX_RANGE_SPAN_XY);
-
-        (
-            Just(z),
-            f_min..=f_max,
-            0..=span_f_max,
-            0..=xy_max,
-            0..=span_xy_max,
-            0..=xy_max,
-            0..=span_xy_max,
-        )
-            .prop_map(
-                move |(z, f_start, f_span, x_start, x_span, y_start, y_span)| {
-                    let idx = z as usize;
-                    let f_end =
-                        (f_start + f_span as i32).min(ZoomLevel::new(idx as u8).unwrap().f_max());
-                    let x_end = x_start
-                        .saturating_add(x_span)
-                        .min(ZoomLevel::new(idx as u8).unwrap().xy_max());
-                    let y_end = y_start
-                        .saturating_add(y_span)
-                        .min(ZoomLevel::new(idx as u8).unwrap().xy_max());
-
-                    RangeId::new(z, [f_start, f_end], [x_start, x_end], [y_start, y_end])
-                        .expect("Generated compact range must be valid")
-                },
-            )
-    })
-}
-
-/// 演算子テスト向けに、処理可能なサイズに抑えたランダム Set ケースを生成する戦略である。
+/// 演算子テスト向けに、処理可能なサイズに抑えたランダムな [`RandomSetCase`] を生成する [`Strategy`] を返す。
 ///
 /// - ズームレベルは `RANDOM_SET_MIN_ZOOM..=RANDOM_SET_MAX_ZOOM` でランダム
 /// - 挿入回数は `RANDOM_SET_MIN_INSERTS..=RANDOM_SET_MAX_INSERTS` でランダム
@@ -195,7 +150,11 @@ fn arb_compact_range_id(max_zoom: u8) -> impl Strategy<Value = RangeId> {
 pub(crate) fn arb_random_set_case() -> impl Strategy<Value = RandomSetCase> {
     let single = SingleId::arb_within(RANDOM_SET_MIN_ZOOM..=RANDOM_SET_MAX_ZOOM)
         .prop_map(RandomSetInsert::Single);
-    let range = arb_compact_range_id(RANDOM_SET_MAX_ZOOM).prop_map(RandomSetInsert::Range);
+    let range = RangeId::arb_bounded(
+        RANDOM_SET_MIN_ZOOM..=RANDOM_SET_MAX_ZOOM,
+        RANDOM_SET_MAX_RANGE_SPAN,
+    )
+    .prop_map(RandomSetInsert::Range);
 
     let insert = prop_oneof![
         // 単一ID多め。全体の展開サイズを抑えつつ多様性を確保する。

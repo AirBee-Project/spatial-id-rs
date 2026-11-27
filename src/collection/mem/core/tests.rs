@@ -2,6 +2,9 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Debug;
+use proptest::prelude::*;
+use rand::{Rng, RngExt};
+use rand_chacha::{ChaCha8Rng, rand_core::SeedableRng};
 use triomphe::Arc;
 
 use super::FlexTreeCore;
@@ -150,43 +153,18 @@ fn model_value_at<V: Clone>(writes: &[(FlexId, Option<V>)], point: &FlexId) -> O
         .and_then(|(_, v)| v.clone())
 }
 
-/// 決定的な擬似乱数（線形合同法）。`next(n)` は `0..n` を返す。
-fn rng(mut seed: u64) -> impl FnMut(u64) -> u64 {
-    move |n| {
-        seed = seed
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
-        (seed >> 33) % n
-    }
-}
-
-/// 各次元のズームが `0..max_zoom` のランダムな FlexId を作る。
-fn random_id(next: &mut impl FnMut(u64) -> u64, max_zoom: u64) -> FlexId {
-    let fz = next(max_zoom) as u8;
-    let xz = next(max_zoom) as u8;
-    let yz = next(max_zoom) as u8;
-    let f = next(2 << fz) as i32 - (1 << fz);
-    let x = next(1 << xz) as u32;
-    let y = next(1 << yz) as u32;
-    // 時間次元が無いビルドでは全時間（ズーム0）しか作れない
-    let tz = if cfg!(feature = "temporal_id") {
-        next(max_zoom) as u8
-    } else {
-        0
-    };
-    let t = next(1 << tz);
-    FlexId::new(fz, f, xz, x, yz, y)
-        .unwrap()
-        .time_with_segment(tz, t)
-        .unwrap()
+/// 各次元のズームが `0..=max_zoom` のランダムな FlexId を作る。
+fn random_id(rng: &mut impl Rng, max_zoom: u8) -> FlexId {
+    FlexId::random_within_using(rng, 0..=max_zoom).time_random_within_using(rng, 0..=max_zoom)
 }
 
 /// 標本点のズーム。[`random_id`] の `max_zoom` 以下の ID より必ず細かい。
 const POINT_ZOOM: u8 = 20;
 
 /// `region` の中のランダムな標本点（各次元のズーム [`POINT_ZOOM`]）。
-fn random_point_in(next: &mut impl FnMut(u64) -> u64, region: &FlexId) -> FlexId {
-    let mut deeper = |z: u8, i: i64| (i << (POINT_ZOOM - z)) + next(1 << (POINT_ZOOM - z)) as i64;
+fn random_point_in(rng: &mut impl Rng, region: &FlexId) -> FlexId {
+    let mut deeper =
+        |z: u8, i: i64| (i << (POINT_ZOOM - z)) + rng.random_range(0..(1i64 << (POINT_ZOOM - z)));
     let f = deeper(region.f_zoomlevel(), region.f_index() as i64);
     let x = deeper(region.x_zoomlevel(), region.x_index() as i64);
     let y = deeper(region.y_zoomlevel(), region.y_index() as i64);
@@ -207,20 +185,20 @@ fn random_point_in(next: &mut impl FnMut(u64) -> u64, region: &FlexId) -> FlexId
 }
 
 /// 書き込んだ各 ID の内側と、全体からランダムに選んだ標本点。
-fn sample_points(next: &mut impl FnMut(u64) -> u64, ids: &[FlexId]) -> Vec<FlexId> {
+fn sample_points(rng: &mut impl Rng, ids: &[FlexId]) -> Vec<FlexId> {
     let mut points = Vec::new();
     for id in ids {
         for _ in 0..2 {
-            points.push(random_point_in(next, id));
+            points.push(random_point_in(rng, id));
         }
     }
     for _ in 0..20 {
-        let root = if next(2) == 0 {
+        let root = if rng.random_bool(0.5) {
             FlexId::UPPER_MAX
         } else {
             FlexId::LOWER_MAX
         };
-        points.push(random_point_in(next, &root));
+        points.push(random_point_in(rng, &root));
     }
     points
 }
@@ -303,89 +281,101 @@ fn remove_restores_empty_tree() {
     assert_eq!(tree, FlexTreeCore::default());
 }
 
-/// 乱数で上書き挿入と削除を繰り返し、参照モデルと値が一致し、常に FlexTreeCore の規則を守っていることを確かめる。
-/// さらに、別の分け方の FlexId（各 FlexId を半分に割ったもの・自分の FlexId を逆順）から組み直しても同じ形になることを確かめる。
-/// 粗い ID が重なり合う場合と、細かい ID が疎に散る場合（段飛ばしが多い）の両方を試す。
-#[test]
-fn random_updates_match_model_and_keep_rules() {
-    let mut next = rng(0x1234_5678_9abc_def0);
-    for max_zoom in [5, 20] {
-        for _ in 0..50 {
-            let mut tree = FlexTreeCore::default();
-            let mut writes: Vec<(FlexId, Option<u64>)> = Vec::new();
-
-            for _ in 0..40 {
-                let id = random_id(&mut next, max_zoom);
-                if next(4) == 0 {
-                    tree.remove(id);
-                    writes.push((id, None));
-                } else {
-                    let value = next(3);
-                    tree.insert(id, value);
-                    writes.push((id, Some(value)));
-                }
-                assert_rules(&tree);
-            }
-
-            let ids: Vec<FlexId> = writes.iter().map(|(id, _)| *id).collect();
-            for point in sample_points(&mut next, &ids) {
-                assert_eq!(value_at(&tree, &point), model_value_at(&writes, &point));
-            }
-
-            let halves: Vec<(FlexId, &u64)> = tree
-                .iter()
-                .flat_map(|(id, v)| {
-                    match Dimension::ALL
-                        .into_iter()
-                        .find(|&d| id.split_on(d, Side::Upper).is_some())
-                    {
-                        Some(d) => [Side::Upper, Side::Lower]
-                            .map(|side| (id.split_on(d, side).unwrap(), v))
-                            .to_vec(),
-                        None => alloc::vec![(id, v)],
-                    }
-                })
-                .collect();
-            assert_eq!(build(halves), tree);
-
-            let mut own_leaves: Vec<(FlexId, &u64)> = tree.iter().collect();
-            own_leaves.reverse();
-            assert_eq!(build(own_leaves), tree);
-        }
-    }
+fn arb_ops(max_zoom: u8) -> impl Strategy<Value = Vec<(FlexId, Option<u64>)>> {
+    let op = prop_oneof![
+        1 => Just(None),
+        3 => (0..3u64).prop_map(Some),
+    ];
+    prop::collection::vec(
+        (FlexId::arb_with_time(0..=max_zoom, 0..=max_zoom), op),
+        1..=40,
+    )
 }
 
-/// 集合演算が参照モデルと一致し、結果も FlexTreeCore の規則を守っていることを確かめる。
-#[test]
-fn set_operations_match_model() {
-    let mut next = rng(7);
-    for max_zoom in [5, 20] {
-        for _ in 0..50 {
-            let (mut a, mut b) = (FlexTreeCore::<()>::default(), FlexTreeCore::<()>::default());
-            let (mut ids_a, mut ids_b) = (Vec::new(), Vec::new());
-            for _ in 0..20 {
-                let id = random_id(&mut next, max_zoom);
-                a.insert(id, ());
-                ids_a.push(id);
-                let id = random_id(&mut next, max_zoom);
-                b.insert(id, ());
-                ids_b.push(id);
-            }
+fn arb_id_pair_lists(max_zoom: u8) -> impl Strategy<Value = (Vec<FlexId>, Vec<FlexId>)> {
+    let ids = || prop::collection::vec(FlexId::arb_with_time(0..=max_zoom, 0..=max_zoom), 0..=20);
+    (ids(), ids())
+}
 
-            let (union, intersection, difference) =
-                (a.union(&b), a.intersection(&b), a.difference(&b));
-            for tree in [&union, &intersection, &difference] {
-                assert_rules(tree);
-            }
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
 
-            let all_ids: Vec<FlexId> = ids_a.iter().chain(&ids_b).copied().collect();
-            for point in sample_points(&mut next, &all_ids) {
-                let in_a = ids_a.iter().any(|id| id.contains(&point));
-                let in_b = ids_b.iter().any(|id| id.contains(&point));
-                assert_eq!(value_at(&union, &point).is_some(), in_a || in_b);
-                assert_eq!(value_at(&intersection, &point).is_some(), in_a && in_b);
-                assert_eq!(value_at(&difference, &point).is_some(), in_a && !in_b);
+    /// 乱数で上書き挿入と削除を繰り返し、参照モデルと値が一致し、常に FlexTreeCore の規則を守っていることを確かめる。
+    /// さらに、別の分け方の FlexId（各 FlexId を半分に割ったもの・自分の FlexId を逆順）から組み直しても同じ形になることを確かめる。
+    /// 粗い ID が重なり合う場合と、細かい ID が疎に散る場合（段飛ばしが多い）の両方を試す。
+    #[test]
+    fn random_updates_match_model_and_keep_rules(
+        writes in prop_oneof![arb_ops(4), arb_ops(19)],
+        point_seed in any::<u64>(),
+    ) {
+        let mut tree = FlexTreeCore::default();
+        for &(id, value) in &writes {
+            match value {
+                None => {
+                    tree.remove(id);
+                }
+                Some(v) => {
+                    tree.insert(id, v);
+                }
             }
+            assert_rules(&tree);
+        }
+
+        let mut rng = ChaCha8Rng::seed_from_u64(point_seed);
+        let ids: Vec<FlexId> = writes.iter().map(|(id, _)| *id).collect();
+        for point in sample_points(&mut rng, &ids) {
+            prop_assert_eq!(value_at(&tree, &point), model_value_at(&writes, &point));
+        }
+
+        let halves: Vec<(FlexId, &u64)> = tree
+            .iter()
+            .flat_map(|(id, v)| {
+                match Dimension::ALL
+                    .into_iter()
+                    .find(|&d| id.split_on(d, Side::Upper).is_some())
+                {
+                    Some(d) => [Side::Upper, Side::Lower]
+                        .map(|side| (id.split_on(d, side).unwrap(), v))
+                        .to_vec(),
+                    None => alloc::vec![(id, v)],
+                }
+            })
+            .collect();
+        prop_assert_eq!(build(halves), tree.clone());
+
+        let mut own_leaves: Vec<(FlexId, &u64)> = tree.iter().collect();
+        own_leaves.reverse();
+        prop_assert_eq!(build(own_leaves), tree);
+    }
+
+    /// 集合演算が参照モデルと一致し、結果も FlexTreeCore の規則を守っていることを確かめる。
+    #[test]
+    fn set_operations_match_model(
+        (ids_a, ids_b) in prop_oneof![arb_id_pair_lists(4), arb_id_pair_lists(19)],
+        point_seed in any::<u64>(),
+    ) {
+        let (mut a, mut b) = (FlexTreeCore::<()>::default(), FlexTreeCore::<()>::default());
+        for &id in &ids_a {
+            a.insert(id, ());
+        }
+        for &id in &ids_b {
+            b.insert(id, ());
+        }
+
+        let (union, intersection, difference) =
+            (a.union(&b), a.intersection(&b), a.difference(&b));
+        for tree in [&union, &intersection, &difference] {
+            assert_rules(tree);
+        }
+
+        let mut rng = ChaCha8Rng::seed_from_u64(point_seed);
+        let all_ids: Vec<FlexId> = ids_a.iter().chain(&ids_b).copied().collect();
+        for point in sample_points(&mut rng, &all_ids) {
+            let in_a = ids_a.iter().any(|id| id.contains(&point));
+            let in_b = ids_b.iter().any(|id| id.contains(&point));
+            prop_assert_eq!(value_at(&union, &point).is_some(), in_a || in_b);
+            prop_assert_eq!(value_at(&intersection, &point).is_some(), in_a && in_b);
+            prop_assert_eq!(value_at(&difference, &point).is_some(), in_a && !in_b);
         }
     }
 }
@@ -432,16 +422,16 @@ fn collect_recursive<'a, V>(node: &'a Node<V>, this: FlexId, out: &mut Vec<(Flex
 /// `FromIterator`・`Extend` で組み直すと元の FlexTreeCore に戻ることを確かめる。
 #[test]
 fn iterators_match_recursive_walk_and_round_trip() {
-    let mut next = rng(0xfeed);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(0xfeed);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
             let mut tree = FlexTreeCore::default();
             for _ in 0..40 {
-                let id = random_id(&mut next, max_zoom);
-                if next(4) == 0 {
+                let id = random_id(&mut rng, max_zoom);
+                if rng.random_range(0..4) == 0 {
                     tree.remove(id);
                 } else {
-                    tree.insert(id, next(3));
+                    tree.insert(id, rng.random_range(0..3u64));
                 }
             }
 
@@ -524,20 +514,20 @@ fn empty_tree_iterators_are_fused() {
 type Writes<V> = Vec<(FlexId, Option<V>)>;
 
 /// 乱数で上書き挿入と削除を繰り返した FlexTreeCore と、その書き込み履歴を作る。
-fn random_tree<V: PartialEq + Clone>(
-    next: &mut impl FnMut(u64) -> u64,
-    max_zoom: u64,
-    random_value: impl Fn(&mut dyn FnMut(u64) -> u64) -> V,
+fn random_tree<V: PartialEq + Clone, R: Rng>(
+    rng: &mut R,
+    max_zoom: u8,
+    random_value: impl Fn(&mut R) -> V,
 ) -> (FlexTreeCore<V>, Writes<V>) {
     let mut tree = FlexTreeCore::default();
     let mut writes = Vec::new();
     for _ in 0..40 {
-        let id = random_id(next, max_zoom);
-        if next(4) == 0 {
+        let id = random_id(rng, max_zoom);
+        if rng.random_range(0..4) == 0 {
             tree.remove(id);
             writes.push((id, None));
         } else {
-            let value = random_value(next);
+            let value = random_value(rng);
             tree.insert(id, value.clone());
             writes.push((id, Some(value)));
         }
@@ -548,10 +538,10 @@ fn random_tree<V: PartialEq + Clone>(
 /// `count` は値を持つ領域の数と一致し、イテレーターの `size_hint` は残りの数を正確に返す。
 #[test]
 fn count_and_size_hint_match_iteration() {
-    let mut next = rng(99);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(99);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
-            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
+            let (tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..3));
             let total = tree.iter().count();
             assert_eq!(tree.count(), total);
             assert_eq!(tree.is_empty(), total == 0);
@@ -584,9 +574,9 @@ fn unordered_values_support_set_operations() {
 }
 
 /// 重ならないとは限らない、ランダムな FlexId の列。
-fn random_targets(next: &mut impl FnMut(u64) -> u64, max_zoom: u64) -> Vec<FlexId> {
-    let count = 1 + next(3);
-    (0..count).map(|_| random_id(next, max_zoom)).collect()
+fn random_targets(rng: &mut impl Rng, max_zoom: u8) -> Vec<FlexId> {
+    let count = rng.random_range(1..=3);
+    (0..count).map(|_| random_id(rng, max_zoom)).collect()
 }
 
 /// FlexId の列が覆う領域。
@@ -599,11 +589,11 @@ fn region_of(ids: &[FlexId]) -> FlexTreeCore<()> {
 /// 複数の領域への `insert` は、1つずつ `insert` した結果と同じになる。
 #[test]
 fn insert_many_ids_matches_inserting_one_by_one() {
-    let mut next = rng(11);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(11);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
-            let (base, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
-            let targets = random_targets(&mut next, max_zoom);
+            let (base, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..3));
+            let targets = random_targets(&mut rng, max_zoom);
 
             let mut at_once = base.clone();
             at_once.insert(targets.iter().copied(), 9);
@@ -620,18 +610,18 @@ fn insert_many_ids_matches_inserting_one_by_one() {
 /// `insert_with` は、既に値がある場所を `resolve(既存, 新しい値)` にし、空の場所には新しい値を置く。
 #[test]
 fn insert_with_matches_model() {
-    let mut next = rng(12);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(12);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
             let mut tree = FlexTreeCore::<u64>::default();
             let mut writes: Writes<u64> = Vec::new();
             for _ in 0..30 {
-                let id = random_id(&mut next, max_zoom);
-                if next(4) == 0 {
+                let id = random_id(&mut rng, max_zoom);
+                if rng.random_range(0..4) == 0 {
                     tree.remove(id);
                     writes.push((id, None));
                 } else {
-                    let value = 1 + next(3);
+                    let value = rng.random_range(1..=3);
                     tree.insert_with(id, value, |old, new| old + new);
                     writes.push((id, Some(value)));
                 }
@@ -639,7 +629,7 @@ fn insert_with_matches_model() {
             }
 
             let ids: Vec<FlexId> = writes.iter().map(|(id, _)| *id).collect();
-            for point in sample_points(&mut next, &ids) {
+            for point in sample_points(&mut rng, &ids) {
                 // 削除（None）で空に戻り、書き込みは既存の値に足される
                 let expected = writes
                     .iter()
@@ -656,11 +646,11 @@ fn insert_with_matches_model() {
 /// `get` は、`target` との共通部分に切り取った FlexId を返す。組み直すと積集合と一致する。
 #[test]
 fn get_matches_intersection() {
-    let mut next = rng(13);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(13);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
-            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
-            let targets = random_targets(&mut next, max_zoom);
+            let (tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..3));
+            let targets = random_targets(&mut rng, max_zoom);
 
             let got: FlexTreeCore<u64> = tree
                 .get(targets.iter().copied())
@@ -677,12 +667,12 @@ fn get_matches_intersection() {
 /// `get_overlapping` は、重なる FlexId をそのまま、1回ずつ、`iter` と同じ順で返す。`RangeId` を渡しても同じ。
 #[test]
 fn get_overlapping_returns_whole_leaves_once() {
-    let mut next = rng(14);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(14);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
-            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
+            let (tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..3));
 
-            let targets = random_targets(&mut next, max_zoom);
+            let targets = random_targets(&mut rng, max_zoom);
             let expected: Vec<_> = tree
                 .iter()
                 .filter(|(leaf, _)| targets.iter().any(|t| leaf.intersection(t).is_some()))
@@ -690,17 +680,7 @@ fn get_overlapping_returns_whole_leaves_once() {
             let got: Vec<_> = tree.get_overlapping(targets.iter().copied()).collect();
             assert_eq!(got, expected);
 
-            let z = next(max_zoom) as u8;
-            let span = 1i64 << z;
-            let f0 = next(2 << z) as i64 - span;
-            let (x0, y0) = (next(1 << z), next(1 << z));
-            let range = RangeId::new(
-                z,
-                [f0 as i32, (f0 + next(3) as i64).min(span - 1) as i32],
-                [x0 as u32, (x0 + next(3)).min(span as u64 - 1) as u32],
-                [y0 as u32, (y0 + next(3)).min(span as u64 - 1) as u32],
-            )
-            .unwrap();
+            let range = RangeId::random_bounded_using(&mut rng, 0..=max_zoom, 2);
             let expected: Vec<_> = tree
                 .iter()
                 .filter(|(leaf, _)| leaf.intersects_range(&range))
@@ -714,12 +694,12 @@ fn get_overlapping_returns_whole_leaves_once() {
 /// `remove` は `target` の部分を取り除き、取り除いた部分（積集合）を返す。
 #[test]
 fn remove_returns_removed_part() {
-    let mut next = rng(15);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(15);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
-            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
+            let (mut tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..3));
             let before = tree.clone();
-            let targets = random_targets(&mut next, max_zoom);
+            let targets = random_targets(&mut rng, max_zoom);
             let region = region_of(&targets);
 
             let removed = tree.remove(targets.iter().copied());
@@ -734,12 +714,12 @@ fn remove_returns_removed_part() {
 /// `remove_overlapping` は、`target` と重なる FlexId を丸ごと取り除く。
 #[test]
 fn remove_overlapping_removes_whole_leaves() {
-    let mut next = rng(16);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(16);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
-            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
+            let (mut tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..3));
             let before = tree.clone();
-            let targets = random_targets(&mut next, max_zoom);
+            let targets = random_targets(&mut rng, max_zoom);
             let overlaps = |leaf: &FlexId| targets.iter().any(|t| leaf.intersection(t).is_some());
 
             let removed = tree.remove_overlapping(targets.iter().copied());
@@ -793,10 +773,10 @@ fn clear_empties_tree() {
 /// Node を辿るスタックは、確保した大きさ（高さ + 2）を超えない。超えると走査の途中で再確保が起きる。
 #[test]
 fn traversal_stack_fits_height_bound() {
-    let mut next = rng(17);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(17);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
-            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
+            let (tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..3));
             let bound = usize::from(
                 tree.upper_root
                     .as_ref()
@@ -843,10 +823,10 @@ impl Eq for Counted {}
 fn eq_skips_shared_subtrees() {
     use core::sync::atomic::Ordering::Relaxed;
 
-    let mut next = rng(19);
+    let mut rng = ChaCha8Rng::seed_from_u64(19);
     let mut tree = FlexTreeCore::<Counted>::default();
     for i in 0..1000 {
-        tree.insert(random_id(&mut next, 20), Counted(i % 5));
+        tree.insert(random_id(&mut rng, 19), Counted(i % 5));
     }
     let height = usize::from(
         tree.upper_root
@@ -860,7 +840,7 @@ fn eq_skips_shared_subtrees() {
     assert_eq!(COUNTED_EQ_CALLS.load(Relaxed) - calls, 0);
 
     let mut changed = tree.clone();
-    changed.insert(random_id(&mut next, 20), Counted(99));
+    changed.insert(random_id(&mut rng, 19), Counted(99));
     let calls = COUNTED_EQ_CALLS.load(Relaxed);
     assert!(tree != changed);
     let compared = COUNTED_EQ_CALLS.load(Relaxed) - calls;
@@ -874,16 +854,16 @@ fn eq_skips_shared_subtrees() {
 /// 書き込みは Node をその場で書き換えることがあるが、clone した FlexTreeCore には影響しない。
 #[test]
 fn writes_do_not_change_clones() {
-    let mut next = rng(20);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(20);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
-            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
+            let (mut tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..3));
             let snapshot = tree.clone();
             let before: Vec<(FlexId, u64)> = snapshot.iter().map(|(id, v)| (id, *v)).collect();
 
             for _ in 0..10 {
-                let id = random_id(&mut next, max_zoom);
-                match next(3) {
+                let id = random_id(&mut rng, max_zoom);
+                match rng.random_range(0..3) {
                     0 => tree.insert(id, 9),
                     1 => tree.insert_with(id, 9, |old, new| old + new),
                     _ => {
@@ -930,14 +910,14 @@ impl Drop for Tracked {
 /// 書き込みと集合演算を重ねても、値はちょうど1回ずつ解放される。
 #[test]
 fn values_are_dropped_exactly_once() {
-    let mut next = rng(21);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(21);
+    for max_zoom in [4, 19] {
         let mut tree = FlexTreeCore::<Tracked>::default();
         let mut other = FlexTreeCore::<Tracked>::default();
         for _ in 0..300 {
-            let id = random_id(&mut next, max_zoom);
-            let value = Tracked::new(next(3));
-            match next(4) {
+            let id = random_id(&mut rng, max_zoom);
+            let value = Tracked::new(rng.random_range(0..3));
+            match rng.random_range(0..4) {
                 0 => tree.insert(id, value),
                 1 => tree.insert_with(id, value, |old, new| Tracked::new(old.0 + new.0)),
                 2 => other.insert(id, value),
@@ -945,7 +925,7 @@ fn values_are_dropped_exactly_once() {
                     tree.remove(id);
                 }
             }
-            if next(16) == 0 {
+            if rng.random_range(0..16) == 0 {
                 let snapshot = tree.clone();
                 tree = tree.union(&other);
                 tree = tree.difference(&snapshot.intersection(&other));
@@ -993,37 +973,37 @@ fn common_descent_stepwise(
 /// `common_descent` は、1段ずつ降りた場合と同じ領域で止まる。
 #[test]
 fn common_descent_matches_stepwise_descent() {
-    let mut next = rng(31);
-    let coarser = |next: &mut dyn FnMut(u64) -> u64, point: &FlexId, this: &FlexId| {
+    let mut rng = ChaCha8Rng::seed_from_u64(31);
+    let coarser = |rng: &mut ChaCha8Rng, point: &FlexId, this: &FlexId| {
         let zoom = Dimension::ALL.map(|d| {
             let (lo, hi) = (this.zoomlevel_on(d), point.zoomlevel_on(d));
-            lo + next(u64::from(hi - lo) + 1) as u8
+            rng.random_range(lo..=hi)
         });
         point.ancestor_at(zoom)
     };
-    for max_zoom in [3, 8, 20] {
+    for max_zoom in [2, 7, 19] {
         for _ in 0..20_000 {
-            let this = random_id(&mut next, max_zoom);
-            let pa = random_point_in(&mut next, &this);
+            let this = random_id(&mut rng, max_zoom);
+            let pa = random_point_in(&mut rng, &this);
             // 近い2点を作り、行き先が深いところまで重なる場合も十分に出す
             let near = Dimension::ALL.map(|d| {
-                let up = next(4) as u8;
+                let up = rng.random_range(0..4u8);
                 this.zoomlevel_on(d)
                     .max(pa.zoomlevel_on(d).saturating_sub(up))
             });
-            let around = if next(2) == 0 {
+            let around = if rng.random_bool(0.5) {
                 pa.ancestor_at(near)
             } else {
                 this
             };
-            let pb = random_point_in(&mut next, &around);
-            let region_a = coarser(&mut next, &pa, &this);
-            let region_b = coarser(&mut next, &pb, &this);
+            let pb = random_point_in(&mut rng, &around);
+            let region_a = coarser(&mut rng, &pa, &this);
+            let region_b = coarser(&mut rng, &pb, &this);
             let mut random_set = || -> DimensionSet {
-                let bits = next(16);
+                let bits = rng.random_range(0..16u8);
                 Dimension::ALL
                     .into_iter()
-                    .filter(|&d| bits >> d as u8 & 1 != 0)
+                    .filter(|&d| (bits >> d as u8) & 1 != 0)
                     .collect()
             };
             let (split_a, split_b) = (random_set(), random_set());
@@ -1041,11 +1021,11 @@ fn common_descent_matches_stepwise_descent() {
 /// 1つの `target` への `get` は、全ての FlexId を `iter` の順に切り取ったものと一致する。
 #[test]
 fn get_single_target_matches_clipped_iteration() {
-    let mut next = rng(41);
-    for max_zoom in [3, 5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(41);
+    for max_zoom in [2, 4, 19] {
         for _ in 0..300 {
-            let (tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(3));
-            let target = random_id(&mut next, max_zoom);
+            let (tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..3));
+            let target = random_id(&mut rng, max_zoom);
             let expected: Vec<_> = tree
                 .iter()
                 .filter_map(|(id, v)| Some((id.intersection(&target)?, v)))
@@ -1097,10 +1077,10 @@ fn arc_counts<V>(tree: &FlexTreeCore<V>) -> (usize, usize) {
 /// `compact` は不変条件と中身を保ち、再実行しても冪等で、同じ構造を1つの `Arc` に共有する。
 #[test]
 fn compact_preserves_contents_and_is_idempotent() {
-    let mut next = rng(0x5150_c011);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(0x5150_c011);
+    for max_zoom in [4, 19] {
         for _ in 0..50 {
-            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(2));
+            let (mut tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..2));
             let expected: Vec<(FlexId, u64)> = tree.iter().map(|(id, v)| (id, *v)).collect();
 
             tree.compact();
@@ -1189,10 +1169,10 @@ fn compact_shares_identical_subtrees_across_positions() {
 /// 別の `FlexTreeCore` と `Node` を共有していても、`compact` は元のクローンに影響を与えず正しく圧縮する。
 #[test]
 fn compact_does_not_affect_clones_and_supports_later_edits() {
-    let mut next = rng(0xbeef_1234);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(0xbeef_1234);
+    for max_zoom in [4, 19] {
         for _ in 0..30 {
-            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(2));
+            let (mut tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..2));
             let snapshot = tree.clone();
             let snapshot_items: Vec<(FlexId, u64)> =
                 snapshot.iter().map(|(id, v)| (id, *v)).collect();
@@ -1213,7 +1193,7 @@ fn compact_does_not_affect_clones_and_supports_later_edits() {
             );
 
             // `compact` 後の FlexTreeCore に対する変更（CoW）も snapshot に波及しない
-            let id = random_id(&mut next, max_zoom);
+            let id = random_id(&mut rng, max_zoom);
             tree.insert(id, 99);
             assert_rules(&tree);
             assert_eq!(
@@ -1232,14 +1212,14 @@ fn compact_does_not_affect_clones_and_supports_later_edits() {
 /// `Node` を共有する2つの `FlexTreeCore` を両方 `compact` しても、それぞれの中身を保つ。
 #[test]
 fn compact_both_trees_sharing_nodes() {
-    let mut next = rng(0x0b07_c0de);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(0x0b07_c0de);
+    for max_zoom in [4, 19] {
         for _ in 0..30 {
-            let (mut tree, _) = random_tree::<u64>(&mut next, max_zoom, |n| n(2));
+            let (mut tree, _) = random_tree::<u64, _>(&mut rng, max_zoom, |r| r.random_range(0..2));
             let mut other = tree.clone();
             // 一部だけ変更して、共有する `Node` と共有しない `Node` を混在させる
-            for _ in 0..next(5) {
-                other.insert(random_id(&mut next, max_zoom), next(2));
+            for _ in 0..rng.random_range(0..5) {
+                other.insert(random_id(&mut rng, max_zoom), rng.random_range(0..2));
             }
             let tree_items: Vec<(FlexId, u64)> = tree.iter().map(|(id, v)| (id, *v)).collect();
             let other_items: Vec<(FlexId, u64)> = other.iter().map(|(id, v)| (id, *v)).collect();
@@ -1257,17 +1237,17 @@ fn compact_both_trees_sharing_nodes() {
 /// `compact` を含む操作列でも値はちょうど1回ずつ解放される。
 #[test]
 fn compact_drops_values_exactly_once() {
-    let mut next = rng(0xdead_c0de);
-    for max_zoom in [5, 20] {
+    let mut rng = ChaCha8Rng::seed_from_u64(0xdead_c0de);
+    for max_zoom in [4, 19] {
         let mut tree = FlexTreeCore::<Tracked>::default();
         for _ in 0..200 {
-            let id = random_id(&mut next, max_zoom);
-            if next(4) == 0 {
+            let id = random_id(&mut rng, max_zoom);
+            if rng.random_range(0..4) == 0 {
                 tree.remove(id);
             } else {
-                tree.insert(id, Tracked::new(next(3)));
+                tree.insert(id, Tracked::new(rng.random_range(0..3)));
             }
-            if next(10) == 0 {
+            if rng.random_range(0..10) == 0 {
                 let clone = tree.clone();
                 tree.compact();
                 assert_rules(&tree);
