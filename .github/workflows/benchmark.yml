@@ -1,9 +1,12 @@
 name: Benchmark
 
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
+  schedule:
+    # 毎週月曜 03:00 JST（UTC 指定のため日曜 18:00）
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
 
 permissions:
   contents: write
