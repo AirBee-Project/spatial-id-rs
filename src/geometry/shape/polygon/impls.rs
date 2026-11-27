@@ -23,7 +23,7 @@ impl Shape for Polygon {
     /// assert!(center.latitude() > 35.0);
     /// ```
     fn center(&self) -> Coordinate {
-        Coordinate::centroid(self.exterior.clone())
+        Coordinate::centroid(self.vertices.clone())
     }
 }
 

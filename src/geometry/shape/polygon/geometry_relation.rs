@@ -7,7 +7,7 @@ use crate::{
 
 impl ExpandCoordinates for Polygon {
     fn expand_coordinates(&self) -> impl Iterator<Item = Coordinate> {
-        self.exterior
+        self.vertices
             .iter()
             .chain(self.interiors.iter().flatten())
             .copied()
@@ -23,22 +23,22 @@ impl ExpandLines for Polygon {
 
 impl ExpandTriangles for Polygon {
     fn expand_triangles(&self) -> impl Iterator<Item = Triangle> {
-        let n = self.exterior.len();
+        let n = self.vertices.len();
         if n < 3 {
             return Vec::<Triangle>::new().into_iter();
         }
 
         if n == 3 {
             return vec![Triangle::new([
-                self.exterior[0],
-                self.exterior[1],
-                self.exterior[2],
+                self.vertices[0],
+                self.vertices[1],
+                self.vertices[2],
             ])]
             .into_iter();
         }
 
         // 計算用に全て ECEF に変換
-        let ecef_points: Vec<Ecef> = self.exterior.iter().map(|&c| c.into()).collect();
+        let ecef_points: Vec<Ecef> = self.vertices.iter().map(|&c| c.into()).collect();
 
         // 投影軸の決定
         let (u_axis, v_axis) = get_projection_axes(&ecef_points);
@@ -72,9 +72,9 @@ impl ExpandTriangles for Polygon {
                     prev_idx, curr_idx, next_idx, &indices, &points_2d, area_sign,
                 ) {
                     result.push(Triangle::new([
-                        self.exterior[prev_idx],
-                        self.exterior[curr_idx],
-                        self.exterior[next_idx],
+                        self.vertices[prev_idx],
+                        self.vertices[curr_idx],
+                        self.vertices[next_idx],
                     ]));
                     indices.remove(i);
                     ear_found = true;
@@ -89,9 +89,9 @@ impl ExpandTriangles for Polygon {
 
         if indices.len() == 3 {
             result.push(Triangle::new([
-                self.exterior[indices[0]],
-                self.exterior[indices[1]],
-                self.exterior[indices[2]],
+                self.vertices[indices[0]],
+                self.vertices[indices[1]],
+                self.vertices[indices[2]],
             ]));
         }
 

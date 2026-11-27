@@ -116,32 +116,13 @@ pub(crate) fn validate_ring(pts: &[(f64, f64)], eps: f64) -> Result<f64, Error> 
 /// `hole` が外周 `exterior` の内側（境界上を含む）に収まっているかを判定する。
 pub(crate) fn ring_inside_exterior(exterior: &[(f64, f64)], hole: &[(f64, f64)], eps: f64) -> bool {
     let eps2 = eps * eps;
-
-    if !hole.iter().all(|&p| point_in_ring(exterior, p, eps2, true)) {
-        return false;
-    }
-
-    for (a, b) in ring_edges(hole) {
-        let mid = ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5);
-        if !point_in_ring(exterior, mid, eps2, true) {
-            return false;
-        }
-        for (c, d) in ring_edges(exterior) {
-            if segments_cross(a, b, c, d, eps) {
-                return false;
-            }
-        }
-    }
-
-    true
+    ring_samples(hole).all(|p| point_in_ring(exterior, p, eps2, true))
+        && ring_edges(hole)
+            .all(|(a, b)| ring_edges(exterior).all(|(c, d)| !segments_cross(a, b, c, d, eps)))
 }
 
 /// 2 つの穴リングが交差、辺重複、または包含関係にあるかを判定する。
 pub(crate) fn holes_overlap(hole_a: &[(f64, f64)], hole_b: &[(f64, f64)], eps: f64) -> bool {
-    if !aabb_overlaps(ring_aabb(hole_a), ring_aabb(hole_b), eps) {
-        return false;
-    }
-
     for (a, b) in ring_edges(hole_a) {
         for (c, d) in ring_edges(hole_b) {
             if segments_cross(a, b, c, d, eps) || segments_collinear_overlap(a, b, c, d, eps) {
@@ -151,16 +132,14 @@ pub(crate) fn holes_overlap(hole_a: &[(f64, f64)], hole_b: &[(f64, f64)], eps: f
     }
 
     let eps2 = eps * eps;
-    has_sample_strictly_inside(hole_a, hole_b, eps2)
-        || has_sample_strictly_inside(hole_b, hole_a, eps2)
+    ring_samples(hole_a).any(|p| point_in_ring(hole_b, p, eps2, false))
+        || ring_samples(hole_b).any(|p| point_in_ring(hole_a, p, eps2, false))
 }
 
-fn has_sample_strictly_inside(src: &[(f64, f64)], target: &[(f64, f64)], eps2: f64) -> bool {
-    src.iter().any(|&p| point_in_ring(target, p, eps2, false))
-        || ring_edges(src).any(|(a, b)| {
-            let mid = ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5);
-            point_in_ring(target, mid, eps2, false)
-        })
+fn ring_samples(ring: &[(f64, f64)]) -> impl Iterator<Item = (f64, f64)> + '_ {
+    ring.iter()
+        .copied()
+        .chain(ring_edges(ring).map(|(a, b)| ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5)))
 }
 
 fn is_collinear_2d(pts: &[(f64, f64)], eps: f64) -> bool {
@@ -300,9 +279,13 @@ fn segments_touch_or_cross(
 
 /// 端点の接触を除いて 2 線分が真に交差するかを判定する。
 fn segments_cross(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64), eps: f64) -> bool {
-    let straddles = |d1: f64, d2: f64| (d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps);
-    straddles(signed_distance(c, a, b), signed_distance(d, a, b))
-        && straddles(signed_distance(a, c, d), signed_distance(b, c, d))
+    let straddles = |a: (f64, f64), b: (f64, f64), p: (f64, f64), q: (f64, f64)| {
+        let thresh = eps * libm::hypot(b.0 - a.0, b.1 - a.1);
+        let o1 = orient(a, b, p);
+        let o2 = orient(a, b, q);
+        (o1 > thresh && o2 < -thresh) || (o1 < -thresh && o2 > thresh)
+    };
+    straddles(a, b, c, d) && straddles(c, d, a, b)
 }
 
 /// 1 点の頂点接触を除き、2 線分が辺に沿って重なっているかを判定する。
@@ -313,39 +296,26 @@ fn segments_collinear_overlap(
     d: (f64, f64),
     eps: f64,
 ) -> bool {
-    let dx = b.0 - a.0;
-    let dy = b.1 - a.1;
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let len = libm::hypot(dx, dy);
     if len <= eps {
         return false;
     }
 
-    if libm::fabs(signed_distance(c, a, b)) > eps || libm::fabs(signed_distance(d, a, b)) > eps {
+    let thresh = eps * len;
+    if libm::fabs(orient(a, b, c)) > thresh || libm::fabs(orient(a, b, d)) > thresh {
         return false;
     }
 
-    let ux = dx / len;
-    let uy = dy / len;
+    let (ux, uy) = (dx / len, dy / len);
     let tc = (c.0 - a.0) * ux + (c.1 - a.1) * uy;
     let td = (d.0 - a.0) * ux + (d.1 - a.1) * uy;
     let (lo, hi) = if tc <= td { (tc, td) } else { (td, tc) };
-
-    let overlap = hi.min(len) - lo.max(0.0);
-    overlap > eps
+    hi.min(len) - lo.max(0.0) > eps
 }
 
 fn orient(a: (f64, f64), b: (f64, f64), c: (f64, f64)) -> f64 {
     (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0)
-}
-
-fn signed_distance(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
-    let dx = b.0 - a.0;
-    let dy = b.1 - a.1;
-    let len = libm::hypot(dx, dy);
-    if len == 0.0 {
-        return 0.0;
-    }
-    (dx * (p.1 - a.1) - dy * (p.0 - a.0)) / len
 }
 
 fn point_segment_distance_sq(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
@@ -370,20 +340,6 @@ fn dist_sq(a: (f64, f64), b: (f64, f64)) -> f64 {
 
 fn seg_aabb(a: (f64, f64), b: (f64, f64)) -> (f64, f64, f64, f64) {
     (a.0.min(b.0), a.1.min(b.1), a.0.max(b.0), a.1.max(b.1))
-}
-
-fn ring_aabb(pts: &[(f64, f64)]) -> (f64, f64, f64, f64) {
-    let mut min_x = f64::INFINITY;
-    let mut min_y = f64::INFINITY;
-    let mut max_x = f64::NEG_INFINITY;
-    let mut max_y = f64::NEG_INFINITY;
-    for &(x, y) in pts {
-        min_x = min_x.min(x);
-        min_y = min_y.min(y);
-        max_x = max_x.max(x);
-        max_y = max_y.max(y);
-    }
-    (min_x, min_y, max_x, max_y)
 }
 
 fn aabb_overlaps(a: (f64, f64, f64, f64), b: (f64, f64, f64, f64), eps: f64) -> bool {

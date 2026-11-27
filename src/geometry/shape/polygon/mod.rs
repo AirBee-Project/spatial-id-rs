@@ -21,27 +21,34 @@ use ring_plane::{RingPlane, holes_overlap, ring_inside_exterior, validate_ring};
 /// ![多角形][polygon]
 #[doc = doc_image!("polygon", "docs/images/polygon.jpg")]
 pub struct Polygon {
-    exterior: Vec<Coordinate>,
+    vertices: Vec<Coordinate>,
     interiors: Vec<Vec<Coordinate>>,
 }
 
 impl Polygon {
-    /// 外周の頂点座標イテレータからデフォルト許容誤差（[`Epsilon::DEFAULT`]）を使って新しい [Polygon] を作成する。
+    /// 頂点座標のイテレータからデフォルト許容誤差（[`Epsilon::DEFAULT`]）を使って新しい [Polygon] を作成する。
     ///
     /// # エラー
     /// - 正規化後の頂点数が 3 未満の場合は [`GeometryError::PolygonTooFewVertices`] を返す。
     /// - 面積が 0（共線など）の場合は [`GeometryError::PolygonZeroArea`] を返す。
     /// - リングが自己交差している場合は [`GeometryError::PolygonSelfIntersecting`] を返す。
-    pub fn new(exterior: impl IntoIterator<Item = Coordinate>) -> Result<Self, Error> {
-        Self::with_epsilon(exterior, Epsilon::DEFAULT)
+    pub fn new(raw_points: impl IntoIterator<Item = Coordinate>) -> Result<Self, Error> {
+        Self::with_epsilon(raw_points, Epsilon::DEFAULT)
     }
 
-    /// 外周の頂点座標イテレータと指定した許容誤差から新しい [Polygon] を作成する。
+    /// 頂点座標のイテレータと指定した許容誤差から新しい [Polygon] を作成する。
     pub fn with_epsilon(
-        exterior: impl IntoIterator<Item = Coordinate>,
+        raw_points: impl IntoIterator<Item = Coordinate>,
         epsilon: Epsilon,
     ) -> Result<Self, Error> {
-        Self::with_interiors_and_epsilon(exterior, core::iter::empty::<[Coordinate; 0]>(), epsilon)
+        let eps = epsilon.as_meters();
+        let vertices = normalize_ring(raw_points, epsilon)?;
+        let (_, ext_2d) = RingPlane::from_exterior(&vertices, eps)?;
+        validate_ring(&ext_2d, eps)?;
+        Ok(Self {
+            vertices,
+            interiors: Vec::new(),
+        })
     }
 
     /// 外周と内周（穴）の頂点座標イテレータからデフォルト許容誤差（[`Epsilon::DEFAULT`]）を使って新しい [Polygon] を作成する。
@@ -64,8 +71,8 @@ impl Polygon {
         epsilon: Epsilon,
     ) -> Result<Self, Error> {
         let eps = epsilon.as_meters();
-        let exterior = normalize_ring(exterior, epsilon)?;
-        let (plane, ext_2d) = RingPlane::from_exterior(&exterior, eps)?;
+        let vertices = normalize_ring(exterior, epsilon)?;
+        let (plane, ext_2d) = RingPlane::from_exterior(&vertices, eps)?;
         let ext_area = validate_ring(&ext_2d, eps)?;
 
         let interiors_iter = interiors.into_iter();
@@ -90,7 +97,7 @@ impl Polygon {
 
         if normalized_holes.is_empty() {
             return Ok(Self {
-                exterior,
+                vertices,
                 interiors: normalized_holes,
             });
         }
@@ -113,14 +120,14 @@ impl Polygon {
         }
 
         Ok(Self {
-            exterior,
+            vertices,
             interiors: normalized_holes,
         })
     }
 
     /// 外周リングを構成する頂点のリストを返す。
     pub fn vertices(&self) -> &Vec<Coordinate> {
-        &self.exterior
+        &self.vertices
     }
 
     /// 内周リング（穴）のリストを返す。
