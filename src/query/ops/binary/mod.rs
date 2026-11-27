@@ -187,77 +187,59 @@ mod test {
     use crate::query::query_iter::QueryIter;
     use crate::{CancellationToken, Error, FlexId, RangeId, Source, SpatialIdMap};
 
-    fn rng(mut seed: u64) -> impl FnMut(u64) -> u64 {
-        move |n| {
-            seed = seed
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            (seed >> 33) % n
-        }
+    use alloc::vec::Vec;
+    use proptest::prelude::*;
+
+    fn arb_mixed_zoom_entries(max_zoom: u8) -> impl Strategy<Value = Vec<(FlexId, i32)>> {
+        prop::collection::vec(
+            (FlexId::arb_with_time(0..=max_zoom, 0..=max_zoom), 1..=10i32),
+            0..=25,
+        )
     }
 
-    fn random_id(next: &mut impl FnMut(u64) -> u64, max_zoom: u64) -> FlexId {
-        let fz = next(max_zoom) as u8;
-        let xz = next(max_zoom) as u8;
-        let yz = next(max_zoom) as u8;
-        let f = next(2 << fz) as i32 - (1 << fz);
-        let x = next(1 << xz) as u32;
-        let y = next(1 << yz) as u32;
-        let tz = if cfg!(feature = "temporal_id") {
-            next(max_zoom) as u8
-        } else {
-            0
-        };
-        let t = next(1 << tz);
-        FlexId::new(fz, f, xz, x, yz, y)
-            .unwrap()
-            .time_with_segment(tz, t)
-            .unwrap()
-    }
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
 
-    #[test]
-    fn binary_ops_stream_matches_tree_operations_on_mixed_zoom_ids() {
-        let mut next = rng(0x5eed_cafe);
-        for max_zoom in [4, 12] {
-            for _ in 0..40 {
-                let mut a = SpatialIdMap::<i32>::new();
-                let mut b = SpatialIdMap::<i32>::new();
-                for _ in 0..25 {
-                    a.insert(random_id(&mut next, max_zoom), next(10) as i32 + 1);
-                    b.insert(random_id(&mut next, max_zoom), next(10) as i32 + 1);
-                }
+        #[test]
+        fn binary_ops_stream_matches_tree_operations_on_mixed_zoom_ids(
+            (a_entries, b_entries) in prop_oneof![
+                (arb_mixed_zoom_entries(3), arb_mixed_zoom_entries(3)),
+                (arb_mixed_zoom_entries(11), arb_mixed_zoom_entries(11)),
+            ]
+        ) {
+            let a: SpatialIdMap<i32> = a_entries.into_iter().collect();
+            let b: SpatialIdMap<i32> = b_entries.into_iter().collect();
 
-                let inter = a
-                    .clone()
-                    .query()
-                    .intersection(b.clone().query())
-                    .get(..)
-                    .into_map()
-                    .unwrap();
-                assert_eq!(inter, a.intersection(&b));
+            let inter = a
+                .clone()
+                .query()
+                .intersection(b.clone().query())
+                .get(..)
+                .into_map()
+                .unwrap();
+            prop_assert_eq!(inter, a.intersection(&b));
 
-                let diff = a
-                    .clone()
-                    .query()
-                    .difference(b.clone().query())
-                    .get(..)
-                    .into_map()
-                    .unwrap();
-                assert_eq!(diff, a.difference(&b));
+            let diff = a
+                .clone()
+                .query()
+                .difference(b.clone().query())
+                .get(..)
+                .into_map()
+                .unwrap();
+            prop_assert_eq!(diff, a.difference(&b));
 
-                let merged = a
-                    .clone()
-                    .query()
-                    .merge(b.clone().query(), Sum)
-                    .get(..)
-                    .into_map()
-                    .unwrap();
-                let mut expected_merge = a.clone();
-                for (id, &val) in b.iter() {
-                    expected_merge.insert_with(id, val, |x, y| x + y);
-                }
-                assert_eq!(merged, expected_merge);
+            let merged = a
+                .clone()
+                .query()
+                .merge(b.clone().query(), Sum)
+                .get(..)
+                .into_map()
+                .unwrap();
+            let mut expected_merge = a.clone();
+            for (id, &val) in b.iter() {
+                expected_merge.insert_with(id, val, |x, y| x + y);
             }
+            prop_assert_eq!(merged, expected_merge);
         }
     }
 
