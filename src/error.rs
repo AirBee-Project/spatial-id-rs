@@ -85,6 +85,9 @@ pub enum GeometryError {
 
     /// GeoJSON の Polygon の穴が外周の内側に収まっていないことを示す。`index` は内周リングの位置（0 始まり）。
     HoleOutsideExterior { index: usize },
+
+    /// 複数の Polygon を扱う操作で、基準の Polygon と同一平面上にない要素があることを示す。`index` は入力配列内の位置（0 始まり）。
+    PolygonNotCoplanar { index: usize },
 }
 
 /// [`SpatialId`](crate::SpatialId) 関連で発生するエラー。
@@ -260,6 +263,13 @@ impl fmt::Display for GeometryError {
             }
             GeometryError::HoleOutsideExterior { index } => {
                 write!(f, "Polygon hole {} is not inside the exterior ring", index)
+            }
+            GeometryError::PolygonNotCoplanar { index } => {
+                write!(
+                    f,
+                    "Polygon at index {} is not coplanar with the base polygon",
+                    index
+                )
             }
         }
     }

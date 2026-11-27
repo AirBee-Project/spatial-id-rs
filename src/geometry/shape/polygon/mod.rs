@@ -1,4 +1,15 @@
+#[cfg(feature = "unstable")]
+use alloc::vec;
 use alloc::vec::Vec;
+
+#[cfg(feature = "unstable")]
+use i_overlay::core::fill_rule::FillRule;
+#[cfg(feature = "unstable")]
+use i_overlay::core::overlay::ContourDirection;
+#[cfg(feature = "unstable")]
+use i_overlay::core::overlay_rule::OverlayRule;
+#[cfg(feature = "unstable")]
+use i_overlay::float::overlay::{FloatOverlay, OverlayOptions};
 
 use crate::geometry::Epsilon;
 use crate::{Coordinate, Error, GeometryError, Point, Vec2, Vec3, Vec3Ecef};
@@ -116,9 +127,136 @@ impl Polygon {
             .all(|&c| libm::fabs((Vec3Ecef::from(c) - origin).dot(&normal)) <= epsilon.as_meters())
     }
 
+    /// 複数の同一平面上の [Polygon] を、デフォルト許容誤差（[`Epsilon::DEFAULT`]）で統合し、
+    /// 統合結果の内部に発生した穴は埋めて返す。
+    ///
+    /// # エラー
+    /// - 基準となる先頭要素と同一平面上にない要素がある場合は [`GeometryError::PolygonNotCoplanar`] を返す。
+    #[cfg(feature = "unstable")]
+    pub fn merge_filling_holes(polygons: &[Polygon]) -> Result<Vec<Polygon>, Error> {
+        Self::merge_filling_holes_epsilon(polygons, Epsilon::DEFAULT)
+    }
+
+    /// 複数の同一平面上の [Polygon] を、指定した許容誤差で統合し、
+    /// 統合結果の内部に発生した穴は埋めて返す。
+    ///
+    /// # エラー
+    /// - 基準となる先頭要素と同一平面上にない要素がある場合は [`GeometryError::PolygonNotCoplanar`] を返す。
+    #[cfg(feature = "unstable")]
+    pub fn merge_filling_holes_epsilon(
+        polygons: &[Polygon],
+        epsilon: Epsilon,
+    ) -> Result<Vec<Polygon>, Error> {
+        if polygons.is_empty() {
+            return Ok(Vec::new());
+        }
+        if polygons.len() == 1 {
+            return Ok(vec![polygons[0].clone()]);
+        }
+
+        let base = &polygons[0];
+        for (idx, poly) in polygons.iter().enumerate().skip(1) {
+            if !base.is_coplanar_epsilon(poly, epsilon) {
+                return Err(GeometryError::PolygonNotCoplanar { index: idx }.into());
+            }
+        }
+
+        let eps = epsilon.as_meters();
+        let origin = Vec3Ecef::from(base.vertices[0]);
+        let rel: Vec<Vec3Ecef> = base
+            .vertices
+            .iter()
+            .map(|&c| Vec3Ecef::from(c) - origin)
+            .collect();
+        let normal = Self::plane_normal(&rel, eps)?;
+        let [u, v] = normal.create_orthonormal_basis();
+
+        let mut contours: Vec<Vec<[f64; 2]>> = Vec::with_capacity(polygons.len());
+        let base_pts: Vec<Vec2> = rel
+            .iter()
+            .map(|r| Vec2::new(r.dot(&u), r.dot(&v)))
+            .collect();
+        contours.push(Self::to_ccw_contour(base_pts));
+        for poly in polygons.iter().skip(1) {
+            let pts: Vec<Vec2> = poly
+                .vertices()
+                .iter()
+                .map(|&c| {
+                    let r = Vec3Ecef::from(c) - origin;
+                    Vec2::new(r.dot(&u), r.dot(&v))
+                })
+                .collect();
+            contours.push(Self::to_ccw_contour(pts));
+        }
+
+        let mut options = OverlayOptions::<f64, i64>::default();
+        options.output_direction = ContourDirection::CounterClockwise;
+        options.ogc = true;
+        if eps > 0.0 {
+            options.min_output_area = 0.5 * eps * eps;
+        }
+
+        let shapes =
+            FloatOverlay::<[f64; 2], i64>::from_subj_custom(&contours, options, Default::default())
+                .overlay(OverlayRule::Subject, FillRule::Positive);
+
+        let dedup_eps2 = eps * eps;
+        let collinear_eps = if eps > 0.0 { eps.min(1e-6) } else { 1e-12 };
+        let collinear_eps2 = collinear_eps * collinear_eps;
+
+        let mut outers: Vec<(Vec<Vec2>, f64)> = Vec::with_capacity(shapes.len());
+        for mut shape in shapes {
+            if let Some(outer_pts) = shape.drain(..1).next() {
+                let mut pts: Vec<Vec2> = outer_pts
+                    .into_iter()
+                    .map(|[x, y]| Vec2::new(x, y))
+                    .collect();
+                Vec2::simplify_ring(&mut pts, dedup_eps2, collinear_eps2);
+                if pts.len() < 3 {
+                    continue;
+                }
+                let area = libm::fabs(Vec2::signed_area(&pts));
+                outers.push((pts, area));
+            }
+        }
+
+        // 穴を埋めた結果、元は穴の中の島だった外周が大きな外周に内包される場合は除外する
+        let accepted = if outers.len() > 1 {
+            outers.sort_by(|a, b| b.1.total_cmp(&a.1));
+            let mut kept: Vec<(Vec<Vec2>, f64)> = Vec::with_capacity(outers.len());
+            for cand in outers {
+                if !kept
+                    .iter()
+                    .any(|parent| Vec2::ring_is_inside(&cand.0, &parent.0))
+                {
+                    kept.push(cand);
+                }
+            }
+            kept
+        } else {
+            outers
+        };
+
+        let mut result = Vec::with_capacity(accepted.len());
+        for (pts, _) in accepted {
+            let coords: Vec<_> = pts
+                .iter()
+                .map(|&pt| Coordinate::try_from(origin + u.scale(pt.x) + v.scale(pt.y)))
+                .collect::<Result<_, _>>()?;
+            result.push(Polygon::new_epsilon(coords, epsilon)?);
+        }
+        Ok(result)
+    }
+
     /// [Polygon]を構成する点を返す。
     pub fn vertices(&self) -> &Vec<Coordinate> {
         &self.vertices
+    }
+
+    #[cfg(feature = "unstable")]
+    fn to_ccw_contour(mut pts: Vec<Vec2>) -> Vec<[f64; 2]> {
+        Vec2::ensure_ccw(&mut pts);
+        pts.into_iter().map(|p| [p.x, p.y]).collect()
     }
 
     fn newell_normal(rel: &[Vec3Ecef]) -> Option<Vec3Ecef> {
