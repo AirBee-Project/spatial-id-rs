@@ -3,43 +3,43 @@
 //! 触る領域にある [`Node::RefPage`] は、中身を読む必要があるときだけ読み出す。
 
 use super::FlexTreeCore;
-use super::node::Node;
+use super::node::{EncodedValue, Node};
 use crate::id::dimension::{Dimension, DimensionSet};
 use crate::{DiskError, FlexId, Side};
 use alloc::boxed::Box;
 
 /// 領域への操作。意味は [`SpatialIdMap`](crate::SpatialIdMap) の同名の操作と同じ。
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(super) enum Op {
     /// 値を書き込む。既に値がある場所は上書きする。
-    Insert(u64),
+    Insert(EncodedValue),
     /// まだ値のない場所にだけ値を書き込む。
-    Upsert(u64),
+    Upsert(EncodedValue),
     /// 空にする。
     Remove,
 }
 
-impl FlexTreeCore {
+impl<V> FlexTreeCore<V> {
     /// 領域 `this` の `node` の `target` に `op` を施す。空になれば [`None`]。`target` は `this` に含まれること。
     pub(super) async fn edit_node(
         &self,
         node: Option<Node>,
         this: &FlexId,
         target: &FlexId,
-        op: Op,
+        op: &Op,
     ) -> Result<Option<Node>, DiskError> {
         let Some(node) = node else {
             return match op {
                 Op::Remove => Ok(None),
                 Op::Insert(value) | Op::Upsert(value) => {
-                    Ok(Some(Node::Value(value).rebase(target, this)?))
+                    Ok(Some(Node::Value(value.clone()).rebase(target, this)?))
                 }
             };
         };
 
         if target == this {
             match op {
-                Op::Insert(value) => return Ok(Some(Node::Value(value))),
+                Op::Insert(value) => return Ok(Some(Node::Value(value.clone()))),
                 Op::Remove => return Ok(None),
                 Op::Upsert(_) => {}
             }
@@ -53,12 +53,15 @@ impl FlexTreeCore {
             }
             Node::Value(old) => match op {
                 Op::Upsert(_) => return Ok(Some(Node::Value(old))),
-                Op::Insert(value) if value == old => return Ok(Some(Node::Value(old))),
+                Op::Insert(value) if *value == old => return Ok(Some(Node::Value(old))),
                 Op::Insert(_) | Op::Remove => {
                     let dimension = this
                         .coarsest_dimension_in(target.finer_dimensions_than(this))
                         .expect("target == this の Insert / Remove は上で処理済み");
-                    (dimension, [Some(Node::Value(old)), Some(Node::Value(old))])
+                    (
+                        dimension,
+                        [Some(Node::Value(old.clone())), Some(Node::Value(old))],
+                    )
                 }
             },
             Node::Branch {

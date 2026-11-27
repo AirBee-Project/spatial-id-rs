@@ -1,10 +1,11 @@
 // ビットの位置は、バイト列をビッグエンディアンの整数として読んだときの最下位ビットを bit 0 として数える。
 use crate::collection::disk::io::PageId;
+use crate::collection::disk::{DiskValue, MAX_VALUE_LEN};
 use crate::id::dimension::{Dimension, DimensionSet};
 use crate::id::relative_flex_id::{RelativeFlexId, ShortRelativeFlexId};
 use crate::{DiskError, FlexId};
 use alloc::boxed::Box;
-use zerocopy::byteorder::{BigEndian, U64};
+use alloc::vec::Vec;
 use zerocopy::{FromBytes, IntoBytes, TryFromBytes};
 
 /// 子の Node の種類。3bit で、あと 3 種類まで増やせる。
@@ -25,10 +26,36 @@ impl TryFrom<u8> for NodeKind {
     }
 }
 
+/// Node が持つ、エンコードした [`MAX_VALUE_LEN`] バイト以下の値のバイト列。一致の判定はバイト列で行う。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct EncodedValue(Box<[u8]>);
+
+impl EncodedValue {
+    /// `value` をエンコードしたもの。[`MAX_VALUE_LEN`] バイトを超えれば [`DiskError::ValueTooLarge`] を返す。
+    pub(super) fn encode<V: DiskValue>(value: &V) -> Result<Self, DiskError> {
+        let mut bytes = Vec::new();
+        value.encode(&mut bytes);
+        if bytes.len() > MAX_VALUE_LEN {
+            return Err(DiskError::ValueTooLarge);
+        }
+        Ok(EncodedValue(bytes.into_boxed_slice()))
+    }
+
+    /// `bytes` をそのまま持つ値。`bytes` は [`MAX_VALUE_LEN`] バイト以下であること。
+    pub(super) fn from_bytes(bytes: &[u8]) -> Self {
+        debug_assert!(bytes.len() <= MAX_VALUE_LEN);
+        EncodedValue(bytes.into())
+    }
+
+    pub(super) fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// ページから読み出した Node。親から渡される領域との相対位置で意味を持つ。
 #[derive(Debug, Clone, PartialEq)]
 pub(super) enum Node {
-    Value(u64),
+    Value(EncodedValue),
     Branch {
         dimension: Dimension,
         /// 自身と子孫が割っている次元の集合。
@@ -54,11 +81,11 @@ impl Node {
     /// 領域が最大ズームを超えないかは、辿るときに [`FlexId::halves`] と [`RelativeFlexId::to_absolute`] で確かめる。
     pub(super) fn decode(kind: NodeKind, bytes: &[u8]) -> Result<Self, DiskError> {
         Ok(match kind {
-            NodeKind::Value => Node::Value(
-                U64::<BigEndian>::read_from_bytes(bytes)
-                    .map_err(|_| DiskError::Corrupt)?
-                    .get(),
-            ),
+            // 値の長さは親（Branch の lower_len、NodePage の長さ、Skip の残り）が決める
+            NodeKind::Value if bytes.len() <= MAX_VALUE_LEN => {
+                Node::Value(EncodedValue::from_bytes(bytes))
+            }
+            NodeKind::Value => return Err(DiskError::Corrupt),
             NodeKind::Branch => {
                 let (header, rest) =
                     raw::Branch::ref_from_prefix(bytes).map_err(|_| DiskError::Corrupt)?;
@@ -152,7 +179,7 @@ impl Node {
     /// [`write`](Self::write) したときの、子を除いたバイト長。
     pub(super) fn header_len(&self) -> usize {
         match self {
-            Node::Value(_) => size_of::<u64>(),
+            Node::Value(value) => value.as_bytes().len(),
             Node::Branch { .. } => size_of::<raw::Branch>(),
             Node::Skip { path, .. } => match ShortRelativeFlexId::new(*path) {
                 Some(_) => size_of::<raw::ShortSkip>(),
@@ -184,7 +211,7 @@ impl Node {
             rest
         }
         match self {
-            Node::Value(value) => put(dst, &value.to_be_bytes()),
+            Node::Value(value) => put(dst, value.as_bytes()),
             Node::Branch {
                 dimension,
                 split_dimensions,
@@ -229,6 +256,26 @@ mod raw {
     use crate::id::relative_flex_id::{RelativeFlexId, ShortRelativeFlexId};
     use zerocopy::byteorder::{BigEndian, U16};
     use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout, Unaligned};
+
+    /// 下位 40bit に詰めた PageId。
+    #[derive(FromBytes, IntoBytes, Immutable, KnownLayout, Unaligned)]
+    #[repr(transparent)]
+    pub(super) struct PageId40([u8; 5]);
+
+    impl From<PageId> for PageId40 {
+        fn from(page_id: PageId) -> Self {
+            // 2^40 ページは 4PiB で、実際のファイルでは超えない
+            assert!(page_id.0 >> 40 == 0);
+            let [_, _, _, bytes @ ..] = page_id.0.to_be_bytes();
+            PageId40(bytes)
+        }
+    }
+
+    impl From<&PageId40> for PageId {
+        fn from(PageId40([a, b, c, d, e]): &PageId40) -> Self {
+            PageId(u64::from_be_bytes([0, 0, 0, *a, *b, *c, *d, *e]))
+        }
+    }
 
     /// Branch の子より前の部分。この後ろに lower、upper が続く。
     ///
@@ -378,29 +425,21 @@ mod raw {
     #[repr(C)]
     pub(super) struct RefPage {
         head: u8,
-        page_id: [u8; RefPage::PAGE_ID_LEN],
+        page_id: PageId40,
     }
 
     impl RefPage {
-        const PAGE_ID_LEN: usize = 5;
-
         /// `page_id` のルートを指す RefPage。`split_dimensions` は行き先のルートのもの。
         pub(super) fn new(page_id: PageId, split_dimensions: DimensionSet) -> Self {
-            // 2^40 ページは 4PiB で、実際のファイルでは超えない
-            assert!(page_id.0 >> (8 * Self::PAGE_ID_LEN) == 0);
             RefPage {
                 head: u8::from(split_dimensions),
-                page_id: page_id.0.to_be_bytes()[8 - Self::PAGE_ID_LEN..]
-                    .try_into()
-                    .unwrap(),
+                page_id: page_id.into(),
             }
         }
 
         /// 行き先のページ番号。
         pub(super) fn page_id(&self) -> PageId {
-            let mut bytes = [0; 8];
-            bytes[8 - Self::PAGE_ID_LEN..].copy_from_slice(&self.page_id);
-            PageId(u64::from_be_bytes(bytes))
+            (&self.page_id).into()
         }
 
         /// 行き先のルートと子孫が割っている次元の集合。

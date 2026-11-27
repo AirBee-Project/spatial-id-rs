@@ -31,6 +31,10 @@ pub enum DiskError {
     Corrupt,
     /// ディスク I/O を担うスレッドが止まっていて、要求を処理できない。
     WorkerStopped,
+    /// ファイルを作ったときの値の型が、開こうとした型と合わない。
+    Incompatible,
+    /// 値のバイト列が、格納できる長さ（[`MAX_VALUE_LEN`](crate::collection::disk::MAX_VALUE_LEN)）を超えている。
+    ValueTooLarge,
 }
 
 /// クエリ関連で発生するエラー。
@@ -361,6 +365,8 @@ impl fmt::Display for DiskError {
             DiskError::Io(err) => write!(f, "I/O error: {err}"),
             DiskError::Corrupt => write!(f, "corrupt file"),
             DiskError::WorkerStopped => write!(f, "disk I/O worker stopped"),
+            DiskError::Incompatible => write!(f, "incompatible value type"),
+            DiskError::ValueTooLarge => write!(f, "value is too large"),
         }
     }
 }

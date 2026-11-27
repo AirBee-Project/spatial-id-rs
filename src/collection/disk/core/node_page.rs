@@ -33,7 +33,7 @@ impl NodePage {
         let len = usize::from(head & 0xFFF);
         let kind = NodeKind::try_from((head >> 12) as u8 & 0b111)?;
         // split はルートが RefPage のページを作らない。許すと自身を指すページで読み続けてしまう
-        if len == 0 || kind == NodeKind::RefPage {
+        if kind == NodeKind::RefPage {
             return Err(DiskError::Corrupt);
         }
         let bytes = self.body.get(..len).ok_or(DiskError::Corrupt)?;
