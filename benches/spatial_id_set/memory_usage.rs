@@ -20,7 +20,7 @@ mod patterns;
 use patterns::{COUNTS, PATTERNS, Z};
 
 use spatial_id::SingleId;
-use spatial_id::collection::SpatialIdSet;
+use spatial_id::collection::mem::SpatialIdSet;
 
 // ────────────────────────────────────────────────────────────────
 // カスタムアロケータ

@@ -100,7 +100,7 @@ impl<V, I> FusedIterator for MapIter<I> where I: FusedIterator<Item = (FlexId, V
 /// 空間IDごとに値を持つマップ。
 ///
 /// ```
-/// use spatial_id::collection::SpatialIdMap;
+/// use spatial_id::collection::mem::SpatialIdMap;
 /// use spatial_id::SingleId;
 ///
 /// let mut table = SpatialIdMap::new();

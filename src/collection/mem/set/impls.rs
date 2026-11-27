@@ -26,7 +26,7 @@ impl<S: SpatialId> Extend<S> for SpatialIdSet {
 /// 一意に定まる。
 ///
 /// ```
-/// use spatial_id::collection::SpatialIdSet;
+/// use spatial_id::collection::mem::SpatialIdSet;
 /// use spatial_id::SingleId;
 /// use rayon::prelude::*;
 ///

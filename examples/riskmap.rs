@@ -4,7 +4,7 @@
 //! cargo run --release --example riskmap --features unstable
 //! ```
 
-use spatial_id::collection::SpatialIdMap;
+use spatial_id::collection::mem::SpatialIdMap;
 use spatial_id::query::merge_policy::{Average, Max};
 use spatial_id::query::{FalloffPattern, Source};
 use std::fs;

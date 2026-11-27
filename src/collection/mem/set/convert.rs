@@ -24,7 +24,7 @@ where
     ///
     /// 値付きテーブルから集合へ:
     /// ```
-    /// use spatial_id::collection::{SpatialIdMap, SpatialIdSet};
+    /// use spatial_id::collection::mem::{SpatialIdMap, SpatialIdSet};
     /// use spatial_id::SingleId;
     /// let mut table: SpatialIdMap<u8> = SpatialIdMap::new();
     /// table.insert(SingleId::new(20, 0, 0, 0).unwrap(), 7);

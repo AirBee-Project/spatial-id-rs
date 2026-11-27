@@ -56,7 +56,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// 全体を評価するには `..` を渡す。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
@@ -70,7 +70,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// 1つの範囲は、[`SingleId`](crate::SingleId)・[`RangeId`]・[`FlexId`](crate::FlexId) のどれでも渡せる。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # use spatial_id::SingleId;
     /// # let table = SpatialIdMap::<u32>::new();
@@ -83,7 +83,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// ```
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # use spatial_id::RangeId;
     /// # let table = SpatialIdMap::<u32>::new();
@@ -96,7 +96,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// ```
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # use spatial_id::FlexId;
     /// # let table = SpatialIdMap::<u32>::new();
@@ -111,7 +111,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// 複数の範囲も指定できる。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # use spatial_id::SingleId;
     /// # let table = SpatialIdMap::<u32>::new();
@@ -126,7 +126,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// ```
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # use spatial_id::SingleId;
     /// # let table = SpatialIdMap::<u32>::new();
@@ -141,7 +141,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// ```
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # use spatial_id::SingleId;
     /// # let table = SpatialIdMap::<u32>::new();
@@ -163,7 +163,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// [`SpatialIdMap`](crate::SpatialIdMap) で受け取る。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
@@ -177,7 +177,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// [`SpatialIdSet`](crate::SpatialIdSet) で受け取る。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
     /// let result = table
@@ -191,7 +191,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// イテレーターで受け取る。読んだ分だけ評価が進むので、途中で読むのをやめれば残りは評価しない。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
     /// for item in table.query().filter_values(|v| (10..20).contains(v)).get(..) {
@@ -212,7 +212,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// [`QueryOutput`] を変数に取っておくときは、先に Query を変数に束縛する。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
     /// let query = table.query().filter_values(|v| (10..20).contains(v));
@@ -232,7 +232,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// `self.get(..).into_map()` と同じ。範囲を指定するときや、結果を順に読むときは [`get`](Self::get) を使う。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
     /// let map = table.query().filter_values(|v| (10..20).contains(v)).into_map()?;
@@ -247,7 +247,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// `self.get(..).into_set()` と同じ。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # let table = SpatialIdMap::<u32>::new();
     /// let set = table.query().filter_values(|v| (10..20).contains(v)).into_set()?;
@@ -262,7 +262,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// ```
     /// # use spatial_id::Error;
     /// # use spatial_id::query::QueryError;
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::{CancellationToken, Source};
     /// # let table = SpatialIdMap::<u32>::new();
     /// let token = CancellationToken::new();
@@ -288,7 +288,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// `targets` と交差する要素をそのまま返すので、`targets` からはみ出した、より大きな [`FlexId`](crate::FlexId) が返ることがある。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::Source;
     /// # use spatial_id::SingleId;
     /// # let table = SpatialIdMap::<u32>::new();
@@ -306,7 +306,7 @@ impl<V: SafeValue + 'static> Query<V> {
     /// [`get_overlapping`](Self::get_overlapping) と同じく評価する。`token` がキャンセルされると、評価の途中で気づき次第 [`QueryError::Cancelled`] を返す。
     ///
     /// ```
-    /// # use spatial_id::collection::SpatialIdMap;
+    /// # use spatial_id::collection::mem::SpatialIdMap;
     /// # use spatial_id::query::{CancellationToken, Source};
     /// # use spatial_id::SingleId;
     /// # let table = SpatialIdMap::<u32>::new();

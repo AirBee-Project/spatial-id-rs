@@ -6,7 +6,7 @@
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use spatial_id::SingleId;
-use spatial_id::collection::SpatialIdSet;
+use spatial_id::collection::mem::SpatialIdSet;
 
 pub const Z: u8 = 20;
 pub const COUNTS: &[usize] = &[500, 2_000, 8_000];
