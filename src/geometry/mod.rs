@@ -11,6 +11,8 @@ pub(crate) mod shape;
 
 pub(crate) mod traits;
 
+pub(crate) mod vec2;
+
 pub(crate) mod vec3;
 
 pub(crate) mod epsilon;
