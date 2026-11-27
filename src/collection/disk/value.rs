@@ -25,6 +25,22 @@ pub trait DiskValue: Sized {
     fn decode(bytes: &[u8]) -> Result<Self, DiskError>;
 }
 
+impl DiskValue for () {
+    fn type_name() -> String {
+        "()".into()
+    }
+
+    fn encode(&self, _out: &mut Vec<u8>) {}
+
+    fn decode(bytes: &[u8]) -> Result<Self, DiskError> {
+        if bytes.is_empty() {
+            Ok(())
+        } else {
+            Err(DiskError::Corrupt)
+        }
+    }
+}
+
 impl DiskValue for u8 {
     fn type_name() -> String {
         "u8".into()

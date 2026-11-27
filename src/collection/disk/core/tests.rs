@@ -555,16 +555,17 @@ fn handles_target_spanning_both_roots() {
 #[test]
 fn round_trips_ids_at_max_zoom() {
     let file = TempFile::new();
+    let t_index = if cfg!(feature = "temporal_id") { 42 } else { 0 };
     let deep = |x| {
         FlexId::new(25, -12345, 30, x, 30, 123)
             .unwrap()
-            .time_with_segment(T_MAX_ZOOM, 42)
+            .time_with_segment(T_MAX_ZOOM, t_index)
             .unwrap()
     };
     let (a, b) = (deep(987_654), deep(987_655));
     let parent = FlexId::new(25, -12345, 29, 987_654 / 2, 30, 123)
         .unwrap()
-        .time_with_segment(T_MAX_ZOOM, 42)
+        .time_with_segment(T_MAX_ZOOM, t_index)
         .unwrap();
     block_on(async {
         let mut tree = Tree::open(&file.0).await.unwrap();
@@ -941,6 +942,7 @@ fn round_trip<V: DiskValue + PartialEq + Debug>(value: V) {
 /// 標準の型の DiskValue は、書いた値に戻り、型として不正なバイト列を Corrupt で弾き、型名が互いに異なる。
 #[test]
 fn standard_disk_values_round_trip() {
+    round_trip(());
     round_trip(u8::MAX);
     round_trip(u16::MAX);
     round_trip(u32::MAX);
@@ -958,6 +960,7 @@ fn standard_disk_values_round_trip() {
     round_trip(String::from("空間ID"));
     round_trip(String::new());
 
+    assert!(matches!(<()>::decode(&[0]), Err(DiskError::Corrupt)));
     assert!(matches!(u64::decode(&[0; 7]), Err(DiskError::Corrupt)));
     assert!(matches!(i32::decode(&[0; 5]), Err(DiskError::Corrupt)));
     assert!(matches!(bool::decode(&[2]), Err(DiskError::Corrupt)));
@@ -969,6 +972,7 @@ fn standard_disk_values_round_trip() {
     assert!(matches!(String::decode(&[0xFF]), Err(DiskError::Corrupt)));
 
     let names = [
+        <()>::type_name(),
         u8::type_name(),
         u16::type_name(),
         u32::type_name(),
@@ -1242,5 +1246,27 @@ fn compact_rejects_cyclic_ref_page() {
 
         assert!(is_corrupt(tree.compact().await));
         tree.close().await.unwrap();
+    });
+}
+
+/// `PagedFile::read_sync` で書いたページを同期的に読み戻せる。
+#[test]
+fn paged_file_read_sync_round_trips() {
+    let file = TempFile::new();
+    block_on(async {
+        let mut paged = PagedFile::open(&file.0).await.unwrap();
+        assert!(matches!(
+            paged.read_sync(PageId(0)),
+            Err(DiskError::Corrupt)
+        ));
+
+        let id = paged.alloc();
+        let meta = MetaPage::new(10, [Some(PageId(3)), None], 1);
+        paged.write(id, Page::of(&meta)).await.unwrap();
+        paged.sync().await.unwrap();
+
+        let got = paged.read_sync(id).unwrap();
+        assert_eq!(got.try_head_as::<MetaPage>().unwrap().generation.get(), 10);
+        paged.close().await.unwrap();
     });
 }

@@ -137,6 +137,18 @@ impl PagedFile {
         self.call(|reply| Request::Read { id, reply }).await
     }
 
+    /// `id` が示すページを同期的に読み出す。
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn read_sync(&self, id: PageId) -> Result<Box<Page>, DiskError> {
+        if id.0 >= self.len {
+            return Err(DiskError::Corrupt);
+        }
+        Ok(self
+            .send(|reply| Request::Read { id, reply })?
+            .recv()
+            .map_err(|_| DiskError::WorkerStopped)??)
+    }
+
     /// `ids` が示すページを、`ids` の順に読み出す。
     ///
     /// 要求をすべて送ってから応答を待つので、各ページの読み込みは並行に進む。
