@@ -411,6 +411,33 @@ mod holes {
             );
         }
     }
+
+    /// 穴ありポリゴンの三角形分割面積と CoverSingleIds の穴抜きを検証する
+    #[test]
+    fn expand_triangles_and_cover_single_ids_exclude_holes() {
+        use crate::{CoverSingleIds, ExpandCoordinates, ExpandTriangles};
+
+        let outer = grid_poly(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]);
+        let h1 = grid_poly(&[(2.0, 2.0), (4.0, 2.0), (4.0, 4.0), (2.0, 4.0)]);
+        let h2 = grid_poly(&[(6.0, 6.0), (8.0, 6.0), (8.0, 8.0), (6.0, 8.0)]);
+        let holed = outer.with_holes(&[h1.clone(), h2.clone()]).unwrap();
+
+        // ExpandCoordinates は外周＋穴の全頂点を含む
+        assert_eq!(holed.expand_coordinates().count(), 12);
+
+        // ExpandTriangles の面積合計は「外周面積 - 穴面積合計」に一致する
+        let tri_area: f64 = holed.expand_triangles().map(|t| t.area()).sum();
+        let expected_area = outer.expand_triangles().map(|t| t.area()).sum::<f64>()
+            - h1.expand_triangles().map(|t| t.area()).sum::<f64>()
+            - h2.expand_triangles().map(|t| t.area()).sum::<f64>();
+        assert!(libm::fabs(tri_area - expected_area) < 1e-3);
+
+        // CoverSingleIds は穴の純粋な内部の空間IDを含まない
+        let z = 22;
+        let outer_ids: hashbrown::HashSet<_> = outer.cover_single_ids(z).unwrap().collect();
+        let holed_ids: hashbrown::HashSet<_> = holed.cover_single_ids(z).unwrap().collect();
+        assert!(holed_ids.len() < outer_ids.len());
+    }
 }
 
 mod validation {
