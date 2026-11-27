@@ -2,75 +2,30 @@ use crate::id::helpers::Side;
 use crate::{Dimension, FlexId, SpatialIdMap};
 use alloc::vec::Vec;
 use core::cmp::Ordering;
+use proptest::prelude::*;
+use rand_chacha::{ChaCha8Rng, rand_core::SeedableRng};
 
-/// 再現可能な疑似乱数（xorshift64）。
-fn next(state: &mut u64) -> u64 {
-    *state ^= *state << 13;
-    *state ^= *state >> 7;
-    *state ^= *state << 17;
-    *state
+fn arb_shallow_entries() -> impl Strategy<Value = Vec<(FlexId, u64)>> {
+    prop::collection::vec((FlexId::arb_with_time(0..=4, 0..=3), 0..3u64), 0..=40)
 }
 
-/// ズームの浅い FlexId を作る。浅いので互いに重なりやすく、木の中で割られる。
-fn random_id(state: &mut u64) -> FlexId {
-    let mut zoom = || (next(state) % 5) as u8;
-    let (fz, xz, yz) = (zoom(), zoom(), zoom());
-    let f = (next(state) % (2 << fz)) as i32 - (1 << fz);
-    let x = (next(state) % (1 << xz)) as u32;
-    let y = (next(state) % (1 << yz)) as u32;
-    let id = FlexId::new(fz, f, xz, x, yz, y).unwrap();
-    if cfg!(feature = "temporal_id") && next(state).is_multiple_of(2) {
-        let tz = (next(state) % 4) as u8;
-        id.time_with_segment(tz, next(state) % (1 << tz)).unwrap()
-    } else {
-        id
-    }
-}
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(128))]
 
-#[test]
-fn table_iterates_in_partial_order() {
-    let mut state = 0x9E37_79B9_7F4A_7C15;
-    for _ in 0..200 {
-        let table: SpatialIdMap<u64> = (0..40)
-            .map(|_| (random_id(&mut state), next(&mut state) % 3))
-            .collect();
+    #[test]
+    fn table_iterates_in_partial_order(entries in arb_shallow_entries()) {
+        let table: SpatialIdMap<u64> = entries.into_iter().collect();
         let ids: Vec<FlexId> = table.iter_flex_ids().map(|(id, _)| id).collect();
         for pair in ids.windows(2) {
-            assert_eq!(pair[0].partial_cmp(&pair[1]), Some(Ordering::Less));
-            assert!(pair[0].zorder_key() < pair[1].zorder_key());
+            prop_assert_eq!(pair[0].partial_cmp(&pair[1]), Some(Ordering::Less));
+            prop_assert!(pair[0].zorder_key() < pair[1].zorder_key());
         }
     }
-}
 
-#[test]
-fn partial_order_is_antisymmetric_and_transitive() {
-    let mut state = 0x2545_F491_4F6C_DD1D;
-    let ids: Vec<FlexId> = (0..300).map(|_| random_id(&mut state)).collect();
-    for a in &ids {
-        for b in &ids {
-            let ab = a.partial_cmp(b);
-            assert_eq!(ab.map(Ordering::reverse), b.partial_cmp(a), "{a:?} {b:?}");
-            assert_eq!(ab == Some(Ordering::Equal), a == b, "{a:?} {b:?}");
-            if ab != Some(Ordering::Less) {
-                continue;
-            }
-            assert!(!a.intersects(b), "前にある組が重なる: {a:?} {b:?}");
-            assert!(a.zorder_key() < b.zorder_key(), "{a:?} {b:?}");
-            for c in ids.iter().filter(|c| b < *c) {
-                assert!(a < c, "推移律: {a:?} {b:?} {c:?}");
-            }
-        }
-    }
-}
-
-/// 同じ形状なら、区切り方や入れる順によらず、FlexTreeCore から同じカノニカル列が出てくる。
-#[test]
-fn table_yields_same_canonical_sequence_for_same_shape() {
-    let mut state = 0xD1B5_4A32_D192_ED03;
-    for _ in 0..50 {
-        let table: SpatialIdMap<u64> = (0..40)
-            .map(|_| (random_id(&mut state), next(&mut state) % 3))
-            .collect();
+    /// 同じ形状なら、区切り方や入れる順によらず、FlexTreeCore から同じカノニカル列が出てくる。
+    #[test]
+    fn table_yields_same_canonical_sequence_for_same_shape(entries in arb_shallow_entries()) {
+        let table: SpatialIdMap<u64> = entries.into_iter().collect();
         let expected: Vec<(FlexId, u64)> = table.iter_flex_ids().map(|(id, v)| (id, *v)).collect();
 
         let dimensions = [Dimension::F, Dimension::X, Dimension::Y];
@@ -91,7 +46,32 @@ fn table_yields_same_canonical_sequence_for_same_shape() {
             rebuilt.insert(id, v);
         }
         let actual: Vec<(FlexId, u64)> = rebuilt.iter_flex_ids().map(|(id, v)| (id, *v)).collect();
-        assert_eq!(actual, expected);
+        prop_assert_eq!(actual, expected);
+    }
+}
+
+#[test]
+fn partial_order_is_antisymmetric_and_transitive() {
+    let mut rng = ChaCha8Rng::seed_from_u64(0x2545_F491_4F6C_DD1D);
+    let ids: Vec<FlexId> = (0..300)
+        .map(|_| {
+            FlexId::random_within_using(&mut rng, 0..=4).time_random_within_using(&mut rng, 0..=3)
+        })
+        .collect();
+    for a in &ids {
+        for b in &ids {
+            let ab = a.partial_cmp(b);
+            assert_eq!(ab.map(Ordering::reverse), b.partial_cmp(a), "{a:?} {b:?}");
+            assert_eq!(ab == Some(Ordering::Equal), a == b, "{a:?} {b:?}");
+            if ab != Some(Ordering::Less) {
+                continue;
+            }
+            assert!(!a.intersects(b), "前にある組が重なる: {a:?} {b:?}");
+            assert!(a.zorder_key() < b.zorder_key(), "{a:?} {b:?}");
+            for c in ids.iter().filter(|c| b < *c) {
+                assert!(a < c, "推移律: {a:?} {b:?} {c:?}");
+            }
+        }
     }
 }
 
