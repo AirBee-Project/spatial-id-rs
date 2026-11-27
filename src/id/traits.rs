@@ -68,7 +68,7 @@ pub trait SpatialId:
         self.seconds_range() == (0, Interval::MAX_SECONDS)
     }
 
-    /// 時間の指定を外し、全時間へ戻した自身を返す。
+    /// 時間の指定を外し、全時間へ戻した新しい値を返す。
     fn time_cleared(self) -> Self;
 
     /// 指定された Unix 時刻（秒）を時間区間に含むかを判定する。

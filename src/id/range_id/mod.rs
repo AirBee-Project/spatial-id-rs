@@ -126,7 +126,7 @@ impl RangeId {
         }
     }
 
-    /// 時間を設定した自身を返す（ビルダー形式）。
+    /// 時間を設定した新しい [`RangeId`] を返す（ビルダー形式）。
     ///
     /// [`SingleId::time_with`](crate::SingleId::time_with)が単一の `{i}/{t}` しか受け取らないのに対し、
     /// こちらは空間と同じく**範囲**を受け取る。`t` は `[min, max]` の `[u64; 2]`、または
@@ -175,7 +175,7 @@ impl RangeId {
         Ok(self.time_with_unchecked(interval, t))
     }
 
-    /// 同じ絶対秒区間を、別の単位で表し直した自身を返す。
+    /// 同じ絶対秒区間を、別の単位で表し直した新しい [`RangeId`] を返す。
     ///
     /// 単位が変わっても指す区間は変わらない。その単位で割り切れない場合は
     /// [`SpatialIdError::TIntervalError`] を返す。
@@ -205,7 +205,7 @@ impl RangeId {
         Ok(self.time_with_unchecked(interval, [start / unit, end / unit - 1]))
     }
 
-    /// 時間の指定を外し、全時間へ戻した自身を返す。
+    /// 時間の指定を外し、全時間へ戻した新しい [`RangeId`] を返す。
     ///
     /// ```
     /// # use spatial_id::SpatialId;

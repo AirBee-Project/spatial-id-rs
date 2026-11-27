@@ -120,7 +120,7 @@ impl SingleId {
         }
     }
 
-    /// 時間を設定した自身を返す（ビルダー形式）。
+    /// 時間を設定した新しい [`SingleId`] を返す（ビルダー形式）。
     ///
     /// [4次元時空間情報基盤 ガイドライン（IPA）](https://www.ipa.go.jp/digital/architecture/guidelines/4dspatio-temporal-guideline.html)第 2.5.3 項の `{i}/{t}` に対応する。`interval` は
     /// [`Interval`]、または秒数を表す整数（無注釈のリテラルを含む）のどちらでも渡せる。
@@ -173,7 +173,7 @@ impl SingleId {
         Ok(self.time_with_unchecked(interval, t))
     }
 
-    /// Unix 時刻（秒）が属する時間区間（`{i}/{t}`）を設定した自身を返す。
+    /// Unix 時刻（秒）が属する時間区間（`{i}/{t}`）を設定した新しい [`SingleId`] を返す。
     ///
     /// 仕様書 2.5.3 (3) の `t = floor(u / i)` をこちらで計算するので、呼び出し側で
     /// インデックスを求める必要がない。
@@ -205,7 +205,7 @@ impl SingleId {
         self.time_with::<Interval>(interval, interval.index_of(unix_seconds))
     }
 
-    /// 同じ絶対秒区間を、別の単位で表し直した自身を返す。
+    /// 同じ絶対秒区間を、別の単位で表し直した新しい [`SingleId`] を返す。
     ///
     /// 単位が変わっても指す時刻は変わらない。その単位で単一の `{i}/{t}` にならない場合は
     /// [`SpatialIdError::TIntervalError`] を返す。
@@ -235,7 +235,7 @@ impl SingleId {
         Ok(self.time_with_unchecked(interval, start / unit))
     }
 
-    /// 時間の指定を外し、全時間へ戻した自身を返す。
+    /// 時間の指定を外し、全時間へ戻した新しい [`SingleId`] を返す。
     ///
     /// ```
     /// # use spatial_id::SpatialId;

@@ -154,7 +154,7 @@ impl<'a, V> View<'a, V> {
         }
     }
 
-    /// `dimension` で割った `[下, 上]`。`dimension` で割っていなければ、両側に自身を返す。
+    /// `dimension` で割った `[下, 上]`。`dimension` で割っていなければ、両側に同じ [`View`] を返す。
     ///
     /// `halves` は `this` を `dimension` で割った `[下, 上]` の領域。
     pub(super) fn split(

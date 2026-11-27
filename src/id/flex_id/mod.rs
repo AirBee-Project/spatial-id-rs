@@ -157,8 +157,7 @@ impl FlexId {
         }
     }
 
-    /// この [`FlexId`] が占める絶対秒区間 `[start, end)` を返す。
-    /// 時間軸の `TimeSegment`（4軸目）を設定した自身を返す（ビルダー形式）。
+    /// 時間軸の `TimeSegment`（4軸目）を設定した新しい [`FlexId`] を返す（ビルダー形式）。
     ///
     /// 引数は空間3軸と同じ「**ズームレベル＋インデックス**」で、[`new`](Self::new) の
     /// `f_zoomlevel` / `f_index` と同じく [`Into<u8>`](Into) を受ける
@@ -231,7 +230,7 @@ impl FlexId {
         Ok(unsafe { self.time_with_segment_unchecked(tz.get(), t_index) })
     }
 
-    /// 時間の指定を外し、全時間へ戻した自身を返す。
+    /// 時間の指定を外し、全時間へ戻した新しい [`FlexId`] を返す。
     ///
     /// ```
     /// # use spatial_id::SpatialId;
@@ -249,7 +248,7 @@ impl FlexId {
         unsafe { self.time_with_segment_unchecked(0, 0) }
     }
 
-    /// 検証を行わずに `TimeSegment`（4軸目）を設定した自身を返す。
+    /// 検証を行わずに `TimeSegment`（4軸目）を設定した新しい [`FlexId`] を返す。
     ///
     /// # Safety
     ///
