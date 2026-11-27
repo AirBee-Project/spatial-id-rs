@@ -75,6 +75,60 @@ mod cover_single_ids {
     }
 }
 
+mod coplanar {
+    use crate::{Coordinate, Epsilon, Polygon};
+
+    fn c(lat: f64, lon: f64, alt: f64) -> Coordinate {
+        Coordinate::new(lat, lon, alt).unwrap()
+    }
+
+    fn base() -> Polygon {
+        Polygon::new([
+            c(35.0, 139.0, 0.0),
+            c(35.0, 139.01, 0.0),
+            c(35.01, 139.0, 0.0),
+        ])
+        .unwrap()
+    }
+
+    #[test]
+    fn same_plane_is_coplanar() {
+        let other = Polygon::new([
+            c(35.0, 139.0, 0.0),
+            c(35.01, 139.01, 0.0),
+            c(35.01, 139.0, 0.0),
+        ])
+        .unwrap();
+        assert!(base().is_coplanar(&other));
+        assert!(base().is_coplanar(&base()));
+    }
+
+    #[test]
+    fn tilted_is_not_coplanar() {
+        let tilted = Polygon::new([
+            c(35.0, 139.0, 0.0),
+            c(35.0, 139.01, 100.0),
+            c(35.01, 139.0, 0.0),
+        ])
+        .unwrap();
+        assert!(!base().is_coplanar(&tilted));
+    }
+
+    #[test]
+    fn epsilon_controls_tolerance() {
+        // 平面から 0.5 m 浮いた頂点を持つ
+        let slightly_off = Polygon::new([
+            c(35.0, 139.0, 0.0),
+            c(35.0, 139.01, 0.0),
+            c(35.01, 139.0, 0.5),
+        ])
+        .unwrap();
+        assert!(!base().is_coplanar(&slightly_off));
+        assert!(base().is_coplanar_epsilon(&slightly_off, Epsilon::from_meters(1.0).unwrap()));
+        assert!(!base().is_coplanar_epsilon(&slightly_off, Epsilon::ZERO));
+    }
+}
+
 mod validation {
     use crate::{Coordinate, Epsilon, Error, GeometryError, Polygon};
 
