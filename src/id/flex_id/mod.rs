@@ -4,6 +4,8 @@ pub mod convert;
 pub mod encode;
 pub mod impls;
 pub mod ops;
+#[cfg(any(test, feature = "random"))]
+pub mod random;
 
 use crate::{
     Error, Side,

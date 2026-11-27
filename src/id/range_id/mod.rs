@@ -1,6 +1,7 @@
 pub mod constructor;
 pub mod convert;
 pub mod impls;
+#[cfg(any(test, feature = "random"))]
 pub mod random;
 #[cfg(test)]
 mod test;
