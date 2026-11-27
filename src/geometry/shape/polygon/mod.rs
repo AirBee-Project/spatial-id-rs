@@ -32,11 +32,11 @@ impl Polygon {
     /// - 面積が 0（共線など）の場合は [`GeometryError::PolygonZeroArea`] を返す。
     /// - リングが自己交差している場合は [`GeometryError::PolygonSelfIntersecting`] を返す。
     pub fn new(raw_points: impl IntoIterator<Item = Coordinate>) -> Result<Self, Error> {
-        Self::with_epsilon(raw_points, Epsilon::DEFAULT)
+        Self::new_epsilon(raw_points, Epsilon::DEFAULT)
     }
 
     /// 頂点座標のイテレータと指定した許容誤差から新しい [Polygon] を作成する。
-    pub fn with_epsilon(
+    pub fn new_epsilon(
         raw_points: impl IntoIterator<Item = Coordinate>,
         epsilon: Epsilon,
     ) -> Result<Self, Error> {

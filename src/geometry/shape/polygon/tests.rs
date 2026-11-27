@@ -50,7 +50,7 @@ mod cover_single_ids {
     }
 
     #[test]
-    fn polygon_with_epsilon() {
+    fn polygon_new_epsilon() {
         use crate::Epsilon;
         let p0 = Coordinate::new(35.0, 139.0, 0.0).unwrap();
         let p1 = Coordinate::new(35.0, 139.001, 0.0).unwrap();
@@ -58,7 +58,7 @@ mod cover_single_ids {
         let p2 = Coordinate::new(35.001, 139.0, 0.0).unwrap();
 
         // 許容誤差大: p2 は p_close と同一視されて縮退
-        let poly = Polygon::with_epsilon(
+        let poly = Polygon::new_epsilon(
             vec![p0, p1, p_close, p2],
             Epsilon::from_meters(1.0).unwrap(),
         )
@@ -66,7 +66,7 @@ mod cover_single_ids {
         assert_eq!(poly.vertices().len(), 3);
 
         // 許容誤差極小: p2 は独立した頂点
-        let poly_strict = Polygon::with_epsilon(
+        let poly_strict = Polygon::new_epsilon(
             vec![p0, p1, p_close, p2],
             Epsilon::from_meters(1e-6).unwrap(),
         )
@@ -202,6 +202,6 @@ mod validation {
             c(35.0, 139.000000001, 0.0),
             c(35.000000001, 139.0, 0.0),
         ];
-        assert!(Polygon::with_epsilon(tiny, Epsilon::ZERO).is_ok());
+        assert!(Polygon::new_epsilon(tiny, Epsilon::ZERO).is_ok());
     }
 }

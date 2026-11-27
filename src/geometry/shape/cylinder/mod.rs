@@ -50,7 +50,7 @@ impl Cylinder {
     /// [Cylinder]を近似した[Solid]を作成する関数
     pub(crate) fn rough_solid(&self) -> Solid {
         let polygons = self.rough_surfaces_without_z().collect();
-        Solid::with_epsilon(polygons, Epsilon::ZERO).unwrap()
+        Solid::new_epsilon(polygons, Epsilon::ZERO).unwrap()
     }
 
     /// [Cylinder]を近似した立体の表面を、ズームレベルを指定せずに[Polygon]として返す関数
@@ -79,7 +79,7 @@ impl Cylinder {
             let v_curr = vertices[i as usize];
             let v_next = vertices[next_i as usize];
 
-            Polygon::with_epsilon(
+            Polygon::new_epsilon(
                 [
                     to_coord(v_curr[0]),
                     to_coord(v_next[0]),
@@ -97,12 +97,12 @@ impl Cylinder {
 
         // 底面
         raw_surfaces.push(
-            Polygon::with_epsilon(vertices.iter().rev().map(|v| to_coord(v[0])), Epsilon::ZERO)
+            Polygon::new_epsilon(vertices.iter().rev().map(|v| to_coord(v[0])), Epsilon::ZERO)
                 .unwrap(),
         );
         // 上面
         raw_surfaces.push(
-            Polygon::with_epsilon(vertices.iter().map(|v| to_coord(v[1])), Epsilon::ZERO).unwrap(),
+            Polygon::new_epsilon(vertices.iter().map(|v| to_coord(v[1])), Epsilon::ZERO).unwrap(),
         );
 
         raw_surfaces.into_iter()
@@ -135,7 +135,7 @@ impl Cylinder {
             let v_curr = vertices[i as usize];
             let v_next = vertices[next_i as usize];
 
-            Polygon::with_epsilon(
+            Polygon::new_epsilon(
                 [
                     to_coord(v_curr[0]),
                     to_coord(v_next[0]),
@@ -153,12 +153,12 @@ impl Cylinder {
 
         // 底面
         raw_surfaces.push(
-            Polygon::with_epsilon(vertices.iter().rev().map(|v| to_coord(v[0])), Epsilon::ZERO)
+            Polygon::new_epsilon(vertices.iter().rev().map(|v| to_coord(v[0])), Epsilon::ZERO)
                 .unwrap(),
         );
         // 上面
         raw_surfaces.push(
-            Polygon::with_epsilon(vertices.iter().map(|v| to_coord(v[1])), Epsilon::ZERO).unwrap(),
+            Polygon::new_epsilon(vertices.iter().map(|v| to_coord(v[1])), Epsilon::ZERO).unwrap(),
         );
 
         raw_surfaces.into_iter()
