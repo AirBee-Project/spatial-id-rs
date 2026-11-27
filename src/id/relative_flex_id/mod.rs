@@ -88,9 +88,11 @@ impl RelativeFlexId {
     }
 
     /// [`encode`](Self::encode) / [`decode`](Self::decode) が扱う固定長バイト列の長さ。
+    #[cfg(feature = "disk")]
     pub(crate) const ENCODED_LEN: usize = 20;
 
     /// 自身を固定長バイト列に変換する。
+    #[cfg(feature = "disk")]
     pub(crate) fn encode(&self) -> [u8; Self::ENCODED_LEN] {
         let r = &self.0;
         let z = u32::from(ZoomLevel::MAX.get());
@@ -106,14 +108,15 @@ impl RelativeFlexId {
             r.y_zoomlevel(),
             r.t_zoomlevel(),
         ]);
-        out[4..].copy_from_slice(&index.to_le_bytes());
+        out[4..].copy_from_slice(&index.to_be_bytes());
         out
     }
 
     /// 固定長バイト列から [`RelativeFlexId`] を復元する（[`encode`](Self::encode) の逆変換）。
+    #[cfg(feature = "disk")]
     pub(crate) fn decode(bytes: &[u8; Self::ENCODED_LEN]) -> Result<Self, Error> {
         let [fz, xz, yz, tz, ..] = *bytes;
-        let index = u128::from_le_bytes(bytes[4..].try_into().unwrap());
+        let index = u128::from_be_bytes(bytes[4..].try_into().unwrap());
         let z = u32::from(ZoomLevel::MAX.get());
         let field = |shift: u32, bits: u32| index >> shift & ((1 << bits) - 1);
         let f = field(0, z) as i32;
@@ -270,6 +273,7 @@ mod tests {
         assert_eq!(rel.to_absolute(&ancestor).unwrap(), descendant);
     }
 
+    #[cfg(feature = "disk")]
     #[test]
     fn encode_round_trips() {
         let ancestor = FlexId::new(2, 1, 1, 0, 3, 5).unwrap();

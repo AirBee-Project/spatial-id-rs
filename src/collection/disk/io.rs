@@ -1,5 +1,6 @@
 use crate::error::DiskError;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use compio::buf::{IoBuf, IoBufMut, SetLen};
 use compio::fs::{File, OpenOptions};
 use compio::io::{AsyncReadAtExt, AsyncWriteAtExt};
@@ -28,6 +29,20 @@ use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, TryFromB
     KnownLayout,
 )]
 pub(crate) struct PageId(pub(crate) u64);
+
+impl PageId {
+    /// あるかもしれないページを、ファイルに書く値にする。[`None`] は 0 で表す。
+    ///
+    /// ページ 0 はメタページの場所で、他のページから指されることはないので、0 を「ない」に使える。
+    pub(crate) fn encode(page: Option<Self>) -> u64 {
+        page.map_or(0, |p| p.0)
+    }
+
+    /// [`encode`](Self::encode) の逆。
+    pub(crate) fn decode(raw: u64) -> Option<Self> {
+        (raw != 0).then_some(PageId(raw))
+    }
+}
 
 #[repr(C, align(4096))]
 #[derive(Debug, FromZeros)]
@@ -95,7 +110,7 @@ pub(crate) struct PagedFile {
 
 impl PagedFile {
     /// ファイルを開く。存在しなければ空のファイルを作る。
-    pub(crate) async fn open(path: impl AsRef<Path>) -> io::Result<Self> {
+    pub(crate) async fn open(path: impl AsRef<Path>) -> Result<Self, DiskError> {
         let path = path.as_ref().to_path_buf();
         let (requests, receiver) = flume::unbounded();
         let (opened, ready) = flume::bounded(1);
@@ -124,32 +139,55 @@ impl PagedFile {
         if id.0 >= self.len {
             return Err(DiskError::Corrupt);
         }
-        Ok(self.request(|reply| Request::Read { id, reply }).await?)
+        Ok(Self::receive(self.send(|reply| Request::Read { id, reply })?).await?)
+    }
+
+    /// `ids` が示すページを、`ids` の順に読み出す。
+    ///
+    /// 要求をすべて送ってから応答を待つので、各ページの読み込みは並行に進む。
+    pub(crate) async fn read_many(&self, ids: &[PageId]) -> Result<Vec<Box<Page>>, DiskError> {
+        if ids.iter().any(|id| id.0 >= self.len) {
+            return Err(DiskError::Corrupt);
+        }
+        let responses = ids
+            .iter()
+            .map(|&id| self.send(|reply| Request::Read { id, reply }))
+            .collect::<io::Result<Vec<_>>>()?;
+        let mut pages = Vec::with_capacity(ids.len());
+        for response in responses {
+            pages.push(Self::receive(response).await?);
+        }
+        Ok(pages)
     }
 
     /// `id` が示すページに書く。ファイルの末尾より先なら、ファイルを伸ばす。
-    pub(crate) async fn write(&mut self, id: PageId, page: Box<Page>) -> io::Result<()> {
-        self.request(|reply| Request::Write { id, page, reply })
-            .await?;
+    pub(crate) async fn write(&mut self, id: PageId, page: Box<Page>) -> Result<(), DiskError> {
+        Self::receive(self.send(|reply| Request::Write { id, page, reply })?).await?;
         self.len = self.len.max(id.0 + 1);
         Ok(())
     }
 
     /// ここまでに書いたページを永続化する。
-    pub(crate) async fn sync(&self) -> io::Result<()> {
-        self.request(Request::Sync).await
+    pub(crate) async fn sync(&self) -> Result<(), DiskError> {
+        Ok(Self::receive(self.send(Request::Sync)?).await?)
     }
 
     /// ファイルを閉じ、専用スレッドを止める。閉じる際のエラーが要らなければ drop するだけでよい。
-    pub(crate) async fn close(self) -> io::Result<()> {
-        self.request(Request::Close).await
+    pub(crate) async fn close(self) -> Result<(), DiskError> {
+        Ok(Self::receive(self.send(Request::Close)?).await?)
     }
 
-    async fn request<T>(&self, request: impl FnOnce(Reply<T>) -> Request) -> io::Result<T> {
+    /// 要求を専用スレッドへ送り、応答を待つ受け口を返す。
+    fn send<T>(&self, request: impl FnOnce(Reply<T>) -> Request) -> io::Result<Response<T>> {
         let (reply, response) = flume::bounded(1);
         self.requests
             .send(request(reply))
             .map_err(|_| Self::stopped())?;
+        Ok(response)
+    }
+
+    /// [`send`](Self::send) で送った要求の応答を待つ。
+    async fn receive<T>(response: Response<T>) -> io::Result<T> {
         response.recv_async().await.map_err(|_| Self::stopped())?
     }
 
@@ -232,6 +270,7 @@ impl PagedFile {
 }
 
 type Reply<T> = flume::Sender<io::Result<T>>;
+type Response<T> = flume::Receiver<io::Result<T>>;
 
 enum Request {
     Read {
