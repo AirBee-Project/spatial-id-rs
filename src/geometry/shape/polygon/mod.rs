@@ -94,20 +94,21 @@ impl Polygon {
     /// `other` のいずれの頂点も、`self` が張る平面からの距離（メートル）が許容誤差以内なら `true` を返す。
     /// 距離は頂点ごとに平面の法線方向で測り、合計ではなく最も離れた頂点で判定する。
     pub fn is_coplanar_epsilon(&self, other: &Polygon, epsilon: Epsilon) -> bool {
-        // 桁落ちを避けるため、最初の頂点を原点とした相対座標で Newell 法により法線を求める。
+        // 桁落ちを避けるため、最初の頂点を原点とした相対座標で法線を求める。
+        // 多角形の法線（Newell 法）は、隣り合う相対座標の外積の総和に等しい。
         let origin = Vec3Ecef::from(self.vertices[0]);
         let rel: Vec<Vec3Ecef> = self
             .vertices
             .iter()
             .map(|&c| Vec3Ecef::from(c) - origin)
             .collect();
-        let (mut nx, mut ny, mut nz) = (0.0, 0.0, 0.0);
-        for (curr, next) in rel.iter().zip(rel.iter().cycle().skip(1)) {
-            nx += (curr.b() - next.b()) * (curr.c() + next.c());
-            ny += (curr.c() - next.c()) * (curr.a() + next.a());
-            nz += (curr.a() - next.a()) * (curr.b() + next.b());
-        }
-        let Some(normal) = Vec3Ecef::new(nx, ny, nz).normalize() else {
+        let normal_sum = rel
+            .iter()
+            .zip(rel.iter().cycle().skip(1))
+            .fold(Vec3Ecef::new(0.0, 0.0, 0.0), |sum, (curr, next)| {
+                sum + curr.cross(next)
+            });
+        let Some(normal) = normal_sum.normalize() else {
             return false;
         };
         other.vertices.iter().all(|&c| {
