@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::geometry::Epsilon;
-use crate::{Coordinate, Error, GeometryError, Point};
+use crate::{Coordinate, Error, GeometryError, Point, Vec3, Vec3Ecef};
 
 pub mod geometry_relation;
 pub mod impls;
@@ -68,6 +68,53 @@ impl Polygon {
         validate_ring(&pts_2d, eps)?;
 
         Ok(Self { vertices })
+    }
+
+    /// 2 つの [Polygon] が同一平面上にあるかを、デフォルト許容誤差（[`Epsilon::DEFAULT`]）で判定する。
+    ///
+    /// `other` のいずれの頂点も、`self` が張る平面からの距離が許容誤差以内なら `true` を返す。
+    ///
+    /// # Examples
+    /// ```
+    /// # use spatial_id::geometry::{Coordinate, Polygon};
+    /// let c = |lat, lon, alt| Coordinate::new(lat, lon, alt).unwrap();
+    /// let a = Polygon::new([c(35.0, 139.0, 0.0), c(35.0, 139.01, 0.0), c(35.01, 139.0, 0.0)]).unwrap();
+    /// let b = Polygon::new([c(35.0, 139.0, 0.0), c(35.01, 139.01, 0.0), c(35.01, 139.0, 0.0)]).unwrap();
+    /// let tilted = Polygon::new([c(35.0, 139.0, 0.0), c(35.0, 139.01, 100.0), c(35.01, 139.0, 0.0)]).unwrap();
+    ///
+    /// assert!(a.is_coplanar(&b));
+    /// assert!(!a.is_coplanar(&tilted));
+    /// ```
+    pub fn is_coplanar(&self, other: &Polygon) -> bool {
+        self.is_coplanar_epsilon(other, Epsilon::DEFAULT)
+    }
+
+    /// 2 つの [Polygon] が同一平面上にあるかを、指定した許容誤差で判定する。
+    ///
+    /// `other` のいずれの頂点も、`self` が張る平面からの距離（メートル）が許容誤差以内なら `true` を返す。
+    /// 距離は頂点ごとに平面の法線方向で測り、合計ではなく最も離れた頂点で判定する。
+    pub fn is_coplanar_epsilon(&self, other: &Polygon, epsilon: Epsilon) -> bool {
+        // 桁落ちを避けるため、最初の頂点を原点とした相対座標で法線を求める。
+        // 多角形の法線（Newell 法）は、隣り合う相対座標の外積の総和に等しい。
+        let origin = Vec3Ecef::from(self.vertices[0]);
+        let rel: Vec<Vec3Ecef> = self
+            .vertices
+            .iter()
+            .map(|&c| Vec3Ecef::from(c) - origin)
+            .collect();
+        let normal_sum = rel
+            .iter()
+            .zip(rel.iter().cycle().skip(1))
+            .fold(Vec3Ecef::new(0.0, 0.0, 0.0), |sum, (curr, next)| {
+                sum + curr.cross(next)
+            });
+        let Some(normal) = normal_sum.normalize() else {
+            return false;
+        };
+        other.vertices.iter().all(|&c| {
+            let distance = (Vec3Ecef::from(c) - origin).dot(&normal);
+            libm::fabs(distance) <= epsilon.as_meters()
+        })
     }
 
     /// [Polygon]を構成する点を返す。
