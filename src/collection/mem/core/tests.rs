@@ -8,7 +8,7 @@ use rand_chacha::{ChaCha8Rng, rand_core::SeedableRng};
 use triomphe::Arc;
 
 use super::FlexTreeCore;
-use super::node::{Branch, Node, Skip, common_descent};
+use super::node::{Branch, Node, Skip};
 use crate::id::relative_flex_id::ShortRelativeFlexId;
 use crate::{
     FlexId, RangeId, Side, SingleId,
@@ -1009,7 +1009,7 @@ fn common_descent_matches_stepwise_descent() {
             let (split_a, split_b) = (random_set(), random_set());
             let expected =
                 common_descent_stepwise(&this, (&region_a, split_a), (&region_b, split_b));
-            let got = common_descent(&this, (&region_a, split_a), (&region_b, split_b));
+            let got = this.common_descent((&region_a, split_a), (&region_b, split_b));
             assert_eq!(
                 got, expected,
                 "this={this} a={region_a}/{split_a:?} b={region_b}/{split_b:?}"

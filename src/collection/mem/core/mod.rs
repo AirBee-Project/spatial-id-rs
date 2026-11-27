@@ -1,5 +1,5 @@
 use crate::collection::time_reconstruct;
-use crate::id::flex_id::ops::PreparedRange;
+use crate::id::flex_id::ops::OverlapTargets;
 use crate::{AllowedIntervals, FlexId, RangeId, Side, SingleId, SpatialId, ZoomLevel};
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
@@ -116,20 +116,7 @@ impl<V> FlexTreeCore<V> {
         &'a self,
         target: impl IntoIterator<Item = impl Into<RangeId>>,
     ) -> impl Iterator<Item = (FlexId, &'a V)> + 'a {
-        let mut iter = target.into_iter().map(|t| PreparedRange::new(t.into()));
-        let targets = match iter.next() {
-            None => OverlapTargets::Empty,
-            Some(first) => match iter.next() {
-                None => OverlapTargets::One(first),
-                Some(second) => {
-                    let mut rest = Vec::with_capacity(iter.size_hint().0 + 2);
-                    rest.push(first);
-                    rest.push(second);
-                    rest.extend(iter);
-                    OverlapTargets::Many(rest)
-                }
-            },
-        };
+        let targets = OverlapTargets::new(target);
         self.overlapping(move |region| targets.matches(region))
     }
 
@@ -496,23 +483,6 @@ impl<V: Ord + Clone> FlexTreeCore<V> {
     /// 値が `values` に含まれる [FlexId] だけを残す。
     pub fn filter_values(&self, values: &BTreeSet<V>) -> Self {
         self.filter(&|_| Decision::Descend, &|_, value| values.contains(value))
-    }
-}
-
-enum OverlapTargets {
-    Empty,
-    One(PreparedRange),
-    Many(Vec<PreparedRange>),
-}
-
-impl OverlapTargets {
-    #[inline(always)]
-    fn matches(&self, region: &FlexId) -> bool {
-        match self {
-            Self::Empty => false,
-            Self::One(t) => t.intersects(region),
-            Self::Many(ts) => ts.iter().any(|t| t.intersects(region)),
-        }
     }
 }
 
