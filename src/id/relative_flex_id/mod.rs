@@ -125,6 +125,19 @@ impl RelativeFlexId {
     }
 }
 
+impl From<ShortRelativeFlexId> for RelativeFlexId {
+    fn from(short: ShortRelativeFlexId) -> Self {
+        let [zf, zx, zy] = short.zooms();
+        let bits = u32::from(short.0 >> 9);
+        let low = |shift: u8, zoom: u8| (bits >> shift) & ((1 << zoom) - 1);
+        // SAFETY: 各次元の深さは MAX_STEPS 段以内で最大ズームに収まり、インデックスはその深さぶんの下位ビットなので範囲に収まる
+        let relative = unsafe {
+            FlexId::new_unchecked(zf, low(0, zf) as i32, zx, low(zf, zx), zy, low(zf + zx, zy))
+        };
+        RelativeFlexId(relative)
+    }
+}
+
 /// T 方向に深くならず、F / X / Y の深さの合計が [`ShortRelativeFlexId::MAX_STEPS`] 段以内の [RelativeFlexId] を u16 に詰めたもの。
 ///
 /// 下位9ビットに F / X / Y の深さを3ビットずつ、残りの7ビットに F / X / Y の順で各次元の下位ビットを並べる。
@@ -264,5 +277,20 @@ mod tests {
         let rel = descendant.relative_to(&ancestor).unwrap();
         let encoded = rel.encode();
         assert_eq!(RelativeFlexId::decode(&encoded).unwrap(), rel);
+    }
+
+    /// ShortRelativeFlexId に詰めた相対 ID は、元の相対 ID に戻せる。
+    #[test]
+    fn short_converts_back_to_relative() {
+        let ancestor = FlexId::new(2, 1, 1, 0, 3, 5).unwrap();
+        for descendant in [
+            FlexId::new(2, 1, 1, 0, 3, 5).unwrap(),
+            FlexId::new(5, 12, 1, 0, 3, 5).unwrap(),
+            FlexId::new(4, 6, 3, 3, 5, 22).unwrap(),
+        ] {
+            let rel = descendant.relative_to(&ancestor).unwrap();
+            let short = ShortRelativeFlexId::new(rel).unwrap();
+            assert_eq!(RelativeFlexId::from(short), rel);
+        }
     }
 }
