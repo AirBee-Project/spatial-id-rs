@@ -293,6 +293,126 @@ mod merge {
     }
 }
 
+#[cfg(feature = "unstable")]
+mod holes {
+    use crate::{Coordinate, Ecef, Epsilon, Error, GeometryError, Polygon};
+
+    fn c(lat: f64, lon: f64, alt: f64) -> Coordinate {
+        Coordinate::new(lat, lon, alt).unwrap()
+    }
+
+    fn plane_coord(x: f64, y: f64, z_offset: f64) -> Coordinate {
+        let origin = Ecef::from(c(0.0, 0.0, 0.0));
+        Ecef::new(origin.x() + z_offset, origin.y() + x, origin.z() + y)
+            .unwrap()
+            .into()
+    }
+
+    fn grid_poly(coords: &[(f64, f64)]) -> Polygon {
+        let scale = 10.0;
+        Polygon::new(
+            coords
+                .iter()
+                .map(|&(x, y)| plane_coord(x * scale, y * scale, 0.0)),
+        )
+        .unwrap()
+    }
+
+    fn outer_square() -> Polygon {
+        grid_poly(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)])
+    }
+
+    /// 空入力・複数穴・連続追加・重なるコの字穴の統合と島埋めを確認する
+    #[test]
+    fn with_holes_adds_merges_and_fills_holes() {
+        let outer = outer_square();
+        assert_eq!(outer.with_holes(&[]).unwrap().holes().len(), 0);
+
+        let h1 = grid_poly(&[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)]);
+        let h2 = grid_poly(&[(6.0, 6.0), (8.0, 6.0), (8.0, 8.0), (6.0, 8.0)]);
+        let holed = outer.with_holes(&[h1, h2]).unwrap();
+        assert_eq!(holed.holes().len(), 2);
+
+        // 既存の穴と重なる穴を追加すると統合される
+        let h3 = grid_poly(&[(2.0, 2.0), (4.0, 2.0), (4.0, 4.0), (2.0, 4.0)]);
+        assert_eq!(holed.with_holes(&[h3]).unwrap().holes().len(), 2);
+
+        // コの字型の穴同士が重なる場合は中央の島を埋めて 1 つの穴にする
+        let left_c = grid_poly(&[
+            (2.0, 2.0),
+            (5.0, 2.0),
+            (5.0, 3.0),
+            (3.0, 3.0),
+            (3.0, 5.0),
+            (5.0, 5.0),
+            (5.0, 6.0),
+            (2.0, 6.0),
+        ]);
+        let right_c = grid_poly(&[
+            (4.0, 2.0),
+            (7.0, 2.0),
+            (7.0, 6.0),
+            (4.0, 6.0),
+            (4.0, 5.0),
+            (6.0, 5.0),
+            (6.0, 3.0),
+            (4.0, 3.0),
+        ]);
+        let filled = outer.with_holes(&[left_c, right_c]).unwrap();
+        assert_eq!(filled.holes().len(), 1);
+        assert_eq!(filled.holes()[0].len(), 4);
+    }
+
+    /// 非同一平面の穴をエラーにし、Epsilon で許容誤差を制御する
+    #[test]
+    fn rejects_non_coplanar_hole_and_respects_epsilon() {
+        let outer = outer_square();
+        let shifted = Polygon::new([
+            plane_coord(20.0, 20.0, 0.5),
+            plane_coord(40.0, 20.0, 0.5),
+            plane_coord(40.0, 40.0, 0.5),
+            plane_coord(20.0, 40.0, 0.5),
+        ])
+        .unwrap();
+
+        assert_eq!(
+            outer
+                .with_holes(core::slice::from_ref(&shifted))
+                .unwrap_err(),
+            Error::Geometry(GeometryError::PolygonNotCoplanar { index: 0 })
+        );
+        let holed = outer
+            .with_holes_epsilon(&[shifted], Epsilon::from_meters(1.0).unwrap())
+            .unwrap();
+        assert_eq!(holed.holes().len(), 1);
+    }
+
+    /// 外周を包む・はみ出す・辺や頂点に接する・外周と同一の穴をエラーにする
+    #[test]
+    fn rejects_hole_enclosing_protruding_or_touching_exterior() {
+        let outer = outer_square();
+        let invalid_holes = [
+            // 外周を完全に包む
+            grid_poly(&[(-5.0, -5.0), (15.0, -5.0), (15.0, 15.0), (-5.0, 15.0)]),
+            // 一部が外周からはみ出す
+            grid_poly(&[(5.0, 5.0), (12.0, 5.0), (12.0, 8.0), (5.0, 8.0)]),
+            // 外周の辺に接する
+            grid_poly(&[(0.0, 2.0), (3.0, 2.0), (3.0, 4.0), (0.0, 4.0)]),
+            // 外周の頂点に 1 点だけ接する
+            grid_poly(&[(0.0, 0.0), (3.0, 1.0), (1.0, 3.0)]),
+            // 外周と同一
+            outer.clone(),
+        ];
+
+        for hole in invalid_holes {
+            assert_eq!(
+                outer.with_holes(&[hole]).unwrap_err(),
+                Error::Geometry(GeometryError::HoleOutsideExterior { index: 0 })
+            );
+        }
+    }
+}
+
 mod validation {
     use crate::{Coordinate, Epsilon, Error, GeometryError, Polygon};
 

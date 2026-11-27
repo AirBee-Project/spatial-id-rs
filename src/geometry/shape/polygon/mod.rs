@@ -30,6 +30,8 @@ mod tests;
 #[doc = doc_image!("polygon", "docs/images/polygon.jpg")]
 pub struct Polygon {
     vertices: Vec<Coordinate>,
+    #[cfg(feature = "unstable")]
+    holes: Vec<Vec<Coordinate>>,
 }
 
 impl Polygon {
@@ -85,7 +87,11 @@ impl Polygon {
             .collect();
         Vec2::validate_ring(&pts_2d, eps)?;
 
-        Ok(Self { vertices })
+        Ok(Self {
+            vertices,
+            #[cfg(feature = "unstable")]
+            holes: Vec::new(),
+        })
     }
 
     /// 2 つの [Polygon] が同一平面上にあるかを、デフォルト許容誤差（[`Epsilon::DEFAULT`]）で判定する。
@@ -248,9 +254,88 @@ impl Polygon {
         Ok(result)
     }
 
+    /// 指定した複数の穴（内周リング）をあけた新しい [Polygon] を、デフォルト許容誤差（[`Epsilon::DEFAULT`]）で作成する。
+    ///
+    /// 重なりや辺の接触がある穴同士は統合され、穴の中に発生する島も埋められる。
+    /// 既存の穴がある場合はそれらも合わせて統合される。
+    ///
+    /// # エラー
+    /// - 基準となる `self` と同一平面上にない穴がある場合は [`GeometryError::PolygonNotCoplanar`] を返す。
+    /// - 統合後の穴が外周の境界に接触している、または外周からはみ出している場合（外周を完全に包む場合を含む）は
+    ///   [`GeometryError::HoleOutsideExterior`] を返す。
+    #[cfg(feature = "unstable")]
+    pub fn with_holes(&self, holes: &[Polygon]) -> Result<Self, Error> {
+        self.with_holes_epsilon(holes, Epsilon::DEFAULT)
+    }
+
+    /// 指定した複数の穴（内周リング）をあけた新しい [Polygon] を、指定した許容誤差で作成する。
+    ///
+    /// # エラー
+    /// - 基準となる `self` と同一平面上にない穴がある場合は [`GeometryError::PolygonNotCoplanar`] を返す。
+    /// - 統合後の穴が外周の境界に接触している、または外周からはみ出している場合（外周を完全に包む場合を含む）は
+    ///   [`GeometryError::HoleOutsideExterior`] を返す。
+    #[cfg(feature = "unstable")]
+    pub fn with_holes_epsilon(&self, holes: &[Polygon], epsilon: Epsilon) -> Result<Self, Error> {
+        if holes.is_empty() {
+            return Ok(self.clone());
+        }
+
+        for (index, hole) in holes.iter().enumerate() {
+            if !self.is_coplanar_epsilon(hole, epsilon) {
+                return Err(GeometryError::PolygonNotCoplanar { index }.into());
+            }
+        }
+
+        let mut all_holes: Vec<Polygon> = Vec::with_capacity(self.holes.len() + holes.len());
+        for existing in &self.holes {
+            all_holes.push(Polygon::new_epsilon(existing.iter().copied(), epsilon)?);
+        }
+        all_holes.extend(holes.iter().cloned());
+
+        let merged_holes = Self::merge_filling_holes_epsilon(&all_holes, epsilon)?;
+
+        let eps = epsilon.as_meters();
+        let origin = Vec3Ecef::from(self.vertices[0]);
+        let rel: Vec<Vec3Ecef> = self
+            .vertices
+            .iter()
+            .map(|&c| Vec3Ecef::from(c) - origin)
+            .collect();
+        let normal = Self::plane_normal(&rel, eps)?;
+        let [u, v] = normal.create_orthonormal_basis();
+        let project = |c: Coordinate| {
+            let r = Vec3Ecef::from(c) - origin;
+            Vec2::new(r.dot(&u), r.dot(&v))
+        };
+        let outer_pts: Vec<Vec2> = rel
+            .iter()
+            .map(|r| Vec2::new(r.dot(&u), r.dot(&v)))
+            .collect();
+
+        let mut new_holes = Vec::with_capacity(merged_holes.len());
+        for (index, hole) in merged_holes.into_iter().enumerate() {
+            let hole_pts: Vec<Vec2> = hole.vertices.iter().copied().map(project).collect();
+            if !Vec2::ring_is_strictly_inside(&hole_pts, &outer_pts, eps) {
+                return Err(GeometryError::HoleOutsideExterior { index }.into());
+            }
+            new_holes.push(hole.vertices);
+        }
+
+        Ok(Self {
+            vertices: self.vertices.clone(),
+            holes: new_holes,
+        })
+    }
+
     /// [Polygon]を構成する点を返す。
     pub fn vertices(&self) -> &Vec<Coordinate> {
         &self.vertices
+    }
+
+    /// [Polygon] の穴（内周リング）のリストを返す。
+    #[cfg(feature = "unstable")]
+    pub fn holes(&self) -> &[Vec<Coordinate>] {
+        &self.holes
     }
 
     #[cfg(feature = "unstable")]
