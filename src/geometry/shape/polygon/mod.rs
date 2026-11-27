@@ -1,16 +1,13 @@
 use alloc::vec::Vec;
 
 use crate::geometry::Epsilon;
-use crate::{Coordinate, Error, GeometryError, Point, Vec3, Vec3Ecef};
+use crate::{Coordinate, Error, GeometryError, Point, Vec2, Vec3, Vec3Ecef};
 
 pub mod geometry_relation;
 pub mod impls;
-mod ring_plane;
 
 #[cfg(test)]
 mod tests;
-
-use ring_plane::{project_ring_2d, validate_ring};
 
 #[derive(Debug, Clone, PartialEq)]
 /// 3 次元空間における多角形（ポリゴン）を表す型。
@@ -64,8 +61,18 @@ impl Polygon {
             .into());
         }
 
-        let pts_2d = project_ring_2d(&vertices, eps)?;
-        validate_ring(&pts_2d, eps)?;
+        let origin = Vec3Ecef::from(vertices[0]);
+        let rel: Vec<Vec3Ecef> = vertices
+            .iter()
+            .map(|&c| Vec3Ecef::from(c) - origin)
+            .collect();
+        let normal = Self::plane_normal(&rel, eps)?;
+        let [u, v] = normal.create_orthonormal_basis();
+        let pts_2d: Vec<Vec2> = rel
+            .iter()
+            .map(|r| Vec2::new(r.dot(&u), r.dot(&v)))
+            .collect();
+        Vec2::validate_ring(&pts_2d, eps)?;
 
         Ok(Self { vertices })
     }
@@ -94,31 +101,72 @@ impl Polygon {
     /// `other` のいずれの頂点も、`self` が張る平面からの距離（メートル）が許容誤差以内なら `true` を返す。
     /// 距離は頂点ごとに平面の法線方向で測り、合計ではなく最も離れた頂点で判定する。
     pub fn is_coplanar_epsilon(&self, other: &Polygon, epsilon: Epsilon) -> bool {
-        // 桁落ちを避けるため、最初の頂点を原点とした相対座標で法線を求める。
-        // 多角形の法線（Newell 法）は、隣り合う相対座標の外積の総和に等しい。
         let origin = Vec3Ecef::from(self.vertices[0]);
         let rel: Vec<Vec3Ecef> = self
             .vertices
             .iter()
             .map(|&c| Vec3Ecef::from(c) - origin)
             .collect();
-        let normal_sum = rel
-            .iter()
-            .zip(rel.iter().cycle().skip(1))
-            .fold(Vec3Ecef::new(0.0, 0.0, 0.0), |sum, (curr, next)| {
-                sum + curr.cross(next)
-            });
-        let Some(normal) = normal_sum.normalize() else {
+        let Some(normal) = Self::newell_normal(&rel) else {
             return false;
         };
-        other.vertices.iter().all(|&c| {
-            let distance = (Vec3Ecef::from(c) - origin).dot(&normal);
-            libm::fabs(distance) <= epsilon.as_meters()
-        })
+        other
+            .vertices
+            .iter()
+            .all(|&c| libm::fabs((Vec3Ecef::from(c) - origin).dot(&normal)) <= epsilon.as_meters())
     }
 
     /// [Polygon]を構成する点を返す。
     pub fn vertices(&self) -> &Vec<Coordinate> {
         &self.vertices
+    }
+
+    fn newell_normal(rel: &[Vec3Ecef]) -> Option<Vec3Ecef> {
+        rel.iter()
+            .zip(rel.iter().cycle().skip(1))
+            .fold(Vec3Ecef::new(0.0, 0.0, 0.0), |sum, (curr, next)| {
+                sum + curr.cross(next)
+            })
+            .normalize()
+    }
+
+    /// Newell の法線を優先し、面積の相殺で 0 になる場合（8 の字の自己交差など）は共線でない 3 点から法線を求める。
+    fn plane_normal(rel: &[Vec3Ecef], eps: f64) -> Result<Vec3Ecef, Error> {
+        let eps2 = eps * eps;
+        let mut far_idx = 0;
+        let mut max_d2 = 0.0;
+        for (i, r) in rel.iter().enumerate().skip(1) {
+            let d2 = r.norm_squared();
+            if d2 > max_d2 {
+                max_d2 = d2;
+                far_idx = i;
+            }
+        }
+        if max_d2 <= eps2 {
+            return Err(GeometryError::PolygonZeroArea.into());
+        }
+
+        let axis = rel[far_idx];
+        let mut perp_idx = 0;
+        let mut max_h2 = 0.0;
+        for (i, r) in rel.iter().enumerate() {
+            let cross = axis.cross(r);
+            let h2 = cross.norm_squared() / max_d2;
+            if h2 > max_h2 {
+                max_h2 = h2;
+                perp_idx = i;
+            }
+        }
+        if max_h2 <= eps2 {
+            return Err(GeometryError::PolygonZeroArea.into());
+        }
+
+        if let Some(unit) = Self::newell_normal(rel) {
+            return Ok(unit);
+        }
+
+        axis.cross(&rel[perp_idx])
+            .normalize()
+            .ok_or_else(|| GeometryError::PolygonZeroArea.into())
     }
 }

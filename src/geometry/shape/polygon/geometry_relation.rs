@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
-use super::ring_plane::signed_area;
 use crate::{
     Coordinate, Ecef, ExpandCoordinates, ExpandLines, ExpandTriangles, Line, Polygon, Triangle,
+    Vec2,
 };
 
 impl ExpandCoordinates for Polygon {
@@ -47,7 +47,12 @@ impl ExpandTriangles for Polygon {
             .collect();
 
         // 回転方向の検知
-        let area = signed_area(&points_2d);
+        let area = Vec2::signed_area(
+            &points_2d
+                .iter()
+                .map(|&(x, y)| Vec2::new(x, y))
+                .collect::<Vec<_>>(),
+        );
         let area_sign = if area > 0.0 { 1.0 } else { -1.0 };
 
         // 耳切りループ
