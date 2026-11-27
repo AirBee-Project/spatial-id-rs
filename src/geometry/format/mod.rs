@@ -1,6 +1,6 @@
 //! 地理空間データのフォーマット。
 
-#[cfg(all(feature = "std", feature = "unstable"))]
+#[cfg(feature = "geojson")]
 mod geojson;
 #[cfg(feature = "unstable")]
 pub(crate) mod regionmesh;

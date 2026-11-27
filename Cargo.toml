@@ -46,7 +46,6 @@ serde_json = { version = "1", default-features = false, features = ["alloc"], op
 # featuresで切り替え可能なもの
 rand = { version = "0.10.2", optional = true }
 rayon = { version = "1.10", optional = true }
-# geojson クレートは std に依存するため、std feature のときだけ使う。
 geojson = { version = "1.0.0", default-features = false, optional = true }
 
 compio = { version = "0.19.2", features = ["fs"], optional = true }
@@ -62,7 +61,7 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"], optio
 
 [features]
 default = ["std", "rayon", "temporal_id"]
-std = ["dep:geojson"]
+std = []
 rayon = ["dep:rayon"]
 random = ["dep:rand"]
 temporal_id = []
@@ -78,6 +77,8 @@ disk = [
     "dep:libc",
     "dep:windows-sys",
 ]
+# GeoJSON からの変換。geojson クレートが std に依存し、API が unstable のため両方を有効にする
+geojson = ["std", "unstable", "dep:geojson"]
 
 [dev-dependencies]
 rand = "0.10.1"
