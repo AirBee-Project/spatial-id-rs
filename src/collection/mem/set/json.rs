@@ -2,7 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{AllowedIntervals, SpatialIdSet};
 
-use super::super::json::{deserialize_without_values, serialize_without_values};
+use crate::collection::json::{deserialize_without_values, serialize_without_values};
 
 impl Serialize for SpatialIdSet {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {

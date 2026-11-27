@@ -13,9 +13,10 @@ use crate::{RangeId, SpatialId};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::borrow::Borrow;
 use core::fmt;
 use serde::de::{self, MapAccess, Visitor};
-use serde::ser::SerializeMap;
+use serde::ser::{self, SerializeMap};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 const SCHEMA_URL: &str = "https://airbee-project.github.io/schemas/json/v1.0.json";
@@ -227,9 +228,9 @@ fn take_single_entry<D>(envelope: EnvelopeIn<D>) -> Result<D, String> {
 }
 
 #[derive(Serialize)]
-struct ValuedDataEntryOut<'a, V: Serialize> {
+struct ValuedDataEntryOut<V: Serialize> {
     name: &'static str,
-    value: Vec<&'a V>,
+    value: Vec<V>,
     ids: Vec<IdEntry>,
 }
 
@@ -259,11 +260,26 @@ where
     V: Serialize + PartialEq + 'a,
     S: Serializer,
 {
-    let mut unique: Vec<&'a V> = Vec::new();
+    try_serialize_with_values::<V, &'a V, core::convert::Infallible, S>(iter.map(Ok), serializer)
+}
+
+/// 失敗し得るイテレータから値ありコレクションを JSON 書き出しする。
+pub(crate) fn try_serialize_with_values<V, B, E, S>(
+    iter: impl Iterator<Item = Result<(RangeId, B), E>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    V: Serialize + PartialEq,
+    B: Borrow<V> + Serialize,
+    E: fmt::Display,
+    S: Serializer,
+{
+    let mut unique: Vec<B> = Vec::new();
     let mut ids: Vec<IdEntry> = Vec::new();
 
-    for (range_id, val) in iter {
-        let idx = match unique.iter().position(|&u| u == val) {
+    for item in iter {
+        let (range_id, val) = item.map_err(ser::Error::custom)?;
+        let idx = match unique.iter().position(|u| u.borrow() == val.borrow()) {
             Some(idx) => idx,
             None => {
                 unique.push(val);
@@ -298,12 +314,26 @@ pub(crate) fn serialize_without_values<S>(
 where
     S: Serializer,
 {
-    let ids: Vec<IdEntry> = iter
-        .map(|range_id| IdEntry {
+    try_serialize_without_values::<core::convert::Infallible, S>(iter.map(Ok), serializer)
+}
+
+/// 失敗し得るイテレータから値なしコレクションを JSON 書き出しする。
+pub(crate) fn try_serialize_without_values<E, S>(
+    iter: impl Iterator<Item = Result<RangeId, E>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    E: fmt::Display,
+    S: Serializer,
+{
+    let mut ids = Vec::new();
+    for item in iter {
+        let range_id = item.map_err(ser::Error::custom)?;
+        ids.push(IdEntry {
             range_id,
             r#ref: None,
-        })
-        .collect();
+        });
+    }
 
     let envelope = EnvelopeOut {
         schema: SCHEMA_URL,
