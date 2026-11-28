@@ -249,11 +249,7 @@ where
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターはテーブルを借用しない。
     pub fn remove_overlapping<T: SpatialId>(&mut self, target: T) -> MapIter<IntoIter<V>> {
-        MapIter::new(
-            self.inner
-                .remove_overlapping(target.flex_ids())
-                .into_iter(),
-        )
+        MapIter::new(self.inner.remove_overlapping(target.flex_ids()).into_iter())
     }
 
     /// 指定した空間IDと面で接している空間IDと値への参照を重複なく返す。入力された空間ID自身と重なる要素は除外する。

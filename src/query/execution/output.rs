@@ -57,9 +57,7 @@ impl<'a, V: SafeValue + 'static> QueryOutput<'a, V> {
 
     /// 結果を [`SpatialIdSet`] にして返す。
     pub fn into_set(self) -> Result<SpatialIdSet, Error> {
-        self.flex_ids()
-            .map(|res| res.map(|(id, _)| id))
-            .collect()
+        self.flex_ids().map(|res| res.map(|(id, _)| id)).collect()
     }
 
     /// 結果を [`FlexId`] で順に返すイテレーターにする。
@@ -143,8 +141,12 @@ impl<V: SafeValue + 'static> QueryOutput<'_, V> {
                 }
                 Some(clipper) => {
                     let start = self.pending.len();
-                    self.pending
-                        .extend(clipper.get(id).flex_ids().map(|piece| (piece, value.clone())));
+                    self.pending.extend(
+                        clipper
+                            .get(id)
+                            .flex_ids()
+                            .map(|piece| (piece, value.clone())),
+                    );
                     self.pending[start..].reverse();
                 }
             }

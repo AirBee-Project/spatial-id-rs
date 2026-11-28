@@ -19,7 +19,13 @@ mod tests {
             .map(|(_, value)| *value)
             .collect();
         assert_eq!(actual_values, vec![20]);
-        assert!(table.iter().flex_ids().find(|(_, val)| **val == 10).is_none());
+        assert!(
+            table
+                .iter()
+                .flex_ids()
+                .find(|(_, val)| **val == 10)
+                .is_none()
+        );
         assert_eq!(
             table
                 .iter()
