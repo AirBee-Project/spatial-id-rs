@@ -14,14 +14,22 @@ mod tests {
         table.insert(target, 20);
 
         let actual_values: Vec<_> = table
-            .get_flex_ids(target)
+            .get(target)
+            .flex_ids()
             .map(|(_, value)| *value)
             .collect();
         assert_eq!(actual_values, vec![20]);
-        assert!(table.iter_flex_ids().find(|(_, val)| **val == 10).is_none());
+        assert!(
+            table
+                .iter()
+                .flex_ids()
+                .find(|(_, val)| **val == 10)
+                .is_none()
+        );
         assert_eq!(
             table
-                .iter_flex_ids()
+                .iter()
+                .flex_ids()
                 .filter(|(_, val)| **val == 20)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),
@@ -42,7 +50,8 @@ mod tests {
 
         assert_eq!(
             table
-                .iter_flex_ids()
+                .iter()
+                .flex_ids()
                 .filter(|(_, val)| **val == 10)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),

@@ -18,52 +18,108 @@ mod tests {
             .collect()
     }
 
-    /// `RangeId` 版は `_flex` 版の各要素を `RangeId` に直したものと一致する。
+    fn as_single(items: Vec<(FlexId, i32)>) -> Vec<(SingleId, i32)> {
+        items
+            .into_iter()
+            .flat_map(|(id, v)| id.single_ids().map(move |s| (s, v)))
+            .collect()
+    }
+
+    /// 既定の `RangeId` 版・`.flex_ids()`・`.single_ids()` が同じ領域と値を返す。
     #[test]
     fn range_id_views_match_flex_views() {
         let table = sample();
         let target = RangeId::new(5, [0, 2], [2, 5], [2, 3]).unwrap();
 
-        let flex: Vec<_> = table.iter_flex_ids().map(|(id, v)| (id, *v)).collect();
+        let flex: Vec<_> = table.iter().flex_ids().map(|(id, v)| (id, *v)).collect();
         let range: Vec<_> = table.iter().map(|(id, v)| (id, *v)).collect();
-        assert_eq!(range, as_range(flex));
-
-        let flex: Vec<_> = table.get_flex_ids(target).map(|(id, v)| (id, *v)).collect();
-        let range: Vec<_> = table.get(target).map(|(id, v)| (id, *v)).collect();
-        assert_eq!(range, as_range(flex));
+        let single: Vec<_> = table.iter().single_ids().map(|(id, v)| (id, *v)).collect();
+        assert_eq!(range, as_range(flex.clone()));
+        assert_eq!(single, as_single(flex));
+        assert_eq!(table.iter().len(), table.count());
+        assert_eq!(table.iter().flex_ids().len(), table.count());
 
         let flex: Vec<_> = table
-            .get_overlapping_flex_ids(target)
+            .get(target)
+            .flex_ids()
+            .map(|(id, v)| (id, *v))
+            .collect();
+        let range: Vec<_> = table.get(target).map(|(id, v)| (id, *v)).collect();
+        let single: Vec<_> = table
+            .get(target)
+            .single_ids()
+            .map(|(id, v)| (id, *v))
+            .collect();
+        assert_eq!(range, as_range(flex.clone()));
+        assert_eq!(single, as_single(flex));
+
+        let flex: Vec<_> = table
+            .get_overlapping(target)
+            .flex_ids()
             .map(|(id, v)| (id, *v))
             .collect();
         let range: Vec<_> = table
             .get_overlapping(target)
             .map(|(id, v)| (id, *v))
             .collect();
-        assert_eq!(range, as_range(flex));
+        let single: Vec<_> = table
+            .get_overlapping(target)
+            .single_ids()
+            .map(|(id, v)| (id, *v))
+            .collect();
+        assert_eq!(range, as_range(flex.clone()));
+        assert_eq!(single, as_single(flex));
 
+        let flex: Vec<_> = table
+            .spatial_face_neighbors(target)
+            .flex_ids()
+            .map(|(id, v)| (id, *v))
+            .collect();
+        let range: Vec<_> = table
+            .spatial_face_neighbors(target)
+            .map(|(id, v)| (id, *v))
+            .collect();
+        let single: Vec<_> = table
+            .spatial_face_neighbors(target)
+            .single_ids()
+            .map(|(id, v)| (id, *v))
+            .collect();
+        assert_eq!(range, as_range(flex.clone()));
+        assert_eq!(single, as_single(flex));
+
+        let into_flex: Vec<_> = table.clone().into_iter().flex_ids().collect();
         assert_eq!(
             table.clone().into_iter().collect::<Vec<_>>(),
-            as_range(table.clone().into_iter_flex_ids().collect())
+            as_range(into_flex.clone())
+        );
+        assert_eq!(
+            table.clone().into_iter().single_ids().collect::<Vec<_>>(),
+            as_single(into_flex)
         );
     }
 
-    /// 削除は呼び出した時点で完了し、`remove` と `remove_flex_ids` のどちらでも同じ内容が取り除かれる。
+    /// 削除は呼び出した時点で完了し、既定・`.flex_ids()`・`.single_ids()` のどれでも同じ内容が取り除かれる。
     #[test]
     fn remove_variants_remove_the_same_content() {
         let target = RangeId::new(5, [0, 2], [2, 5], [2, 3]).unwrap();
 
-        let (mut a, mut b) = (sample(), sample());
+        let (mut a, mut b, mut c) = (sample(), sample(), sample());
         let removed: Vec<_> = a.remove(target).collect();
-        let removed_flex: Vec<_> = b.remove_flex_ids(target).collect();
-        assert_eq!(removed, as_range(removed_flex));
+        let removed_flex: Vec<_> = b.remove(target).flex_ids().collect();
+        let removed_single: Vec<_> = c.remove(target).single_ids().collect();
+        assert_eq!(removed, as_range(removed_flex.clone()));
+        assert_eq!(removed_single, as_single(removed_flex));
         assert_eq!(a, b);
+        assert_eq!(a, c);
 
-        let (mut a, mut b) = (sample(), sample());
+        let (mut a, mut b, mut c) = (sample(), sample(), sample());
         let removed: Vec<_> = a.remove_overlapping(target).collect();
-        let removed_flex: Vec<_> = b.remove_overlapping_flex_ids(target).collect();
-        assert_eq!(removed, as_range(removed_flex));
+        let removed_flex: Vec<_> = b.remove_overlapping(target).flex_ids().collect();
+        let removed_single: Vec<_> = c.remove_overlapping(target).single_ids().collect();
+        assert_eq!(removed, as_range(removed_flex.clone()));
+        assert_eq!(removed_single, as_single(removed_flex));
         assert_eq!(a, b);
+        assert_eq!(a, c);
     }
 
     /// `FromIterator` と `Extend` は `SingleId`・`RangeId`・`FlexId` のどれでも受け取る。
@@ -83,7 +139,7 @@ mod tests {
         from_ranges.extend([(RangeId::from(flex), 3)]);
         assert_eq!(from_ranges, expected);
 
-        let from_flex: SpatialIdMap<i32> = expected.clone().into_iter_flex_ids().collect();
+        let from_flex: SpatialIdMap<i32> = expected.clone().into_iter().flex_ids().collect();
         assert_eq!(from_flex, expected);
 
         let from_single: SpatialIdMap<i32> = [(single, 1)].into_iter().collect();
