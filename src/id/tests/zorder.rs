@@ -15,7 +15,7 @@ proptest! {
     #[test]
     fn table_iterates_in_partial_order(entries in arb_shallow_entries()) {
         let table: SpatialIdMap<u64> = entries.into_iter().collect();
-        let ids: Vec<FlexId> = table.iter_flex_ids().map(|(id, _)| id).collect();
+        let ids: Vec<FlexId> = table.iter().flex_ids().map(|(id, _)| id).collect();
         for pair in ids.windows(2) {
             prop_assert_eq!(pair[0].partial_cmp(&pair[1]), Some(Ordering::Less));
             prop_assert!(pair[0].zorder_key() < pair[1].zorder_key());
@@ -26,7 +26,7 @@ proptest! {
     #[test]
     fn table_yields_same_canonical_sequence_for_same_shape(entries in arb_shallow_entries()) {
         let table: SpatialIdMap<u64> = entries.into_iter().collect();
-        let expected: Vec<(FlexId, u64)> = table.iter_flex_ids().map(|(id, v)| (id, *v)).collect();
+        let expected: Vec<(FlexId, u64)> = table.iter().flex_ids().map(|(id, v)| (id, *v)).collect();
 
         let dimensions = [Dimension::F, Dimension::X, Dimension::Y];
         let mut pieces: Vec<(FlexId, u64)> = Vec::new();
@@ -45,7 +45,7 @@ proptest! {
         for (id, v) in pieces {
             rebuilt.insert(id, v);
         }
-        let actual: Vec<(FlexId, u64)> = rebuilt.iter_flex_ids().map(|(id, v)| (id, *v)).collect();
+        let actual: Vec<(FlexId, u64)> = rebuilt.iter().flex_ids().map(|(id, v)| (id, *v)).collect();
         prop_assert_eq!(actual, expected);
     }
 }

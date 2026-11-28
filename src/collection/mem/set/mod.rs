@@ -1,6 +1,6 @@
 use crate::collection::core::{FlexTreeCore, IntoIter};
 use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId, ZoomLevel};
-use core::iter::Map;
+use core::iter::{FusedIterator, Map};
 pub(crate) mod convert;
 pub(crate) mod impls;
 #[cfg(feature = "unstable")]
@@ -8,6 +8,87 @@ pub(crate) mod json;
 pub(crate) mod ops;
 #[cfg(test)]
 mod tests;
+
+/// [`SpatialIdSet`] の各メソッドが返すイテレーター。
+///
+/// 既定では [`RangeId`] を返す。
+/// 木が保持する [`FlexId`] のまま受け取るには [`SetIter::flex_ids`]、
+/// 各要素を [`SingleId`] へ展開するには [`SetIter::single_ids`] を使う。
+#[derive(Clone, Debug)]
+pub struct SetIter<I>(I);
+
+impl<I> SetIter<I> {
+    pub(crate) fn new(inner: I) -> Self {
+        Self(inner)
+    }
+
+    /// 木が保持する [`FlexId`] をそのまま返すイテレーターへ切り替える。
+    pub fn flex_ids(self) -> I {
+        self.0
+    }
+}
+
+impl<I> SetIter<I>
+where
+    I: Iterator<Item = FlexId>,
+{
+    /// 各要素を [`SingleId`] へ展開して返すイテレーターへ切り替える。
+    pub fn single_ids(self) -> impl Iterator<Item = SingleId> {
+        self.0.flat_map(FlexId::single_ids)
+    }
+}
+
+impl<I> Iterator for SetIter<I>
+where
+    I: Iterator<Item = FlexId>,
+{
+    type Item = RangeId;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(RangeId::from)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.0.count()
+    }
+
+    #[inline]
+    fn last(self) -> Option<Self::Item> {
+        self.0.last().map(RangeId::from)
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.0.nth(n).map(RangeId::from)
+    }
+
+    #[inline]
+    fn fold<B, F>(self, init: B, mut f: F) -> B
+    where
+        F: FnMut(B, Self::Item) -> B,
+    {
+        self.0.fold(init, |acc, id| f(acc, RangeId::from(id)))
+    }
+}
+
+impl<I> ExactSizeIterator for SetIter<I>
+where
+    I: ExactSizeIterator<Item = FlexId>,
+{
+    #[inline]
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<I> FusedIterator for SetIter<I> where I: FusedIterator<Item = FlexId> {}
 
 /// 空間IDの集合を表す型。
 ///
@@ -66,52 +147,43 @@ impl SpatialIdSet {
     }
 
     /// 集合から指定した空間IDと重なる空間IDを切り出して返す。
-    pub fn get<'a, S: SpatialId + 'a>(&'a self, target: S) -> impl Iterator<Item = RangeId> + 'a {
-        self.get_flex_ids(target).map(RangeId::from)
-    }
-
-    /// [`get`](Self::get) と同じだが、結果を [`FlexId`] で返す。
-    pub fn get_flex_ids<'a, S: SpatialId + 'a>(
+    pub fn get<'a, S: SpatialId + 'a>(
         &'a self,
         target: S,
-    ) -> impl Iterator<Item = FlexId> + 'a {
-        self.inner
-            .get(target.flex_ids())
-            .map(|(flex_id, _)| flex_id)
+    ) -> SetIter<impl Iterator<Item = FlexId> + 'a> {
+        SetIter::new(
+            self.inner
+                .get(target.flex_ids())
+                .map(|(flex_id, _)| flex_id),
+        )
     }
 
     /// 集合から指定した空間IDと重なる空間IDを切り出して削除する。削除した部分の空間IDを返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターは集合を借用しない。
-    pub fn remove<S: SpatialId>(&mut self, target: S) -> impl Iterator<Item = RangeId> + use<S> {
-        self.remove_flex_ids(target).map(RangeId::from)
-    }
-
-    /// [`remove`](Self::remove) と同じだが、削除した部分を [`FlexId`] で返す。
-    pub fn remove_flex_ids<S: SpatialId>(
+    pub fn remove<S: SpatialId>(
         &mut self,
         target: S,
-    ) -> impl Iterator<Item = FlexId> + use<S> {
-        self.inner
-            .remove(target.flex_ids())
-            .into_iter()
-            .map(|(flex_id, _)| flex_id)
+    ) -> SetIter<impl ExactSizeIterator<Item = FlexId> + FusedIterator + use<S>> {
+        SetIter::new(
+            self.inner
+                .remove(target.flex_ids())
+                .into_iter()
+                .map(|(flex_id, ())| flex_id),
+        )
     }
 
     /// 指定した空間IDと接触していたすべての空間IDを返す。
     /// [`get`](Self::get) と異なり切り取りを行わず、target と重なった空間IDをそのまま返す。
-    pub fn get_overlapping<S: SpatialId>(&self, target: S) -> impl Iterator<Item = RangeId> + '_ {
-        self.get_overlapping_flex_ids(target).map(RangeId::from)
-    }
-
-    /// [`get_overlapping`](Self::get_overlapping) と同じだが、結果を [`FlexId`] で返す。
-    pub fn get_overlapping_flex_ids<S: SpatialId>(
+    pub fn get_overlapping<S: SpatialId>(
         &self,
         target: S,
-    ) -> impl Iterator<Item = FlexId> + '_ {
-        self.inner
-            .get_overlapping([target])
-            .map(|(flex_id, _)| flex_id)
+    ) -> SetIter<impl Iterator<Item = FlexId> + '_> {
+        SetIter::new(
+            self.inner
+                .get_overlapping([target])
+                .map(|(flex_id, _)| flex_id),
+        )
     }
 
     /// 指定した空間IDと接触していたすべての空間IDを削除する。削除した空間IDを返す。
@@ -121,38 +193,25 @@ impl SpatialIdSet {
     pub fn remove_overlapping<S: SpatialId>(
         &mut self,
         target: S,
-    ) -> impl Iterator<Item = RangeId> + use<S> {
-        self.remove_overlapping_flex_ids(target).map(RangeId::from)
-    }
-
-    /// [`remove_overlapping`](Self::remove_overlapping) と同じだが、削除した空間IDを [`FlexId`] で返す。
-    pub fn remove_overlapping_flex_ids<S: SpatialId>(
-        &mut self,
-        target: S,
-    ) -> impl Iterator<Item = FlexId> + use<S> {
-        self.inner
-            .remove_overlapping(target.flex_ids())
-            .into_iter()
-            .map(|(flex_id, _)| flex_id)
+    ) -> SetIter<impl ExactSizeIterator<Item = FlexId> + FusedIterator + use<S>> {
+        SetIter::new(
+            self.inner
+                .remove_overlapping(target.flex_ids())
+                .into_iter()
+                .map(|(flex_id, ())| flex_id),
+        )
     }
 
     /// 指定した空間IDと面で接している空間IDを重複なく返す。入力された空間ID自身と重なる空間IDは除外する。
     pub fn spatial_face_neighbors<S: SpatialId>(
         &self,
         target: S,
-    ) -> impl Iterator<Item = RangeId> + '_ {
-        self.spatial_face_neighbors_flex_ids(target)
-            .map(RangeId::from)
-    }
-
-    /// [`spatial_face_neighbors`](Self::spatial_face_neighbors) と同じだが、結果を [`FlexId`] で返す。
-    pub fn spatial_face_neighbors_flex_ids<S: SpatialId>(
-        &self,
-        target: S,
-    ) -> impl Iterator<Item = FlexId> + '_ {
-        self.inner
-            .spatial_face_neighbors(target)
-            .map(|(flex_id, _)| flex_id)
+    ) -> SetIter<impl Iterator<Item = FlexId> + '_> {
+        SetIter::new(
+            self.inner
+                .spatial_face_neighbors(target)
+                .map(|(flex_id, _)| flex_id),
+        )
     }
 
     /// 集合の内部にある[FlexId]の個数を返す。
@@ -235,28 +294,18 @@ impl SpatialIdSet {
     }
 
     /// 集合が保持するすべての空間IDを返す。
-    pub fn iter(&self) -> impl Iterator<Item = RangeId> + Clone + '_ {
-        self.iter_flex_ids().map(RangeId::from)
-    }
-
-    /// [`iter`](Self::iter) と同じだが、木が保持する [`FlexId`] をそのまま返す。
-    pub fn iter_flex_ids(&self) -> impl Iterator<Item = FlexId> + Clone + '_ {
-        self.inner.iter().map(|(flex_id, _)| flex_id)
-    }
-
-    /// [`into_iter`](IntoIterator::into_iter) と同じだが、木が保持する [`FlexId`] をそのまま返す。
-    pub fn into_iter_flex_ids(self) -> impl Iterator<Item = FlexId> {
-        self.inner.into_iter().map(|(flex_id, ())| flex_id)
+    pub fn iter(
+        &self,
+    ) -> SetIter<impl ExactSizeIterator<Item = FlexId> + FusedIterator + Clone + '_> {
+        SetIter::new(self.inner.iter().map(|(flex_id, _)| flex_id))
     }
 }
 
 impl IntoIterator for SpatialIdSet {
     type Item = RangeId;
-    type IntoIter = Map<IntoIter<()>, fn((FlexId, ())) -> RangeId>;
+    type IntoIter = SetIter<Map<IntoIter<()>, fn((FlexId, ())) -> FlexId>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.inner
-            .into_iter()
-            .map(|(flex_id, ())| RangeId::from(flex_id))
+        SetIter::new(self.inner.into_iter().map(|(flex_id, ())| flex_id))
     }
 }

@@ -9,5 +9,5 @@ pub(crate) mod time_reconstruct;
 pub(crate) mod traits;
 
 pub use self::core::IntoIter;
-pub use map::SpatialIdMap;
-pub use set::SpatialIdSet;
+pub use map::{MapIter, SpatialIdMap};
+pub use set::{SetIter, SpatialIdSet};

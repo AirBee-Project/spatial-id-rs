@@ -86,7 +86,8 @@ fn zoom_out_multiple_parents_commutative_and_non_commutative() {
         .get(..)
         .into_map()
         .unwrap()
-        .iter_flex_ids()
+        .iter()
+        .flex_ids()
         .map(|(id, v)| (id, *v))
         .collect();
 
@@ -96,7 +97,8 @@ fn zoom_out_multiple_parents_commutative_and_non_commutative() {
         .get(..)
         .into_map()
         .unwrap()
-        .iter_flex_ids()
+        .iter()
+        .flex_ids()
         .map(|(id, v)| (id, *v))
         .collect();
 
@@ -189,7 +191,7 @@ fn zoom_out_merges_same_parent_split_by_finer_t() {
         table.clone().query().zoom_out(5, Sum).get(..),
         table.clone().query().zoom_out(5, Average).get(..),
     ] {
-        let out: Vec<_> = out.into_flex_ids().collect::<Result<_, _>>().unwrap();
+        let out: Vec<_> = out.flex_ids().collect::<Result<_, _>>().unwrap();
         let parent = FlexId::new(5, 0, 5, 0, 5, 0).unwrap();
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].0, parent.time_with_segment(6, 0).unwrap());
@@ -254,7 +256,7 @@ proptest::proptest! {
             .unwrap();
 
         let mut expected = SpatialIdMap::<i32>::new();
-        for (id, &v) in table.iter_flex_ids() {
+        for (id, &v) in table.iter().flex_ids() {
             let parent = id.spatial_parent_at_zoom(target_z).unwrap();
             expected.insert_with(parent, v, |a, b| a + b);
         }

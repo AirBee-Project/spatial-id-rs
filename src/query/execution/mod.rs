@@ -44,7 +44,8 @@ impl<V: SafeValue + 'static> Query<V> {
     ///
     /// 戻り値の [`QueryOutput`] は `Result<(RangeId, V), Error>` を返すイテレーターで、
     /// 評価は最初の要素を読むときに始まり、読んだ分だけ進む。
-    /// 木が保持する [`FlexId`](crate::FlexId) のまま受け取るには [`QueryOutput::into_flex_ids`] を使う。
+    /// 木が保持する [`FlexId`](crate::FlexId) のまま受け取るには [`QueryOutput::flex_ids`]、
+    /// 各要素を [`SingleId`](crate::SingleId) へ展開するには [`QueryOutput::single_ids`] を使う。
     /// まとめて [`SpatialIdMap`](crate::SpatialIdMap) で受け取るには [`QueryOutput::into_map`] を、[`SpatialIdSet`](crate::SpatialIdSet) で受け取るには [`QueryOutput::into_set`] を使う。
     ///
     /// # 評価する範囲の指定

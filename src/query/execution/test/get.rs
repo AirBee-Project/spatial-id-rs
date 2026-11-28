@@ -333,16 +333,12 @@ fn get_clips_and_get_overlapping_does_not() {
     let target = crate::SingleId::new(20, 1, 101, 2).unwrap();
     let target_id = target.flex_ids().next().unwrap();
 
-    let clipped: Vec<_> = query
-        .get(target)
-        .into_flex_ids()
-        .map(Result::unwrap)
-        .collect();
+    let clipped: Vec<_> = query.get(target).flex_ids().map(Result::unwrap).collect();
     assert_eq!(clipped, alloc::vec![(target_id, 7)]);
 
     let overlapping: Vec<_> = query
         .get_overlapping(target)
-        .into_flex_ids()
+        .flex_ids()
         .map(Result::unwrap)
         .collect();
     assert_eq!(overlapping, alloc::vec![(coarse, 7)]);
@@ -360,7 +356,7 @@ fn get_with_overlapping_targets_yields_each_place_once_in_order() {
 
     let pieces: Vec<(FlexId, u32)> = query
         .get(alloc::vec![big, inside.into()])
-        .into_flex_ids()
+        .flex_ids()
         .map(Result::unwrap)
         .collect();
     for pair in pieces.windows(2) {
@@ -412,20 +408,36 @@ fn query_into_map_and_into_set_yield_validation_error() {
     assert!(query().into_set().is_err());
 }
 
-/// `into_flex_ids` は同じ領域を `FlexId` で、同じ順に返す。
+/// `flex_ids` と `single_ids` は既定の `RangeId` 出力と一致する領域を返す。
 #[test]
-fn into_flex_matches_range_id_output() {
+fn flex_and_single_ids_match_range_id_output() {
     let mut table = SpatialIdMap::<u32>::new();
     table.insert(FlexId::new(16, 0, 16, 6, 16, 0).unwrap(), 1);
     table.insert(FlexId::new(16, 0, 16, 7, 16, 0).unwrap(), 2);
+    table.insert(
+        crate::RangeId::new(16, [0, 1], [10, 11], [0, 0]).unwrap(),
+        3,
+    );
     let query = table.query();
 
     let ranges: Vec<_> = query.get(..).map(Result::unwrap).collect();
-    let flexes = query.get(..).into_flex_ids().map(Result::unwrap);
+    let flexes = query.get(..).flex_ids().map(Result::unwrap);
     assert_eq!(
         ranges,
         flexes
             .map(|(id, v)| (crate::RangeId::from(id), v))
             .collect::<Vec<_>>()
     );
+
+    let singles: Vec<_> = query.get(..).single_ids().map(Result::unwrap).collect();
+    let expected_singles: Vec<_> = ranges
+        .into_iter()
+        .flat_map(|(id, v)| id.single_ids().map(move |s| (s, v)))
+        .collect();
+    assert_eq!(singles, expected_singles);
+
+    // 検証エラーもそのまま伝播する
+    let invalid = SpatialIdMap::<u32>::new().query().shift_x(100, 3);
+    let err_items: Vec<_> = invalid.get(..).single_ids().collect();
+    assert!(matches!(err_items.as_slice(), [Err(_)]));
 }

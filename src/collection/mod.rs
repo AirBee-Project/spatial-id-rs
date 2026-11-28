@@ -2,7 +2,7 @@
 
 pub mod mem;
 
-pub use self::mem::{IntoIter, SpatialIdMap, SpatialIdSet};
+pub use self::mem::{IntoIter, MapIter, SetIter, SpatialIdMap, SpatialIdSet};
 
 #[cfg(test)]
 #[allow(unused_imports)]

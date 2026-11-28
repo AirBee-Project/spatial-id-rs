@@ -90,6 +90,6 @@ impl<V> Iterator for QueryIter<'_, V> {
 
 impl<'a, V: SafeValue + 'static> From<SpatialIdMap<V>> for QueryIter<'a, V> {
     fn from(table: SpatialIdMap<V>) -> Self {
-        Self::new(table.into_iter_flex_ids().map(Ok))
+        Self::new(table.into_iter().flex_ids().map(Ok))
     }
 }

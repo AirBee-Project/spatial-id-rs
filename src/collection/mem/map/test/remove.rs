@@ -14,7 +14,7 @@ mod tests {
             TableEntry::Single(second, 20),
         ]);
 
-        let removed: Vec<_> = table.remove_flex_ids(first).collect();
+        let removed: Vec<_> = table.remove(first).flex_ids().collect();
         assert_eq!(removed.len(), 1);
         let (flex_id, value) = &removed[0];
         assert_eq!(*value, 10);
@@ -24,10 +24,11 @@ mod tests {
         assert_eq!(flex_id.x_index(), 2);
         assert_eq!(flex_id.y_zoomlevel(), 4);
         assert_eq!(flex_id.y_index(), 1);
-        assert!(table.get_flex_ids(first).next().is_none());
+        assert!(table.get(first).flex_ids().next().is_none());
         assert_eq!(
             table
-                .iter_flex_ids()
+                .iter()
+                .flex_ids()
                 .filter(|(_, v)| **v == 20)
                 .map(|(id, _)| id)
                 .collect::<Vec<_>>(),
@@ -46,7 +47,7 @@ mod tests {
             TableEntry::Single(second, 20),
         ]);
 
-        table.remove_flex_ids(first);
+        table.remove(first);
         assert_eq!(table.iter().map(|(_, v)| *v).collect::<Vec<_>>(), vec![20]);
     }
 }

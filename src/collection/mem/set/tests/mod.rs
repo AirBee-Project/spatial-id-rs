@@ -187,7 +187,7 @@ pub(crate) fn decompose_set_to_single_ids_at_zoom(
 ) -> HashSet<SingleId> {
     let mut normalized = HashSet::new();
 
-    for flex_id in set.iter_flex_ids() {
+    for flex_id in set.iter().flex_ids() {
         let range = RangeId::from(&flex_id);
         let expanded = if range.z() == target_z {
             range

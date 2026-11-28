@@ -2,7 +2,7 @@ use crate::collection::core::{FlexTreeCore, IntoIter};
 use alloc::collections::BTreeSet;
 #[cfg(feature = "unstable")]
 use core::hash::Hash;
-use core::iter::Map;
+use core::iter::FusedIterator;
 use core::ops::RangeBounds;
 #[cfg(feature = "unstable")]
 pub(crate) mod json;
@@ -12,6 +12,90 @@ pub(crate) mod par;
 mod test;
 
 use crate::{AllowedIntervals, FlexId, RangeId, SingleId, SpatialId, ZoomLevel};
+
+/// [`SpatialIdMap`] の各メソッドが返すイテレーター。
+///
+/// 既定では [`RangeId`] と値の組を返す。
+/// 木が保持する [`FlexId`] のまま受け取るには [`MapIter::flex_ids`]、
+/// 各要素を [`SingleId`] へ展開するには [`MapIter::single_ids`] を使う。
+#[derive(Clone, Debug)]
+pub struct MapIter<I>(I);
+
+impl<I> MapIter<I> {
+    pub(crate) fn new(inner: I) -> Self {
+        Self(inner)
+    }
+
+    /// 木が保持する [`FlexId`] をそのまま返すイテレーターへ切り替える。
+    pub fn flex_ids(self) -> I {
+        self.0
+    }
+}
+
+impl<V, I> MapIter<I>
+where
+    V: Clone,
+    I: Iterator<Item = (FlexId, V)>,
+{
+    /// 各要素を [`SingleId`] と値の組へ展開して返すイテレーターへ切り替える。
+    pub fn single_ids(self) -> impl Iterator<Item = (SingleId, V)> {
+        self.0
+            .flat_map(|(id, value)| id.single_ids().map(move |single| (single, value.clone())))
+    }
+}
+
+impl<V, I> Iterator for MapIter<I>
+where
+    I: Iterator<Item = (FlexId, V)>,
+{
+    type Item = (RangeId, V);
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next().map(|(id, v)| (RangeId::from(id), v))
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.0.count()
+    }
+
+    #[inline]
+    fn last(self) -> Option<Self::Item> {
+        self.0.last().map(|(id, v)| (RangeId::from(id), v))
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.0.nth(n).map(|(id, v)| (RangeId::from(id), v))
+    }
+
+    #[inline]
+    fn fold<B, F>(self, init: B, mut f: F) -> B
+    where
+        F: FnMut(B, Self::Item) -> B,
+    {
+        self.0
+            .fold(init, |acc, (id, v)| f(acc, (RangeId::from(id), v)))
+    }
+}
+
+impl<V, I> ExactSizeIterator for MapIter<I>
+where
+    I: ExactSizeIterator<Item = (FlexId, V)>,
+{
+    #[inline]
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<V, I> FusedIterator for MapIter<I> where I: FusedIterator<Item = (FlexId, V)> {}
 
 /// 空間IDごとに値を持つマップ。
 ///
@@ -62,7 +146,7 @@ where
             + u32::from(region.x_zoomlevel())
             + u32::from(region.y_zoomlevel());
         let split: fn(&FlexId, crate::Side) -> Option<FlexId> =
-            if self.iter_flex_ids().all(|(id, _)| id.time_is_whole()) {
+            if self.iter().flex_ids().all(|(id, _)| id.time_is_whole()) {
                 match spatial % 3 {
                     0 => FlexId::split_f,
                     1 => FlexId::split_x,
@@ -80,7 +164,8 @@ where
             let part = split(&region, side)?;
             Some((
                 part,
-                self.get_flex_ids(part)
+                self.get(part)
+                    .flex_ids()
                     .map(|(id, v)| (id, v.clone()))
                     .collect(),
             ))
@@ -139,33 +224,15 @@ where
     pub fn get<'a, T: SpatialId + 'a>(
         &'a self,
         target: T,
-    ) -> impl Iterator<Item = (RangeId, &'a V)> + 'a {
-        self.get_flex_ids(target)
-            .map(|(id, v)| (RangeId::from(id), v))
-    }
-
-    /// [`get`](Self::get) と同じだが、結果を [`FlexId`] で返す。
-    pub fn get_flex_ids<'a, T: SpatialId + 'a>(
-        &'a self,
-        target: T,
-    ) -> impl Iterator<Item = (FlexId, &'a V)> + 'a {
-        self.inner.get(target.flex_ids())
+    ) -> MapIter<impl Iterator<Item = (FlexId, &'a V)> + 'a> {
+        MapIter::new(self.inner.get(target.flex_ids()))
     }
 
     /// 指定した空間（target）をツリーからくり抜き、削除された領域とその値を返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターはテーブルを借用しない。
-    pub fn remove<T: SpatialId>(
-        &mut self,
-        target: T,
-    ) -> impl Iterator<Item = (RangeId, V)> + use<T, V> {
-        self.remove_flex_ids(target)
-            .map(|(id, v)| (RangeId::from(id), v))
-    }
-
-    /// [`remove`](Self::remove) と同じだが、削除した領域を [`FlexId`] で返す。
-    pub fn remove_flex_ids<T: SpatialId>(&mut self, target: T) -> IntoIter<V> {
-        self.inner.remove(target.flex_ids()).into_iter()
+    pub fn remove<T: SpatialId>(&mut self, target: T) -> MapIter<IntoIter<V>> {
+        MapIter::new(self.inner.remove(target.flex_ids()).into_iter())
     }
 
     /// [`get`](Self::get) と異なり切り取りを行わず、target と重なった
@@ -173,51 +240,28 @@ where
     pub fn get_overlapping<T: SpatialId>(
         &self,
         target: T,
-    ) -> impl Iterator<Item = (RangeId, &V)> + '_ {
-        self.get_overlapping_flex_ids(target)
-            .map(|(id, v)| (RangeId::from(id), v))
-    }
-
-    /// [`get_overlapping`](Self::get_overlapping) と同じだが、結果を [`FlexId`] で返す。
-    pub fn get_overlapping_flex_ids<T: SpatialId>(
-        &self,
-        target: T,
-    ) -> impl Iterator<Item = (FlexId, &V)> + '_ {
-        self.inner.get_overlapping([target])
+    ) -> MapIter<impl Iterator<Item = (FlexId, &V)> + '_> {
+        MapIter::new(self.inner.get_overlapping([target]))
     }
 
     /// [`remove`](Self::remove) と異なり切り取りを行わず、target と重なった
     /// 空間IDと値をそのまま取り除いて返す。
     ///
     /// 削除は呼び出した時点で済んでおり、返すイテレーターはテーブルを借用しない。
-    pub fn remove_overlapping<T: SpatialId>(
-        &mut self,
-        target: T,
-    ) -> impl Iterator<Item = (RangeId, V)> + use<T, V> {
-        self.remove_overlapping_flex_ids(target)
-            .map(|(id, v)| (RangeId::from(id), v))
-    }
-
-    /// [`remove_overlapping`](Self::remove_overlapping) と同じだが、削除した領域を [`FlexId`] で返す。
-    pub fn remove_overlapping_flex_ids<T: SpatialId>(&mut self, target: T) -> IntoIter<V> {
-        self.inner.remove_overlapping(target.flex_ids()).into_iter()
+    pub fn remove_overlapping<T: SpatialId>(&mut self, target: T) -> MapIter<IntoIter<V>> {
+        MapIter::new(
+            self.inner
+                .remove_overlapping(target.flex_ids())
+                .into_iter(),
+        )
     }
 
     /// 指定した空間IDと面で接している空間IDと値への参照を重複なく返す。入力された空間ID自身と重なる要素は除外する。
     pub fn spatial_face_neighbors<T: SpatialId>(
         &self,
         target: T,
-    ) -> impl Iterator<Item = (RangeId, &V)> + '_ {
-        self.spatial_face_neighbors_flex_ids(target)
-            .map(|(id, v)| (RangeId::from(id), v))
-    }
-
-    /// [`spatial_face_neighbors`](Self::spatial_face_neighbors) と同じだが、結果を [`FlexId`] で返す。
-    pub fn spatial_face_neighbors_flex_ids<T: SpatialId>(
-        &self,
-        target: T,
-    ) -> impl Iterator<Item = (FlexId, &V)> + '_ {
-        self.inner.spatial_face_neighbors(target)
+    ) -> MapIter<impl Iterator<Item = (FlexId, &V)> + '_> {
+        MapIter::new(self.inner.spatial_face_neighbors(target))
     }
 
     /// 保持している [FlexId] の総数を返す。
@@ -262,13 +306,10 @@ where
     }
 
     /// テーブルに保持されているすべての空間と値への参照のペアを返す。
-    pub fn iter(&self) -> impl Iterator<Item = (RangeId, &V)> + Clone + '_ {
-        self.iter_flex_ids().map(|(id, v)| (RangeId::from(id), v))
-    }
-
-    /// [`iter`](Self::iter) と同じだが、木が保持する [`FlexId`] をそのまま返す。
-    pub fn iter_flex_ids(&self) -> impl Iterator<Item = (FlexId, &V)> + Clone + '_ {
-        self.inner.iter()
+    pub fn iter(
+        &self,
+    ) -> MapIter<impl ExactSizeIterator<Item = (FlexId, &V)> + FusedIterator + Clone + '_> {
+        MapIter::new(self.inner.iter())
     }
 }
 
@@ -309,21 +350,12 @@ impl<V: Eq + Hash + Clone> SpatialIdMap<V> {
     }
 }
 
-impl<V: Clone> SpatialIdMap<V> {
-    /// [`into_iter`](IntoIterator::into_iter) と同じだが、木が保持する [`FlexId`] をそのまま返す。
-    pub fn into_iter_flex_ids(self) -> IntoIter<V> {
-        self.inner.into_iter()
-    }
-}
-
 impl<V: Clone> IntoIterator for SpatialIdMap<V> {
     type Item = (RangeId, V);
-    type IntoIter = Map<IntoIter<V>, fn((FlexId, V)) -> (RangeId, V)>;
+    type IntoIter = MapIter<IntoIter<V>>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.inner
-            .into_iter()
-            .map(|(id, value)| (RangeId::from(id), value))
+        MapIter::new(self.inner.into_iter())
     }
 }
 

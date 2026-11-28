@@ -2,7 +2,7 @@ use crate::query::Query;
 use crate::query::SafeValue;
 use crate::query::cancellation::CancellationToken;
 use crate::query::query_iter::QueryIter;
-use crate::{Error, FlexId, RangeId, SpatialIdMap, SpatialIdSet};
+use crate::{Error, FlexId, RangeId, SingleId, SpatialIdMap, SpatialIdSet};
 use alloc::vec::Vec;
 
 /// [`Query::get`] などの結果を順に返すイテレーター。
@@ -10,7 +10,8 @@ use alloc::vec::Vec;
 /// 検証や評価の開始に失敗すると、最初の要素として [`Err`] を返して終わる。
 /// 読み出しや演算に失敗すると、その位置で [`Err`] を返す。
 ///
-/// 要素は [`RangeId`] で返す。木が保持する [`FlexId`] のまま受け取るには [`QueryOutput::into_flex_ids`] を使う。
+/// 要素は [`RangeId`] で返す。木が保持する [`FlexId`] のまま受け取るには [`QueryOutput::flex_ids`]、
+/// 各要素を [`SingleId`] へ展開するには [`QueryOutput::single_ids`] を使う。
 ///
 /// 返す要素は互いに素である。全体を評価したときと [`Query::get_overlapping`] の結果は FlexId の Z-order 列になるが、
 /// [`Query::get`] で `targets` に切り取った結果は、`targets` の形によって順序が前後することがある。
@@ -51,12 +52,12 @@ impl<'a, V: SafeValue + 'static> QueryOutput<'a, V> {
 
     /// 結果を [`SpatialIdMap`] にして返す。
     pub fn into_map(self) -> Result<SpatialIdMap<V>, Error> {
-        self.into_flex_ids().collect()
+        self.flex_ids().collect()
     }
 
     /// 結果を [`SpatialIdSet`] にして返す。
     pub fn into_set(self) -> Result<SpatialIdSet, Error> {
-        self.into_flex_ids()
+        self.flex_ids()
             .map(|res| res.map(|(id, _)| id))
             .collect()
     }
@@ -65,8 +66,27 @@ impl<'a, V: SafeValue + 'static> QueryOutput<'a, V> {
     ///
     /// 要素の順序や評価の進み方、エラーの返し方は、この [`QueryOutput`] 自身を読む場合と同じ。
     /// [`QueryOutput`] 自身は同じ領域を [`RangeId`] で返す。
-    pub fn into_flex_ids(mut self) -> impl Iterator<Item = Result<(FlexId, V), Error>> + 'a {
+    pub fn flex_ids(mut self) -> impl Iterator<Item = Result<(FlexId, V), Error>> + 'a {
         core::iter::from_fn(move || self.next_flex())
+    }
+
+    /// 各要素を [`SingleId`] へ展開して順に返すイテレーターにする。
+    ///
+    /// 評価の進み方やエラーの返し方は、この [`QueryOutput`] 自身を読む場合と同じ。
+    pub fn single_ids(self) -> impl Iterator<Item = Result<(SingleId, V), Error>> + 'a {
+        self.flex_ids().flat_map(|res| {
+            let (singles, err) = match res {
+                Ok((id, value)) => (
+                    Some(
+                        id.single_ids()
+                            .map(move |single| Ok((single, value.clone()))),
+                    ),
+                    None,
+                ),
+                Err(e) => (None, Some(Err(e))),
+            };
+            err.into_iter().chain(singles.into_iter().flatten())
+        })
     }
 
     fn start(&mut self) -> Result<QueryIter<'a, V>, Error> {
@@ -124,7 +144,7 @@ impl<V: SafeValue + 'static> QueryOutput<'_, V> {
                 Some(clipper) => {
                     let start = self.pending.len();
                     self.pending
-                        .extend(clipper.get_flex_ids(id).map(|piece| (piece, value.clone())));
+                        .extend(clipper.get(id).flex_ids().map(|piece| (piece, value.clone())));
                     self.pending[start..].reverse();
                 }
             }
