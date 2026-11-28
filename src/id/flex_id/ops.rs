@@ -305,6 +305,41 @@ impl PreparedRange {
     }
 }
 
+/// 領域がいずれかと重なるかを判定する、[`PreparedRange`] の集まり。1件のときは Vec を確保しない。
+pub(crate) enum OverlapTargets {
+    Empty,
+    One(PreparedRange),
+    Many(alloc::vec::Vec<PreparedRange>),
+}
+
+impl OverlapTargets {
+    pub(crate) fn new(target: impl IntoIterator<Item = impl Into<crate::RangeId>>) -> Self {
+        let mut iter = target.into_iter().map(|t| PreparedRange::new(t.into()));
+        match iter.next() {
+            None => Self::Empty,
+            Some(first) => match iter.next() {
+                None => Self::One(first),
+                Some(second) => {
+                    let mut rest = alloc::vec::Vec::with_capacity(iter.size_hint().0 + 2);
+                    rest.push(first);
+                    rest.push(second);
+                    rest.extend(iter);
+                    Self::Many(rest)
+                }
+            },
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn matches(&self, region: &FlexId) -> bool {
+        match self {
+            Self::Empty => false,
+            Self::One(t) => t.intersects(region),
+            Self::Many(ts) => ts.iter().any(|t| t.intersects(region)),
+        }
+    }
+}
+
 #[inline]
 fn overlaps_i32(
     segment_z: u8,
