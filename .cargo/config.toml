@@ -1,0 +1,14 @@
+[alias]
+# docs.rs と同じ設定（Cargo.toml の [package.metadata.docs.rs]）でドキュメントを作る。
+# `cargo doc` は組み込みのコマンドなので alias で上書きできない。
+# `--cfg docsrs` が有効にする feature(doc_cfg) は stable では使えないため、このコマンドの実行中だけ
+# RUSTC_BOOTSTRAP を設定する。常に設定すると、通常のビルドでも不安定な機能を使えてしまい気づけなくなる
+docsrs = [
+    "doc",
+    "--no-deps",
+    "--all-features",
+    "--config",
+    "build.rustdocflags=['--cfg', 'docsrs']",
+    "--config",
+    "env.RUSTC_BOOTSTRAP='1'",
+]
