@@ -2,7 +2,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::{AllowedIntervals, SpatialIdMap};
 
-use super::super::json::{deserialize_with_values, serialize_with_values};
+use crate::collection::json::{deserialize_with_values, serialize_with_values};
 
 impl<V> Serialize for SpatialIdMap<V>
 where
