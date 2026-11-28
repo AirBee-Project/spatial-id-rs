@@ -167,3 +167,35 @@ fn try_filter_map_values_transforms_and_propagates_error() {
     );
     assert_eq!(calls.load(Ordering::Relaxed), 1);
 }
+
+/// `par_*_values` 系が逐次版と同じ結果を返すことを検証する。
+#[test]
+fn par_values_operators_match_sequential() {
+    let mut table = SpatialIdMap::new();
+    for x in 0..1500i32 {
+        table.insert(single_at_x(x as u32), x);
+    }
+
+    let expected: SpatialIdMap<i32> = table
+        .clone()
+        .query()
+        .filter_values(|v| *v >= 100)
+        .filter_map_values(|v| (v % 3 == 0).then_some(v + 1))
+        .map_values(|v| v * 2)
+        .try_filter_map_values(|v| Ok::<_, crate::Error>((v % 4 == 0).then_some(v)))
+        .get(..)
+        .into_map()
+        .unwrap();
+
+    let actual: SpatialIdMap<i32> = table
+        .query()
+        .par_filter_values(|v| *v >= 100)
+        .par_filter_map_values(|v| (v % 3 == 0).then_some(v + 1))
+        .par_map_values(|v| v * 2)
+        .par_try_filter_map_values(|v| Ok::<_, crate::Error>((v % 4 == 0).then_some(v)))
+        .get(..)
+        .into_map()
+        .unwrap();
+
+    assert_eq!(actual, expected);
+}

@@ -22,4 +22,31 @@ impl<V: SafeValue + 'static> Query<V> {
     {
         self.filter(move |_, value| f(value))
     }
+
+    /// [`filter`](Self::filter) の並列版。
+    ///
+    /// `rayon` feature が有効なときはチャンク単位で並列に評価し、無効なときは [`filter`](Self::filter) と同等に逐次評価する。
+    pub fn par_filter<F>(self, f: F) -> Self
+    where
+        F: Fn(FlexId, &V) -> bool + Send + Sync + 'static,
+    {
+        #[cfg(feature = "rayon")]
+        {
+            self.wrap_unary(Filter::new_parallel(f))
+        }
+        #[cfg(not(feature = "rayon"))]
+        {
+            self.filter(f)
+        }
+    }
+
+    /// [`filter_values`](Self::filter_values) の並列版。
+    ///
+    /// `rayon` feature が有効なときはチャンク単位で並列に評価し、無効なときは [`filter_values`](Self::filter_values) と同等に逐次評価する。
+    pub fn par_filter_values<F>(self, f: F) -> Self
+    where
+        F: Fn(&V) -> bool + Send + Sync + 'static,
+    {
+        self.par_filter(move |_, value| f(value))
+    }
 }

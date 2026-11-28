@@ -23,6 +23,8 @@ fn stream_inner<'a, V: SafeValue + 'static>(
 pub(crate) struct FilterMap<V: SafeValue + 'static, U, F> {
     inner: Query<V>,
     f: F,
+    #[cfg(feature = "rayon")]
+    parallel: bool,
     _marker: core::marker::PhantomData<fn() -> U>,
 }
 
@@ -31,6 +33,18 @@ impl<V: SafeValue + 'static, U, F> FilterMap<V, U, F> {
         Self {
             inner,
             f,
+            #[cfg(feature = "rayon")]
+            parallel: false,
+            _marker: core::marker::PhantomData,
+        }
+    }
+
+    #[cfg(feature = "rayon")]
+    pub(crate) fn new_parallel(inner: Query<V>, f: F) -> Self {
+        Self {
+            inner,
+            f,
+            parallel: true,
             _marker: core::marker::PhantomData,
         }
     }
@@ -49,7 +63,12 @@ where
         targets: &[RangeId],
         token: &CancellationToken,
     ) -> Result<QueryIter<'a, U>, Error> {
-        Ok(stream_inner(&self.inner, targets, token)?.filter_map_ordered(&self.f))
+        let stream = stream_inner(&self.inner, targets, token)?;
+        #[cfg(feature = "rayon")]
+        if self.parallel {
+            return Ok(stream.par_filter_map_ordered(&self.f));
+        }
+        Ok(stream.filter_map_ordered(&self.f))
     }
 }
 
@@ -57,6 +76,8 @@ where
 pub(crate) struct TryFilterMap<V: SafeValue + 'static, U, F> {
     inner: Query<V>,
     f: F,
+    #[cfg(feature = "rayon")]
+    parallel: bool,
     _marker: core::marker::PhantomData<fn() -> U>,
 }
 
@@ -65,6 +86,18 @@ impl<V: SafeValue + 'static, U, F> TryFilterMap<V, U, F> {
         Self {
             inner,
             f,
+            #[cfg(feature = "rayon")]
+            parallel: false,
+            _marker: core::marker::PhantomData,
+        }
+    }
+
+    #[cfg(feature = "rayon")]
+    pub(crate) fn new_parallel(inner: Query<V>, f: F) -> Self {
+        Self {
+            inner,
+            f,
+            parallel: true,
             _marker: core::marker::PhantomData,
         }
     }
@@ -83,6 +116,11 @@ where
         targets: &[RangeId],
         token: &CancellationToken,
     ) -> Result<QueryIter<'a, U>, Error> {
-        Ok(stream_inner(&self.inner, targets, token)?.try_filter_map_ordered(&self.f))
+        let stream = stream_inner(&self.inner, targets, token)?;
+        #[cfg(feature = "rayon")]
+        if self.parallel {
+            return Ok(stream.par_try_filter_map_ordered(&self.f));
+        }
+        Ok(stream.try_filter_map_ordered(&self.f))
     }
 }
