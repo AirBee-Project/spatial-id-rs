@@ -110,7 +110,7 @@ impl SpatialIdSet {
     /// # Examples
     ///
     /// ```
-    /// use spatial_id::collection::SpatialIdSet;
+    /// use spatial_id::collection::mem::SpatialIdSet;
     ///
     /// let set = SpatialIdSet::new();
     /// assert!(set.is_empty());
@@ -125,7 +125,7 @@ impl SpatialIdSet {
     /// # Examples
     ///
     /// ```
-    /// use spatial_id::collection::SpatialIdSet;
+    /// use spatial_id::collection::mem::SpatialIdSet;
     /// use spatial_id::{FlexId, RangeId, SingleId};
     ///
     /// let mut set = SpatialIdSet::new();
@@ -239,7 +239,7 @@ impl SpatialIdSet {
     /// ```
     /// # #[cfg(feature = "temporal_id")]
     /// # {
-    /// # use spatial_id::collection::SpatialIdSet;
+    /// # use spatial_id::collection::mem::SpatialIdSet;
     /// # use spatial_id::{SingleId, time::{AllowedIntervals, Interval}};
     /// let mut set = SpatialIdSet::new();
     /// set.insert(SingleId::new(12, 0, 3638, 1614).unwrap().time_with(Interval::HOUR, 0).unwrap());

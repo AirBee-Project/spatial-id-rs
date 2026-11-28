@@ -1,4 +1,4 @@
-//! [`SpatialIdSet`](crate::collection::SpatialIdSet) や [`SpatialIdMap`](crate::collection::SpatialIdMap) などのデータを組み合わせて変換する [`Query`]。
+//! [`SpatialIdSet`](crate::collection::mem::SpatialIdSet) や [`SpatialIdMap`](crate::collection::mem::SpatialIdMap) などのデータを組み合わせて変換する [`Query`]。
 
 mod cancellation;
 mod execution;

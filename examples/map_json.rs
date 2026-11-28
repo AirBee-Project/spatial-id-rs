@@ -7,7 +7,7 @@
 //! ```
 
 use spatial_id::SingleId;
-use spatial_id::collection::SpatialIdMap;
+use spatial_id::collection::mem::SpatialIdMap;
 
 /// [SpatialIdMap]をJsonに書き出したり、Jsonから読み出したりする例
 fn main() {

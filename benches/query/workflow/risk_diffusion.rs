@@ -1,6 +1,6 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use spatial_id::Side::Upper;
-use spatial_id::collection::SpatialIdMap;
+use spatial_id::collection::mem::SpatialIdMap;
 use spatial_id::query::merge_policy::Max;
 use spatial_id::query::{FalloffPattern, Source};
 

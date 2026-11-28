@@ -1,11 +1,11 @@
-//! 空間IDの集合 [`SpatialIdSet`] と、空間IDごとに値を持つマップ [`SpatialIdMap`]。
+//! 空間IDの集合 `SpatialIdSet` と、空間IDごとに値を持つマップ `SpatialIdMap`。
+//!
+//! - [`mem`] — メモリ上で扱う [`SpatialIdSet`](mem::SpatialIdSet) と [`SpatialIdMap`](mem::SpatialIdMap)。
 
 #[cfg(feature = "unstable")]
 pub(crate) mod json;
 pub mod mem;
 pub(crate) mod time_reconstruct;
-
-pub use self::mem::{IntoIter, MapIter, SetIter, SpatialIdMap, SpatialIdSet};
 
 #[cfg(test)]
 #[allow(unused_imports)]

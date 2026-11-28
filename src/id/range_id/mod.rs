@@ -138,7 +138,7 @@ impl RangeId {
     ///
     /// ## 動作コスト
     ///
-    /// 木構造（[`SpatialIdSet`](crate::collection::SpatialIdSet) など）へ挿入する際、時間間隔が2の冪乗の秒数であれば必ず1つの `TimeSegment`
+    /// 木構造（[`SpatialIdSet`](crate::collection::mem::SpatialIdSet) など）へ挿入する際、時間間隔が2の冪乗の秒数であれば必ず1つの `TimeSegment`
     /// （[`FlexId`](crate::FlexId)）に収まる。しかし2の冪乗でない秒数（例: 1800秒）を指定した場合、
     /// 内部で最大十数個の `TimeSegment` に分解されるため、**挿入コストと木の葉の数が比例して増大**する。
     /// パフォーマンスが重視される用途では、1800秒や3600秒の代わりに、**1024秒**や**4096秒**

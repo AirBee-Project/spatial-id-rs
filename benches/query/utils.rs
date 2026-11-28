@@ -1,4 +1,4 @@
-use spatial_id::collection::SpatialIdMap;
+use spatial_id::collection::mem::SpatialIdMap;
 use std::fs;
 use std::sync::OnceLock;
 

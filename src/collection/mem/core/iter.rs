@@ -145,7 +145,7 @@ impl<V> FusedIterator for Iter<'_, V> {}
 /// 値を持つ領域と値の組 `(FlexId, V)` を、所有権ごと1つずつ返すイテレーター。
 ///
 /// [`SpatialIdMap::remove`](crate::SpatialIdMap::remove) や [`SpatialIdMap`](crate::SpatialIdMap) の `into_iter` が返す
-/// [`MapIter`](crate::collection::MapIter) に包まれ、[`MapIter::flex_ids`](crate::collection::MapIter::flex_ids) で取り出せる。
+/// [`MapIter`](crate::collection::mem::MapIter) に包まれ、[`MapIter::flex_ids`](crate::collection::mem::MapIter::flex_ids) で取り出せる。
 #[derive(Debug)]
 pub struct IntoIter<V> {
     stack: Vec<(Node<V>, FlexId)>,

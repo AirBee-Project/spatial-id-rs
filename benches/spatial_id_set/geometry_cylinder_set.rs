@@ -5,7 +5,7 @@
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use spatial_id::SingleId;
-use spatial_id::collection::SpatialIdSet;
+use spatial_id::collection::mem::SpatialIdSet;
 use spatial_id::geometry::{Coordinate, CoverSingleIds, Cylinder};
 use std::hint::black_box;
 

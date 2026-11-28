@@ -7,7 +7,7 @@ impl<V: SafeValue + 'static> Query<V> {
     ///
     /// 動作例:
     /// ```
-    /// # use spatial_id::{SingleId, collection::SpatialIdMap, query::Source};
+    /// # use spatial_id::{SingleId, collection::mem::SpatialIdMap, query::Source};
     /// let mut map = SpatialIdMap::new();
     /// map.insert(SingleId::new(20, 0, 10, 200).unwrap(), 1);
     /// map.insert(SingleId::new(20, 0, 11, 200).unwrap(), 15);
